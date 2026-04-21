@@ -1,0 +1,143 @@
+name: Auto Merge and Docker Build
+
+on:
+  push:
+    branches: [ dev ]
+
+jobs:
+  auto-merge-and-build:
+    if: contains(github.event.head_commit.message, 'push to main')
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Git
+      run: |
+        git config --global user.name "Auto Merge Bot"
+        git config --global user.email "bot@github.com"
+        
+    - name: Direct Merge to Main
+      run: |
+        echo "🚀 Starting direct merge..."
+        
+        # Switch to main และ pull ล่าสุด
+        git checkout main
+        git pull origin main
+        
+        # Merge dev ไป main
+        git merge origin/dev --no-ff -m "Auto merge from dev: ${{ github.event.head_commit.message }}"
+        
+        # Push ไป main
+        git push origin main
+        echo "✅ Successfully merged to main"
+        
+    - name: Delete and Recreate Dev Branch
+      run: |
+        echo "🔄 Recreating dev branch..."
+        
+        # ลบ remote dev branch
+        git push origin --delete dev
+        echo "✅ Deleted remote dev branch"
+        
+        # ลบ local branches
+        git branch -D dev 2>/dev/null || true
+        
+        # สร้าง dev branch ใหม่จาก main ล่าสุด
+        git checkout -b dev
+        git push origin dev
+        echo "✅ Created fresh dev branch"
+        
+    - name: Send Merge Notification
+      run: |
+        TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        TELEGRAM_CHAT_ID="${{ vars.TELEGRAM_CHAT_ID }}"
+        
+        MESSAGE="🚀 <b>Auto Merge Completed!</b>%0A%0A📂 Repo: ${{ github.repository }}%0A🌿 dev → main%0A👤 ${{ github.event.head_commit.author.name }}%0A💬 ${{ github.event.head_commit.message }}%0A%0A✅ Merged to main%0A✅ Recreated dev branch%0A🐳 Starting Docker build...%0A%0A🕐 $(date '+%H:%M %d/%m/%Y')"
+        
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          -d "text=${MESSAGE}" \
+          -d "parse_mode=HTML"
+          
+    # === DOCKER BUILD SECTION ===
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+     
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+     
+    - name: Extract version from package.json
+      id: package-version
+      run: |
+        if [ -f package.json ]; then
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "Found version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "package.json not found, using fallback"
+          echo "version=latest" >> $GITHUB_OUTPUT
+        fi
+     
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKER_HUB_USERNAME }}/files_system_nova_api
+        tags: |
+          type=raw,value=latest
+          type=raw,value=${{ steps.package-version.outputs.version }}
+     
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Send Success Notification
+      if: success()
+      run: |
+        TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        TELEGRAM_CHAT_ID="${{ vars.TELEGRAM_CHAT_ID }}"
+        
+        VERSION="${{ steps.package-version.outputs.version }}"
+        
+        MESSAGE="🎉 <b>All Tasks Completed!</b>%0A%0A📂 Repo: ${{ github.repository }}%0A🌿 dev → main%0A👤 ${{ github.event.head_commit.author.name }}%0A💬 ${{ github.event.head_commit.message }}%0A%0A✅ Merged to main%0A✅ Recreated dev branch%0A🐳 Docker built & pushed%0A🏷️ Version: ${VERSION}%0A🚀 Ready for deployment%0A%0A💡 Update Portainer manually or use Watchtower%0A🕐 $(date '+%H:%M %d/%m/%Y')"
+        
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          -d "text=${MESSAGE}" \
+          -d "parse_mode=HTML"
+          
+    - name: Send Error Notification
+      if: failure()
+      run: |
+        TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        TELEGRAM_CHAT_ID="${{ vars.TELEGRAM_CHAT_ID }}"
+        
+        MESSAGE="❌ <b>Auto Process Failed!</b>%0A%0A📂 Repo: ${{ github.repository }}%0A💬 ${{ github.event.head_commit.message }}%0A%0A🔴 Check logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}%0A%0A🕐 $(date '+%H:%M %d/%m/%Y')"
+        
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          -d "text=${MESSAGE}" \
+          -d "parse_mode=HTML"
