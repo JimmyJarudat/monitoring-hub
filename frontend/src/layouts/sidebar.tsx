@@ -25,42 +25,42 @@ const sidebarSections: SidebarSection[] = [
     title: "Overview",
     items: [
       { label: "Dashboard", path: "/dashboard", icon: "D", end: true },
-      { label: "Status Map", path: "/dashboard/status-map", icon: "S", badge: "Soon" },
-      { label: "Reports", path: "/dashboard/reports", icon: "R", badge: "Soon" },
+      { label: "Status Map", path: "/status-map", icon: "S", badge: "Soon" },
+      { label: "Reports", path: "/reports", icon: "R", badge: "Soon" },
     ],
   },
   {
     title: "Inventory",
     items: [
-      { label: "Devices", path: "/dashboard/devices", icon: "V", badge: "Soon" },
-      { label: "Add Device", path: "/dashboard/devices/new", icon: "+", badge: "Soon" },
-      { label: "Groups", path: "/dashboard/groups", icon: "G", badge: "Soon" },
-      { label: "Credentials", path: "/dashboard/credentials", icon: "K", badge: "Soon" },
+      { label: "Devices", path: "/devices", icon: "V", badge: "Soon" },
+      { label: "Add Device", path: "/devices/new", icon: "+", badge: "Soon" },
+      { label: "Groups", path: "/groups", icon: "G", badge: "Soon" },
+      { label: "Credentials", path: "/credentials", icon: "K", badge: "Soon" },
     ],
   },
   {
     title: "Monitoring",
     items: [
-      { label: "Monitors", path: "/dashboard/monitors", icon: "M" },
-      { label: "Add Monitor", path: "/dashboard/monitors/new", icon: "+" },
-      { label: "Results", path: "/dashboard/results", icon: "T" },
-      { label: "Incidents", path: "/dashboard/incidents", icon: "I", badge: "Soon" },
+      { label: "Monitors", path: "/monitors", icon: "M" },
+      { label: "Add Monitor", path: "/monitors/new", icon: "+" },
+      { label: "Results", path: "/results", icon: "T" },
+      { label: "Incidents", path: "/incidents", icon: "I", badge: "Soon" },
     ],
   },
   {
     title: "Alerting",
     items: [
-      { label: "Alert Rules", path: "/dashboard/alerts", icon: "A", badge: "Soon" },
-      { label: "Channels", path: "/dashboard/channels", icon: "C", badge: "Soon" },
-      { label: "Maintenance", path: "/dashboard/maintenance", icon: "N", badge: "Soon" },
+      { label: "Alert Rules", path: "/alerts", icon: "A", badge: "Soon" },
+      { label: "Channels", path: "/channels", icon: "C", badge: "Soon" },
+      { label: "Maintenance", path: "/maintenance", icon: "N", badge: "Soon" },
     ],
   },
   {
     title: "System",
     items: [
-      { label: "Users", path: "/dashboard/users", icon: "U", badge: "Soon" },
-      { label: "Audit Logs", path: "/dashboard/audit-logs", icon: "L", badge: "Soon" },
-      { label: "Settings", path: "/dashboard/settings", icon: "S", badge: "Soon" },
+      { label: "Users", path: "/users", icon: "U", badge: "Soon" },
+      { label: "Audit Logs", path: "/audit-logs", icon: "L", badge: "Soon" },
+      { label: "Settings", path: "/settings", icon: "S", badge: "Soon" },
     ],
   },
 ];

@@ -377,7 +377,7 @@ const MonitorsPage = () => {
           </button>
           <Link
             className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            to="/dashboard/monitors/new"
+            to="/monitors/new"
           >
             Add Monitor
           </Link>
@@ -436,7 +436,7 @@ const MonitorsPage = () => {
                     <td className="whitespace-nowrap px-4 py-3">
                       <Link
                         className="font-medium text-cyan-700 underline-offset-2 transition hover:text-cyan-900 hover:underline"
-                        to={`/dashboard/monitors/${monitor.id}`}
+                        to={`/monitors/${monitor.id}`}
                       >
                         {monitor.name}
                       </Link>
@@ -497,7 +497,7 @@ const MonitorsPage = () => {
                         ) : null}
                         <Link
                           className="rounded-md border border-cyan-200 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
-                          to={`/dashboard/monitors/${monitor.id}`}
+                          to={`/monitors/${monitor.id}`}
                         >
                           View
                         </Link>

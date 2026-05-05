@@ -516,7 +516,7 @@ const MonitorDetailPage = () => {
       }
 
       toast.success("ลบ monitor แล้ว");
-      navigate("/dashboard/monitors", { replace: true });
+      navigate("/monitors", { replace: true });
     } catch {
       toast.error("ลบ monitor ไม่สำเร็จ");
     } finally {
@@ -539,7 +539,7 @@ const MonitorDetailPage = () => {
       <div className="min-h-full bg-slate-50 p-6">
         <div className="rounded-lg border border-slate-200 bg-white p-6">
           <h1 className="text-lg font-semibold text-slate-950">ไม่พบ monitor</h1>
-          <Link className="mt-4 inline-flex text-sm font-semibold text-cyan-700" to="/dashboard/monitors">
+          <Link className="mt-4 inline-flex text-sm font-semibold text-cyan-700" to="/monitors">
             Back to Monitors
           </Link>
         </div>
@@ -561,7 +561,7 @@ const MonitorDetailPage = () => {
         <div className="flex flex-wrap gap-2">
           <Link
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-            to="/dashboard/monitors"
+            to="/monitors"
           >
             Back
           </Link>

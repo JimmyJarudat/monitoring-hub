@@ -199,7 +199,7 @@ const AddMonitorPage = () => {
     try {
       await post("/monitors", payload);
       toast.success("เพิ่ม monitor สำเร็จ");
-      navigate("/dashboard/monitors", { replace: true });
+      navigate("/monitors", { replace: true });
     } catch {
       toast.error("เพิ่ม monitor ไม่สำเร็จ");
     } finally {
@@ -220,7 +220,7 @@ const AddMonitorPage = () => {
 
         <Link
           className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          to="/dashboard/monitors"
+          to="/monitors"
         >
           Back to Monitors
         </Link>

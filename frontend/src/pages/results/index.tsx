@@ -273,7 +273,7 @@ const ResultsPage = () => {
           </button>
           <Link
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            to="/dashboard/monitors"
+            to="/monitors"
           >
             Back to Monitors
           </Link>
@@ -450,7 +450,7 @@ const ResultsPage = () => {
                   <td className="px-4 py-3">
                     <Link
                       className="font-medium text-cyan-700 underline-offset-2 transition hover:text-cyan-900 hover:underline"
-                      to={`/dashboard/monitors/${result.monitor.id}`}
+                      to={`/monitors/${result.monitor.id}`}
                     >
                       {result.monitor.name}
                     </Link>
