@@ -297,6 +297,56 @@ const formatBytes = (value: number | null | undefined) => {
   return `${value.toFixed(0)} B`;
 };
 
+const formatBitsPerSecond = (value: number | null | undefined) => {
+  if (!isFiniteNumber(value)) return "-";
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} Gbps`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} Mbps`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} Kbps`;
+  return `${value.toFixed(0)} bps`;
+};
+
+const getChartCeiling = (values: number[]) => {
+  const sanitized = values.filter((value) => Number.isFinite(value) && value >= 0);
+  if (sanitized.length === 0) return 1;
+
+  const sorted = [...sanitized].sort((a, b) => a - b);
+  const max = sorted[sorted.length - 1] ?? 1;
+  const percentile95 = sorted[Math.floor((sorted.length - 1) * 0.95)] ?? max;
+
+  if (percentile95 > 0 && max > percentile95 * 5) {
+    return Math.max(percentile95 * 1.2, 1);
+  }
+
+  return Math.max(max * 1.1, 1);
+};
+
+const buildRatePoints = (points: Array<{ collectedAt: string; value: number }>) => {
+  const sorted = [...points].sort(
+    (a, b) => new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime(),
+  );
+  const rates: Array<{ checkedAt: string; timeLabel: string; rateBps: number }> = [];
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const previous = sorted[index - 1];
+    const current = sorted[index];
+    const elapsedSeconds =
+      (new Date(current.collectedAt).getTime() - new Date(previous.collectedAt).getTime()) / 1000;
+
+    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) continue;
+
+    const delta = current.value - previous.value;
+    const rateBps = delta >= 0 ? (delta * 8) / elapsedSeconds : 0;
+
+    rates.push({
+      checkedAt: current.collectedAt,
+      timeLabel: formatShortTime(current.collectedAt),
+      rateBps,
+    });
+  }
+
+  return rates;
+};
+
 const MonitorDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -584,48 +634,143 @@ const MonitorDetailPage = () => {
     );
   }, [diskSeries]);
 
-  const netCounterChartData = useMemo(() => {
-    const inSeries = metricSeries.filter(
-      (series) => series.metricGroup === "NET" && series.metricKey === "net.in_octets",
-    );
-    const outSeries = metricSeries.filter(
-      (series) => series.metricGroup === "NET" && series.metricKey === "net.out_octets",
-    );
-    const bucket = new Map<
+  const interfaceAnalytics = useMemo(() => {
+    const seriesByInterface = new Map<
       string,
-      { checkedAt: string; timeLabel: string; inOctets: number; outOctets: number }
+      {
+        inSeries?: DeviceMetricSeries;
+        outSeries?: DeviceMetricSeries;
+        inErrors?: DeviceMetricSeries;
+        outErrors?: DeviceMetricSeries;
+        operStatus?: DeviceMetricSeries;
+      }
     >();
 
-    for (const series of inSeries) {
-      for (const point of series.points) {
-        const current = bucket.get(point.collectedAt) ?? {
-          checkedAt: point.collectedAt,
-          timeLabel: formatShortTime(point.collectedAt),
-          inOctets: 0,
-          outOctets: 0,
-        };
-        current.inOctets += point.value;
-        bucket.set(point.collectedAt, current);
-      }
+    for (const series of metricSeries.filter((item) => item.metricGroup === "NET")) {
+      const instance = series.instance ?? "unknown";
+      const current = seriesByInterface.get(instance) ?? {};
+
+      if (series.metricKey === "net.in_octets") current.inSeries = series;
+      if (series.metricKey === "net.out_octets") current.outSeries = series;
+      if (series.metricKey === "net.in_errors") current.inErrors = series;
+      if (series.metricKey === "net.out_errors") current.outErrors = series;
+      if (series.metricKey === "net.oper_status") current.operStatus = series;
+
+      seriesByInterface.set(instance, current);
     }
 
-    for (const series of outSeries) {
-      for (const point of series.points) {
-        const current = bucket.get(point.collectedAt) ?? {
-          checkedAt: point.collectedAt,
-          timeLabel: formatShortTime(point.collectedAt),
-          inOctets: 0,
-          outOctets: 0,
-        };
-        current.outOctets += point.value;
-        bucket.set(point.collectedAt, current);
-      }
-    }
+    const totalsBucket = new Map<
+      string,
+      { checkedAt: string; timeLabel: string; rxRateBps: number; txRateBps: number }
+    >();
+    const perInterface = Array.from(seriesByInterface.entries())
+      .map(([name, current]) => {
+        const rxRates = current.inSeries ? buildRatePoints(current.inSeries.points) : [];
+        const txRates = current.outSeries ? buildRatePoints(current.outSeries.points) : [];
 
-    return Array.from(bucket.values()).sort(
+        for (const point of rxRates) {
+          const bucket = totalsBucket.get(point.checkedAt) ?? {
+            checkedAt: point.checkedAt,
+            timeLabel: point.timeLabel,
+            rxRateBps: 0,
+            txRateBps: 0,
+          };
+          bucket.rxRateBps += point.rateBps;
+          totalsBucket.set(point.checkedAt, bucket);
+        }
+
+        for (const point of txRates) {
+          const bucket = totalsBucket.get(point.checkedAt) ?? {
+            checkedAt: point.checkedAt,
+            timeLabel: point.timeLabel,
+            rxRateBps: 0,
+            txRateBps: 0,
+          };
+          bucket.txRateBps += point.rateBps;
+          totalsBucket.set(point.checkedAt, bucket);
+        }
+
+        const latestRxRate = rxRates[rxRates.length - 1]?.rateBps ?? 0;
+        const latestTxRate = txRates[txRates.length - 1]?.rateBps ?? 0;
+        const latestInErrors = current.inErrors?.points[current.inErrors.points.length - 1]?.value ?? 0;
+        const latestOutErrors =
+          current.outErrors?.points[current.outErrors.points.length - 1]?.value ?? 0;
+        const latestOperStatus =
+          current.operStatus?.points[current.operStatus.points.length - 1]?.value ?? 0;
+
+        return {
+          name,
+          rxRates,
+          txRates,
+          latestRxRate,
+          latestTxRate,
+          latestInErrors,
+          latestOutErrors,
+          latestOperStatus,
+          totalRateBps: latestRxRate + latestTxRate,
+        };
+      })
+      .sort((a, b) => b.totalRateBps - a.totalRateBps);
+
+    const totalTrafficRateData = Array.from(totalsBucket.values()).sort(
       (a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
     );
+
+    const interfaceTrafficChartData = (() => {
+      const topInterfaces = perInterface.slice(0, 4);
+      const bucket = new Map<string, Record<string, string | number | undefined>>();
+
+      for (const iface of topInterfaces) {
+        for (const point of iface.rxRates) {
+          const current = bucket.get(point.checkedAt) ?? {
+            checkedAt: point.checkedAt,
+            timeLabel: point.timeLabel,
+          };
+          current[`${iface.name} RX`] = point.rateBps;
+          bucket.set(point.checkedAt, current);
+        }
+
+        for (const point of iface.txRates) {
+          const current = bucket.get(point.checkedAt) ?? {
+            checkedAt: point.checkedAt,
+            timeLabel: point.timeLabel,
+          };
+          current[`${iface.name} TX`] = point.rateBps;
+          bucket.set(point.checkedAt, current);
+        }
+      }
+
+      return Array.from(bucket.values()).sort(
+        (a, b) => new Date(String(a.checkedAt)).getTime() - new Date(String(b.checkedAt)).getTime(),
+      );
+    })();
+
+    return {
+      totalTrafficRateData,
+      interfaceTrafficChartData,
+      topInterfaces: perInterface.slice(0, 8),
+    };
   }, [metricSeries]);
+
+  const totalTrafficRateCeiling = useMemo(
+    () =>
+      getChartCeiling(
+        interfaceAnalytics.totalTrafficRateData.flatMap((point) => [point.rxRateBps, point.txRateBps]),
+      ),
+    [interfaceAnalytics.totalTrafficRateData],
+  );
+
+  const interfaceTrafficRateCeiling = useMemo(
+    () =>
+      getChartCeiling(
+        interfaceAnalytics.interfaceTrafficChartData.flatMap((point) =>
+          Object.entries(point)
+            .filter(([key, value]) => key !== "checkedAt" && key !== "timeLabel" && typeof value === "number")
+            .map(([, value]) => Number(value)),
+        ),
+      ),
+    [interfaceAnalytics.interfaceTrafficChartData],
+  );
 
   const openEditModal = () => {
     if (!monitor) return;
@@ -1019,29 +1164,114 @@ const MonitorDetailPage = () => {
 
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="border-b border-slate-200 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-slate-950">Network counters</h2>
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-semibold text-slate-950">Traffic rate</h2>
+                      <span className="text-xs text-slate-400">Aggregated across interfaces</span>
+                    </div>
                   </div>
                   <div className="h-72 p-4">
-                    {netCounterChartData.length === 0 ? (
+                    {interfaceAnalytics.totalTrafficRateData.length === 0 ? (
                       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                        ยังไม่มี network counters
+                        ยังไม่มี traffic rate
                       </div>
                     ) : (
                       <ResponsiveContainer height="100%" width="100%">
-                        <LineChart data={netCounterChartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                        <LineChart
+                          data={interfaceAnalytics.totalTrafficRateData}
+                          margin={{ bottom: 8, left: 0, right: 12, top: 12 }}
+                        >
                           <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
                           <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
-                          <YAxis tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => formatBytes(Number(value))} tickLine={false} width={64} />
+                          <YAxis
+                            domain={[0, totalTrafficRateCeiling]}
+                            tick={{ fill: "#64748b", fontSize: 12 }}
+                            tickFormatter={(value) => formatBitsPerSecond(Number(value))}
+                            tickLine={false}
+                            width={72}
+                          />
                           <Tooltip
-                            formatter={(value, name) => [formatBytes(Number(value)), name === "inOctets" ? "RX total" : "TX total"]}
+                            formatter={(value, name) => [formatBitsPerSecond(Number(value)), String(name)]}
                             labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
                           />
-                          <Line dataKey="inOctets" name="RX total" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                          <Line dataKey="outOctets" name="TX total" stroke="#ea580c" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          <Line dataKey="rxRateBps" name="RX total" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          <Line dataKey="txRateBps" name="TX total" stroke="#ea580c" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                         </LineChart>
                       </ResponsiveContainer>
                     )}
                   </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <h2 className="text-sm font-semibold text-slate-950">Top interface traffic</h2>
+                </div>
+                <div className="h-72 p-4">
+                  {interfaceAnalytics.interfaceTrafficChartData.length === 0 ||
+                  interfaceAnalytics.topInterfaces.length === 0 ? (
+                    <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                      ยังไม่มีข้อมูล traffic ต่อ interface
+                    </div>
+                  ) : (
+                    <ResponsiveContainer height="100%" width="100%">
+                      <LineChart
+                        data={interfaceAnalytics.interfaceTrafficChartData}
+                        margin={{ bottom: 8, left: 0, right: 12, top: 12 }}
+                      >
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="timeLabel"
+                          minTickGap={24}
+                          tick={{ fill: "#64748b", fontSize: 12 }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          domain={[0, interfaceTrafficRateCeiling]}
+                          tick={{ fill: "#64748b", fontSize: 12 }}
+                          tickFormatter={(value) => formatBitsPerSecond(Number(value))}
+                          tickLine={false}
+                          width={72}
+                        />
+                        <Tooltip
+                          formatter={(value, name) => [formatBitsPerSecond(Number(value)), name]}
+                          labelFormatter={(_, payload) =>
+                            payload?.[0]?.payload?.checkedAt
+                              ? formatDateTime(String(payload[0].payload.checkedAt))
+                              : ""
+                          }
+                        />
+                        {interfaceAnalytics.topInterfaces.slice(0, 4).flatMap((iface, index) => {
+                          const colors = [
+                            ["#1d4ed8", "#60a5fa"],
+                            ["#c2410c", "#fb923c"],
+                            ["#047857", "#34d399"],
+                            ["#7c3aed", "#c084fc"],
+                          ];
+                          const palette = colors[index % colors.length];
+                          return [
+                            <Line
+                              key={`${iface.name}-rx`}
+                              dataKey={`${iface.name} RX`}
+                              name={`${iface.name} RX`}
+                              stroke={palette[0]}
+                              strokeWidth={2}
+                              dot={false}
+                              connectNulls
+                            />,
+                            <Line
+                              key={`${iface.name}-tx`}
+                              dataKey={`${iface.name} TX`}
+                              name={`${iface.name} TX`}
+                              stroke={palette[1]}
+                              strokeWidth={2}
+                              dot={false}
+                              connectNulls
+                            />,
+                          ];
+                        })}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 
@@ -1095,27 +1325,29 @@ const MonitorDetailPage = () => {
                       <tr>
                         <th className="px-4 py-3">Interface</th>
                         <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">RX</th>
-                        <th className="px-4 py-3">TX</th>
+                        <th className="px-4 py-3">RX rate</th>
+                        <th className="px-4 py-3">TX rate</th>
                         <th className="px-4 py-3">Errors</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {!latestMetadata?.interfaces?.length ? (
+                      {!interfaceAnalytics.topInterfaces.length ? (
                         <tr>
                           <td className="px-4 py-8 text-center text-slate-500" colSpan={5}>
                             ยังไม่มีข้อมูล interface
                           </td>
                         </tr>
                       ) : (
-                        latestMetadata.interfaces.map((iface) => (
+                        interfaceAnalytics.topInterfaces.map((iface) => (
                           <tr className="hover:bg-slate-50" key={iface.name}>
                             <td className="px-4 py-3 font-medium text-slate-800">{iface.name}</td>
-                            <td className="px-4 py-3 text-slate-600">{iface.operStatus === 1 ? "UP" : "DOWN"}</td>
-                            <td className="px-4 py-3 text-slate-600">{formatBytes(iface.inOctets)}</td>
-                            <td className="px-4 py-3 text-slate-600">{formatBytes(iface.outOctets)}</td>
                             <td className="px-4 py-3 text-slate-600">
-                              in {iface.inErrors ?? 0} · out {iface.outErrors ?? 0}
+                              {iface.latestOperStatus === 1 ? "UP" : iface.latestOperStatus > 0 ? "DOWN" : "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{formatBitsPerSecond(iface.latestRxRate)}</td>
+                            <td className="px-4 py-3 text-slate-600">{formatBitsPerSecond(iface.latestTxRate)}</td>
+                            <td className="px-4 py-3 text-slate-600">
+                              in {Math.round(iface.latestInErrors)} · out {Math.round(iface.latestOutErrors)}
                             </td>
                           </tr>
                         ))

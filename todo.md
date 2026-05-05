@@ -123,10 +123,11 @@
 - [ ] ยังไม่มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
 
 ### Device / network analytics
-- [ ] Network UI ยังควรแสดง **rate** มากกว่า raw counters
-- [ ] Interface traffic graph ยังไม่เป็น bps/Kbps/Mbps แบบ NMS เต็มตัว
-- [ ] ยังไม่มี top interfaces / busiest links
+- [x] Network UI แสดง **traffic rate** แทน raw counters ในหน้า detail
+- [x] Interface traffic graph เป็น bps/Kbps/Mbps/Gbps แบบอ่านง่าย
+- [x] Top interfaces / busiest links ในหน้า detail
 - [ ] ยังไม่มี port/interface inventory page แยก
+- [ ] Error / discard counters ยังไม่ครบแบบ NMS เต็มตัว
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 
 ### Inventory flow
@@ -137,14 +138,14 @@
 ## Next Recommended Work
 
 ### Priority 1 — Make device monitoring feel like a real NMS
-- [ ] Convert network counters to traffic rate
-  - RX/TX bps
-  - Kbps / Mbps / Gbps formatting
-  - per-interface history
-- [ ] Add interface-focused device detail
-  - top active interfaces
-  - error / discard counters
-  - interface operational status
+- [x] Convert network counters to traffic rate
+  - [x] RX/TX bps
+  - [x] Kbps / Mbps / Gbps formatting
+  - [x] per-interface history
+- [x] Add interface-focused device detail
+  - [x] top active interfaces
+  - [x] interface operational status
+  - [ ] error / discard counters ให้ครบขึ้น
 - [ ] Add group-aware views
   - filter devices by group
   - filter monitors by group
