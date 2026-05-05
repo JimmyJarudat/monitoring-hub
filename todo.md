@@ -62,7 +62,7 @@
 - [ ] Keyword / content check สำหรับเว็บ
 - [x] HTTP advanced เช่น follow redirect, auth, body match, latency threshold
 - [x] Port/service preset เช่น SSH / RDP / SMTP / LDAP แบบใช้ TCP แต่ตั้งง่าย
-- [ ] Webhook / API health ที่เช็ก response body หรือ JSON path ได้
+- [x] Webhook / API health ที่เช็ก response body หรือ JSON path ได้
 - [ ] Docker direct แบบไม่พึ่ง Portainer
 
 ### Deeper capabilities for existing monitor types

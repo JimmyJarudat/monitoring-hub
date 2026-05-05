@@ -243,6 +243,85 @@ const buildConfig = (form: FormState) => {
   });
 };
 
+type GuideField = { name: string; desc: string; required?: boolean };
+type TypeGuide = { summary: string; fields: GuideField[]; tip?: string };
+
+const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
+  HTTP: {
+    summary: "ส่ง HTTP request แล้วตรวจสอบ status code, body, header และความเร็ว",
+    fields: [
+      { name: "URL", desc: "ที่อยู่ที่ต้องการเช็ค เช่น https://example.com/health", required: true },
+      { name: "Method", desc: "GET สำหรับดึงข้อมูล · HEAD ถ้าไม่ต้องการ body · POST สำหรับ API ที่รับ request" },
+      { name: "Expected status", desc: "HTTP status ที่คาดว่าจะได้ เช่น 200 = OK · 201 = Created · 204 = No Content" },
+      { name: "Auth type", desc: "Basic = username/password · Bearer = API token หรือ JWT" },
+      { name: "Expected body text", desc: 'ข้อความที่ต้องมีใน response เช่น "ok" หรือ "healthy" — ถ้าไม่มีจะ DEGRADED' },
+      { name: "JSON path", desc: 'เช็คค่าใน JSON response เช่น $.status หรือ $.data.items[0].state' },
+      { name: "JSON expected value", desc: 'ค่าที่คาดว่าจะได้จาก JSON path เช่น "ok" หรือ "true"' },
+      { name: "Expected header", desc: "ชื่อ header เช่น content-type และค่าที่คาดว่าจะได้ เช่น application/json" },
+      { name: "Latency threshold ms", desc: "ถ้า response ช้ากว่านี้จะ DEGRADED เช่น 2000 = ช้ากว่า 2 วินาที" },
+      { name: "Follow redirects", desc: "เปิด = ตาม redirect อัตโนมัติ · ปิด = หยุดที่ 3xx แล้วเช็ค status นั้น" },
+    ],
+    tip: "เหมาะกับ API health endpoint เช่น /health /ping /status และ web page ที่ต้องการเช็ค content",
+  },
+  PING: {
+    summary: "ส่ง ICMP ping ไปยัง host แล้วดูว่าตอบกลับหรือไม่",
+    fields: [
+      { name: "Host", desc: "IP address หรือ hostname เช่น 192.168.1.1 หรือ router.local", required: true },
+      { name: "Timeout ms", desc: "รอนานแค่ไหน ถ้าเกินจะ DOWN เช่น 5000 = 5 วินาที" },
+    ],
+    tip: "ใช้เช็คว่าอุปกรณ์ยังเปิดอยู่ไหม ไม่ได้เช็คว่า service ทำงานได้ — ควรใช้คู่กับ TCP หรือ HTTP",
+  },
+  TCP: {
+    summary: "เปิด TCP connection ไปยัง host:port แล้วดูว่าเชื่อมต่อได้หรือไม่",
+    fields: [
+      { name: "Service preset", desc: "เลือก service สำเร็จรูป port จะ auto-fill เช่น SSH = 22 · RDP = 3389 · SMTP = 25" },
+      { name: "Host", desc: "IP address หรือ hostname ของ server", required: true },
+      { name: "Port", desc: "TCP port ที่ต้องการเช็ค", required: true },
+      { name: "Timeout ms", desc: "รอ connection นานแค่ไหน" },
+    ],
+    tip: "เหมาะกับเช็คว่า SSH, RDP, database port เปิดอยู่ไหม — ไม่ได้เช็คว่า login ได้",
+  },
+  TLS_CERT: {
+    summary: "เชื่อมต่อ HTTPS แล้วตรวจสอบ SSL/TLS certificate ว่าใกล้หมดอายุหรือไม่",
+    fields: [
+      { name: "URL", desc: "ที่อยู่ https เช่น https://example.com — ต้องขึ้นต้นด้วย https://", required: true },
+      { name: "Warning days", desc: "เตือนล่วงหน้ากี่วันก่อน cert หมดอายุ เช่น 30 = เตือนก่อน 1 เดือน" },
+    ],
+    tip: "ถ้า cert หมดอายุแล้วจะ DOWN · ถ้าใกล้หมดตาม warning days จะ DEGRADED · ถ้ายังเหลือนานจะ UP",
+  },
+  DNS: {
+    summary: "ส่ง DNS query แล้วตรวจสอบว่า domain resolve ได้และได้ค่าที่ถูกต้อง",
+    fields: [
+      { name: "Host", desc: "domain ที่ต้องการ resolve เช่น n8n.example.com — ต้องเป็นชื่อเต็ม ไม่ใช่ root domain ที่ไม่มี record", required: true },
+      { name: "Record type", desc: "A = IPv4 · AAAA = IPv6 · CNAME = alias · MX = email server · NS = nameserver · TXT = text" },
+      { name: "Expected value", desc: "ค่าที่คาดว่าจะ resolve ได้ เช่น IP address — ถ้าไม่ตรงจะ DEGRADED" },
+      { name: "DNS server", desc: "ระบุ DNS server เฉพาะ เช่น 1.1.1.1 — ถ้าว่างจะใช้ system default" },
+    ],
+    tip: "ถ้า domain ไม่มี record จะ DOWN ทันที — ต้องใช้ subdomain เช่น api.example.com ไม่ใช่ example.com",
+  },
+  DOCKER: {
+    summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ endpoint หรือ container เฉพาะตัว",
+    fields: [
+      { name: "Portainer URL", desc: "ที่อยู่ Portainer เช่น https://portainer.example.com หรือ http://192.168.1.1:9000", required: true },
+      { name: "API key", desc: "สร้างได้ที่ Portainer → User settings → Access tokens", required: true },
+      { name: "Endpoint ID", desc: "ID ของ environment ใน Portainer ดูได้จาก URL เช่น /#!/1/docker → ID = 1", required: true },
+      { name: "Container ID", desc: "ถ้าว่างจะเช็ค endpoint health ทั้งหมด · ถ้าระบุจะเช็ค container นั้นเฉพาะ" },
+    ],
+    tip: "Container ID หาได้จาก Portainer → Containers แล้วดูที่ column ID หรือ URL",
+  },
+  DATABASE: {
+    summary: "เปิด connection ไปยัง database แล้วรัน query ง่ายๆ เพื่อเช็คว่า database ตอบสนอง",
+    fields: [
+      { name: "Database type", desc: "เลือกประเภท database ที่ต้องการเช็ค", required: true },
+      { name: "Host / Port", desc: "ที่อยู่ database server เช่น 192.168.1.1 port 5432", required: true },
+      { name: "User / Password", desc: "แนะนำสร้าง read-only user เฉพาะสำหรับ monitor — ไม่ควรใช้ admin" },
+      { name: "Database name", desc: "ชื่อ database ที่ต้องการ connect" },
+      { name: "MongoDB URI", desc: "ถ้าระบุ URI จะใช้แทน host/port/user/password ทั้งหมด เช่น mongodb://user:pass@host:27017/db" },
+    ],
+    tip: "แนะนำใช้ read-only user ที่มีสิทธิ์น้อยที่สุด เช่น SELECT เท่านั้น ไม่ควรใช้ admin credential",
+  },
+};
+
 const getRequiredHint = (type: MonitorType) => {
   if (type === "PING") return "Required: host";
   if (type === "TCP") return "Required: host, port";
@@ -258,6 +337,7 @@ const AddMonitorPage = () => {
   const { post } = useApi();
   const [form, setForm] = useState<FormState>(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const selectedType = useMemo(
     () => monitorTypes.find((item) => item.value === form.type) ?? monitorTypes[0],
@@ -373,10 +453,45 @@ const AddMonitorPage = () => {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-sm font-semibold text-slate-950">{selectedType.label} config</h2>
-              <p className="text-sm text-slate-500">{selectedType.description}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">{selectedType.label} config</h2>
+                <p className="mt-0.5 text-sm text-slate-500">{selectedType.description}</p>
+              </div>
+              <button
+                type="button"
+                className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                onClick={() => setShowGuide((v) => !v)}
+              >
+                <span>{showGuide ? "▲" : "▼"}</span>
+                คำแนะนำการใช้งาน
+              </button>
             </div>
+
+            {showGuide ? (
+              <div className="mt-4 rounded-lg border border-cyan-100 bg-cyan-50 p-4 text-sm">
+                <p className="font-medium text-cyan-900">{TYPE_GUIDES[form.type].summary}</p>
+                <ul className="mt-3 space-y-2">
+                  {TYPE_GUIDES[form.type].fields.map((field) => (
+                    <li key={field.name} className="flex gap-2">
+                      <span className="mt-0.5 shrink-0">
+                        {field.required ? (
+                          <span className="rounded bg-cyan-200 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800">required</span>
+                        ) : (
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">optional</span>
+                        )}
+                      </span>
+                      <span className="text-slate-700"><span className="font-medium text-slate-900">{field.name}</span> — {field.desc}</span>
+                    </li>
+                  ))}
+                </ul>
+                {TYPE_GUIDES[form.type].tip ? (
+                  <p className="mt-3 rounded-md bg-cyan-100 px-3 py-2 text-xs text-cyan-800">
+                    💡 {TYPE_GUIDES[form.type].tip}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {form.type === "HTTP" ? (
