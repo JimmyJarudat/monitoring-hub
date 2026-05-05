@@ -27,7 +27,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       }
 
       const user = await authService.createUser(body.username, body.email, body.password);
-      const token = await jwt.sign({ sub: user.id, role: user.role });
+      const token = await jwt.sign({ sub: user.id, role: user.role.name });
 
       return { token, user };
     },
@@ -55,7 +55,7 @@ export const authController = new Elysia({ prefix: "/auth" })
         return { message: "Invalid credentials" };
       }
 
-      const token = await jwt.sign({ sub: user.id, role: user.role });
+      const token = await jwt.sign({ sub: user.id, role: user.role.name });
       const { password: _, ...safeUser } = user;
 
       return { token, user: safeUser };
