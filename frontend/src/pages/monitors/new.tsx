@@ -26,6 +26,7 @@ type FormState = {
   httpExpectedHeaderKey: string;
   httpExpectedHeaderValue: string;
   httpLatencyThresholdMs: string;
+  tcpPreset: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
   dnsServer: string;
@@ -69,6 +70,23 @@ const monitorTypes: Array<{ label: string; value: MonitorType; description: stri
   { label: "Database", value: "DATABASE", description: "Check database connection health" },
 ];
 
+const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [
+  { label: "Custom", value: "custom", port: "" },
+  { label: "SSH", value: "ssh", port: "22" },
+  { label: "RDP", value: "rdp", port: "3389" },
+  { label: "FTP", value: "ftp", port: "21" },
+  { label: "SMTP", value: "smtp", port: "25" },
+  { label: "SMTP TLS", value: "smtp-tls", port: "587" },
+  { label: "LDAP", value: "ldap", port: "389" },
+  { label: "LDAPS", value: "ldaps", port: "636" },
+  { label: "HTTP", value: "http", port: "80" },
+  { label: "HTTPS", value: "https", port: "443" },
+  { label: "MySQL", value: "mysql", port: "3306" },
+  { label: "PostgreSQL", value: "postgresql", port: "5432" },
+  { label: "Redis", value: "redis", port: "6379" },
+  { label: "MongoDB", value: "mongodb", port: "27017" },
+];
+
 const initialForm: FormState = {
   name: "",
   type: "HTTP",
@@ -81,6 +99,7 @@ const initialForm: FormState = {
   expectedStatus: "200",
   timeoutMs: "5000",
   warningDays: "30",
+  tcpPreset: "custom",
   httpFollowRedirect: true,
   httpAuthType: "none",
   httpAuthUsername: "",
@@ -557,6 +576,26 @@ const AddMonitorPage = () => {
               form.type === "TCP" ||
               (form.type === "DATABASE" && !usesSqlite && !usesMongoUri) ? (
                 <>
+                  {form.type === "TCP" ? (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">Service preset</span>
+                      <select
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.tcpPreset}
+                        onChange={(event) => {
+                          const preset = TCP_PRESETS.find((p) => p.value === event.target.value);
+                          updateField("tcpPreset", event.target.value);
+                          if (preset && preset.port) updateField("port", preset.port);
+                        }}
+                      >
+                        {TCP_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.port ? `${p.label} — port ${p.port}` : p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Host</span>
                     <input
