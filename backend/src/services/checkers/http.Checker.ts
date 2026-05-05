@@ -13,6 +13,8 @@ export interface HttpConfig {
   expectedHeaderKey?: string;
   expectedHeaderValue?: string;
   latencyThresholdMs?: number;
+  jsonPath?: string;
+  jsonExpected?: string;
 }
 
 export interface CheckResult {
@@ -21,6 +23,27 @@ export interface CheckResult {
   message?: string;
   metadata?: Record<string, unknown>;
 }
+
+// Supports: $.key  $.key.sub  $.key[0]  $.key[0].sub
+const resolveJsonPath = (obj: unknown, path: string): unknown => {
+  const normalized = path.replace(/^\$\.?/, "");
+  if (!normalized) return obj;
+
+  let current: unknown = obj;
+  for (const token of normalized.split(".")) {
+    if (current === null || current === undefined) return undefined;
+    const arrayMatch = token.match(/^(\w+)\[(\d+)\]$/);
+    if (arrayMatch) {
+      const arr = (current as Record<string, unknown>)[arrayMatch[1]];
+      if (!Array.isArray(arr)) return undefined;
+      current = arr[parseInt(arrayMatch[2])];
+    } else {
+      if (typeof current !== "object" || Array.isArray(current)) return undefined;
+      current = (current as Record<string, unknown>)[token];
+    }
+  }
+  return current;
+};
 
 export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
   const timeout = config.timeoutMs ?? 10000;
@@ -55,12 +78,30 @@ export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
       issues.push(`ได้รับ HTTP ${res.status} คาดว่า ${expectedStatus}`);
     }
 
-    let bodySnippet: string | undefined;
-    if (config.expectedBodyText) {
-      const bodyText = await res.text();
-      bodySnippet = bodyText.slice(0, 300);
-      if (!bodyText.includes(config.expectedBodyText)) {
+    let rawBody: string | undefined;
+    if (config.expectedBodyText || config.jsonPath) {
+      rawBody = await res.text();
+    }
+
+    if (config.expectedBodyText && rawBody !== undefined) {
+      if (!rawBody.includes(config.expectedBodyText)) {
         issues.push(`ไม่พบข้อความ "${config.expectedBodyText}" ใน body`);
+      }
+    }
+
+    if (config.jsonPath && rawBody !== undefined) {
+      try {
+        const parsed: unknown = JSON.parse(rawBody);
+        const value = resolveJsonPath(parsed, config.jsonPath);
+        if (value === undefined) {
+          issues.push(`ไม่พบ JSON path "${config.jsonPath}"`);
+        } else if (config.jsonExpected !== undefined && config.jsonExpected !== "") {
+          if (String(value) !== String(config.jsonExpected)) {
+            issues.push(`"${config.jsonPath}" ได้ "${value}" คาดว่า "${config.jsonExpected}"`);
+          }
+        }
+      } catch {
+        issues.push(`response ไม่ใช่ JSON`);
       }
     }
 
@@ -89,7 +130,7 @@ export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
       metadata: {
         httpStatus: res.status,
         url: config.url,
-        ...(bodySnippet !== undefined ? { bodySnippet } : {}),
+        ...(rawBody !== undefined ? { bodySnippet: rawBody.slice(0, 300) } : {}),
       },
     };
   } catch (e: any) {

@@ -26,6 +26,8 @@ type FormState = {
   httpExpectedHeaderKey: string;
   httpExpectedHeaderValue: string;
   httpLatencyThresholdMs: string;
+  httpJsonPath: string;
+  httpJsonExpected: string;
   tcpPreset: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
@@ -109,6 +111,8 @@ const initialForm: FormState = {
   httpExpectedHeaderKey: "",
   httpExpectedHeaderValue: "",
   httpLatencyThresholdMs: "",
+  httpJsonPath: "",
+  httpJsonExpected: "",
   dnsRecordType: "A",
   dnsExpectedValue: "",
   dnsServer: "",
@@ -169,6 +173,8 @@ const buildConfig = (form: FormState) => {
       expectedHeaderKey: form.httpExpectedHeaderKey,
       expectedHeaderValue: form.httpExpectedHeaderValue,
       latencyThresholdMs: toOptionalNumber(form.httpLatencyThresholdMs),
+      jsonPath: form.httpJsonPath,
+      jsonExpected: form.httpJsonExpected,
     });
   }
 
@@ -494,6 +500,24 @@ const AddMonitorPage = () => {
                       value={form.httpLatencyThresholdMs}
                       onChange={(event) => updateField("httpLatencyThresholdMs", event.target.value)}
                       placeholder="DEGRADED ถ้า response ช้ากว่านี้ เช่น 2000"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">JSON path <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpJsonPath}
+                      onChange={(event) => updateField("httpJsonPath", event.target.value)}
+                      placeholder="$.status"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">JSON expected value <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpJsonExpected}
+                      onChange={(event) => updateField("httpJsonExpected", event.target.value)}
+                      placeholder="ok"
                     />
                   </label>
                 </>
