@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/auth/me)",
+      "Bash(kill %1)",
+      "Bash(node -e \"const {decodeJwt} = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/jose'\\); console.log\\(typeof decodeJwt\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/auth/logout -H \"Content-Type: application/json\" -d '{\"refreshToken\":\"fake\"}')",
+      "Bash(curl -s http://localhost:3000/auth/me -H \"Authorization: Bearer fake.token.here\")",
+      "Bash(node -e \"const e = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia'\\); console.log\\(Object.keys\\(e\\).filter\\(k => k.toLowerCase\\(\\).includes\\('error'\\)\\)\\)\")",
+      "Bash(node -e \"console.log\\(require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia/package.json'\\).version\\)\")",
+      "Bash(node -e \"const e = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia'\\); console.log\\(Object.keys\\(e\\)\\)\")"
+    ]
+  }
+}

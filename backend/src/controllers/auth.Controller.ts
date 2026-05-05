@@ -12,20 +12,21 @@ export const authController = new Elysia({ prefix: "/auth" })
       const existingUsername = await authService.findByUsernameOrEmail(body.username);
       if (existingUsername) {
         set.status = 409;
-        return { message: "Username already taken" };
+        return { success: false, message: "Username นี้ถูกใช้ไปแล้ว" };
       }
 
       const existingEmail = await authService.findByUsernameOrEmail(body.email);
       if (existingEmail) {
         set.status = 409;
-        return { message: "Email already in use" };
+        return { success: false, message: "Email นี้ถูกใช้ไปแล้ว" };
       }
 
       const user = await authService.createUser(body.username, body.email, body.password);
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
       const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
 
-      return { accessToken, refreshToken, user };
+      set.status = 201;
+      return { success: true, accessToken, refreshToken, user };
     },
     {
       body: t.Object({
@@ -41,24 +42,24 @@ export const authController = new Elysia({ prefix: "/auth" })
       const user = await authService.findByUsernameOrEmail(body.identifier);
       if (!user) {
         set.status = 401;
-        return { message: "Invalid credentials" };
+        return { success: false, message: "username/email หรือรหัสผ่านไม่ถูกต้อง" };
       }
 
       const valid = await authService.verifyPassword(body.password, user.password);
       if (!valid) {
         set.status = 401;
-        return { message: "Invalid credentials" };
+        return { success: false, message: "username/email หรือรหัสผ่านไม่ถูกต้อง" };
       }
 
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
       const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
       const { password: _, ...safeUser } = user;
 
-      return { accessToken, refreshToken, user: safeUser };
+      return { success: true, accessToken, refreshToken, user: safeUser };
     },
     {
       body: t.Object({
-        identifier: t.String({ description: "username or email" }),
+        identifier: t.String({ description: "username หรือ email" }),
         password: t.String(),
       }),
     }
@@ -69,15 +70,15 @@ export const authController = new Elysia({ prefix: "/auth" })
       const record = await tokenService.findValid(body.refreshToken);
       if (!record) {
         set.status = 401;
-        return { message: "Invalid or expired refresh token" };
+        return { success: false, message: "Refresh token ไม่ถูกต้องหรือหมดอายุแล้ว" };
       }
 
-      // rotate: revoke เดิม ออกใหม่
+      // Token Rotation: revoke เดิม ออก token คู่ใหม่
       await tokenService.revoke(body.refreshToken);
       const accessToken = await jwt.sign({ sub: record.userId, role: record.user.role.name });
       const { token: newRefreshToken } = await tokenService.createRefreshToken(record.userId);
 
-      return { accessToken, refreshToken: newRefreshToken };
+      return { success: true, accessToken, refreshToken: newRefreshToken };
     },
     {
       body: t.Object({
@@ -87,9 +88,15 @@ export const authController = new Elysia({ prefix: "/auth" })
   )
   .post(
     "/logout",
-    async ({ body, set }) => {
+    async ({ body }) => {
+      const record = await tokenService.findValid(body.refreshToken);
+      if (!record) {
+        // Token ไม่มีอยู่หรือถูก revoke แล้ว ถือว่า logout สำเร็จ
+        return { success: true, message: "ออกจากระบบแล้ว" };
+      }
+
       await tokenService.revoke(body.refreshToken);
-      set.status = 204;
+      return { success: true, message: "ออกจากระบบแล้ว" };
     },
     {
       body: t.Object({
