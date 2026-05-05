@@ -17,6 +17,15 @@ type FormState = {
   expectedStatus: string;
   timeoutMs: string;
   warningDays: string;
+  httpFollowRedirect: boolean;
+  httpAuthType: "none" | "basic" | "bearer";
+  httpAuthUsername: string;
+  httpAuthPassword: string;
+  httpAuthToken: string;
+  httpExpectedBodyText: string;
+  httpExpectedHeaderKey: string;
+  httpExpectedHeaderValue: string;
+  httpLatencyThresholdMs: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
   dnsServer: string;
@@ -72,6 +81,15 @@ const initialForm: FormState = {
   expectedStatus: "200",
   timeoutMs: "5000",
   warningDays: "30",
+  httpFollowRedirect: true,
+  httpAuthType: "none",
+  httpAuthUsername: "",
+  httpAuthPassword: "",
+  httpAuthToken: "",
+  httpExpectedBodyText: "",
+  httpExpectedHeaderKey: "",
+  httpExpectedHeaderValue: "",
+  httpLatencyThresholdMs: "",
   dnsRecordType: "A",
   dnsExpectedValue: "",
   dnsServer: "",
@@ -123,6 +141,15 @@ const buildConfig = (form: FormState) => {
       method: form.method,
       expectedStatus: Number(form.expectedStatus),
       timeoutMs,
+      followRedirect: form.httpFollowRedirect ? undefined : false,
+      authType: form.httpAuthType !== "none" ? form.httpAuthType : undefined,
+      authUsername: form.httpAuthType === "basic" ? form.httpAuthUsername : undefined,
+      authPassword: form.httpAuthType === "basic" ? form.httpAuthPassword : undefined,
+      authToken: form.httpAuthType === "bearer" ? form.httpAuthToken : undefined,
+      expectedBodyText: form.httpExpectedBodyText,
+      expectedHeaderKey: form.httpExpectedHeaderKey,
+      expectedHeaderValue: form.httpExpectedHeaderValue,
+      latencyThresholdMs: toOptionalNumber(form.httpLatencyThresholdMs),
     });
   }
 
@@ -194,7 +221,7 @@ const buildConfig = (form: FormState) => {
 const getRequiredHint = (type: MonitorType) => {
   if (type === "PING") return "Required: host";
   if (type === "TCP") return "Required: host, port";
-  if (type === "HTTP") return "Required: url";
+  if (type === "HTTP") return "Required: url. Optional: auth, body/header check, latency threshold";
   if (type === "TLS_CERT") return "Required: url. Optional: warning days";
   if (type === "DNS") return "Required: host. Optional: record type, expected value, DNS server";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
@@ -359,6 +386,95 @@ const AddMonitorPage = () => {
                       value={form.expectedStatus}
                       onChange={(event) => updateField("expectedStatus", event.target.value)}
                       required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Auth type</span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpAuthType}
+                      onChange={(event) => updateField("httpAuthType", event.target.value as "none" | "basic" | "bearer")}
+                    >
+                      <option value="none">None</option>
+                      <option value="basic">Basic</option>
+                      <option value="bearer">Bearer token</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <input
+                      checked={form.httpFollowRedirect}
+                      className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                      type="checkbox"
+                      onChange={(event) => updateField("httpFollowRedirect", event.target.checked)}
+                    />
+                    <span className="text-sm font-medium text-slate-700">Follow redirects</span>
+                  </label>
+                  {form.httpAuthType === "basic" ? (
+                    <>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">Username</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          value={form.httpAuthUsername}
+                          onChange={(event) => updateField("httpAuthUsername", event.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">Password</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          type="password"
+                          value={form.httpAuthPassword}
+                          onChange={(event) => updateField("httpAuthPassword", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                  {form.httpAuthType === "bearer" ? (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">Bearer token</span>
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.httpAuthToken}
+                        onChange={(event) => updateField("httpAuthToken", event.target.value)}
+                      />
+                    </label>
+                  ) : null}
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Expected body text</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpExpectedBodyText}
+                      onChange={(event) => updateField("httpExpectedBodyText", event.target.value)}
+                      placeholder="Text that must appear in the response body"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Expected header name</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpExpectedHeaderKey}
+                      onChange={(event) => updateField("httpExpectedHeaderKey", event.target.value)}
+                      placeholder="content-type"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Expected header value</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.httpExpectedHeaderValue}
+                      onChange={(event) => updateField("httpExpectedHeaderValue", event.target.value)}
+                      placeholder="application/json"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Latency threshold ms</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      value={form.httpLatencyThresholdMs}
+                      onChange={(event) => updateField("httpLatencyThresholdMs", event.target.value)}
+                      placeholder="DEGRADED if slower than this"
                     />
                   </label>
                 </>
