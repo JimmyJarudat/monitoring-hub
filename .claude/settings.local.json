@@ -18,7 +18,9 @@
       "Read(//c/Users/Saranrat/.claude/projects/**)",
       "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt | \\\\ *)",
       "Read(//tmp/**)",
-      "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt)"
+      "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt)",
+      "Bash(bun add *)",
+      "Bash(bunx prisma *)"
     ]
   }
 }

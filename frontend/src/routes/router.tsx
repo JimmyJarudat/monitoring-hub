@@ -14,6 +14,7 @@ import IncidentsPage from "@/pages/incidents";
 import MonitorsPage from "@/pages/monitors";
 import AddMonitorPage from "@/pages/monitors/new";
 import MonitorDetailPage from "@/pages/monitors/detail";
+import DevicesPage from "@/pages/devices";
 import ResultsPage from "@/pages/results";
 
 const LegacyMonitorDetailRedirect = () => {
@@ -39,6 +40,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "monitors", element: <MonitorsPage /> }),
       createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage /> }),
       createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
+      createProtectedRoute({ path: "devices", element: <DevicesPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),
       createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
       createProtectedRoute({

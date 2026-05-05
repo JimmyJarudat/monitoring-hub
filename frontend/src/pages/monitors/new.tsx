@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "SYSTEM" | "DOCKER" | "DATABASE";
 
 type FormState = {
   name: string;
@@ -76,6 +76,11 @@ const monitorTypes: Array<{ label: string; value: MonitorType; description: stri
     label: "SNMP",
     value: "SNMP",
     description: "Query SNMP agent on network devices — routers, switches, firewalls",
+  },
+  {
+    label: "System",
+    value: "SYSTEM",
+    description: "Monitor CPU, RAM and Disk usage via SNMP — Linux servers with snmpd",
   },
   { label: "Docker", value: "DOCKER", description: "Check Portainer endpoint or container" },
   { label: "Database", value: "DATABASE", description: "Check database connection health" },
@@ -220,6 +225,16 @@ const buildConfig = (form: FormState) => {
     });
   }
 
+  if (form.type === "SYSTEM") {
+    return compactConfig({
+      host: form.host,
+      port: toOptionalNumber(form.snmpPort),
+      community: form.snmpCommunity,
+      version: form.snmpVersion,
+      timeoutMs,
+    });
+  }
+
   if (form.type === "DOCKER") {
     return compactConfig({
       portainerUrl: form.portainerUrl,
@@ -334,6 +349,16 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
     ],
     tip: "ตรวจสอบให้แน่ใจว่า device เปิด SNMP ไว้ และ community string ถูกต้อง — ส่วนใหญ่ใช้ \"public\" สำหรับ read-only",
   },
+  SYSTEM: {
+    summary: "ดึงข้อมูล CPU, RAM, Disk จาก Linux server ผ่าน SNMP — ต้องติดตั้ง snmpd ก่อน",
+    fields: [
+      { name: "Host", desc: "IP address ของ server เช่น 10.8.0.1", required: true },
+      { name: "Community", desc: 'SNMP community string เช่น "public" หรือที่กำหนดเอง' },
+      { name: "Version", desc: "SNMP version — 2c รองรับดีที่สุด" },
+      { name: "Port", desc: "UDP port ของ SNMP — default 161" },
+    ],
+    tip: "ต้องเปิด UCD-SNMP MIB บน snmpd.conf — ตรวจสอบว่า rocommunity อนุญาต host ของ monitoring hub",
+  },
   DOCKER: {
     summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ endpoint หรือ container เฉพาะตัว",
     fields: [
@@ -364,6 +389,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "TLS_CERT") return "Required: url. Optional: warning days";
   if (type === "DNS") return "Required: host. Optional: record type, expected value, DNS server";
   if (type === "SNMP") return "Required: host. Optional: community, version, port, custom OIDs";
+  if (type === "SYSTEM") return "Required: host. Optional: community, version, port";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
   return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
@@ -748,6 +774,51 @@ const AddMonitorPage = () => {
                       value={form.snmpOids}
                       onChange={(event) => updateField("snmpOids", event.target.value)}
                       placeholder="1.3.6.1.2.1.1.5.0, 1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime"
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {form.type === "SYSTEM" ? (
+                <>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Host</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.host}
+                      onChange={(event) => updateField("host", event.target.value)}
+                      placeholder="10.8.0.1"
+                      required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Community <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.snmpCommunity}
+                      onChange={(event) => updateField("snmpCommunity", event.target.value)}
+                      placeholder="public"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Version <span className="font-normal text-slate-400">(optional)</span></span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.snmpVersion}
+                      onChange={(event) => updateField("snmpVersion", event.target.value as "1" | "2c")}
+                    >
+                      <option value="2c">2c (recommended)</option>
+                      <option value="1">1 (legacy)</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Port <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      value={form.snmpPort}
+                      onChange={(event) => updateField("snmpPort", event.target.value)}
+                      placeholder="161"
                     />
                   </label>
                 </>

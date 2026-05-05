@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { databaseCheck } from "./checkers/database.Checker";
 import { dnsCheck } from "./checkers/dns.Checker";
 import { snmpCheck } from "./checkers/snmp.Checker";
+import { systemCheck } from "./checkers/system.Checker";
 import { dockerCheck } from "./checkers/docker.Checker";
 import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
@@ -47,6 +48,8 @@ const runChecker = async (
       return dnsCheck(config as unknown as Parameters<typeof dnsCheck>[0]);
     case "SNMP":
       return snmpCheck(config as unknown as Parameters<typeof snmpCheck>[0]);
+    case "SYSTEM":
+      return systemCheck(config as unknown as Parameters<typeof systemCheck>[0]);
     case "DOCKER":
       return dockerCheck(config as unknown as Parameters<typeof dockerCheck>[0]);
     case "DATABASE":

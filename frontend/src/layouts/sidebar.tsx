@@ -32,8 +32,8 @@ const sidebarSections: SidebarSection[] = [
   {
     title: "Inventory",
     items: [
-      { label: "Devices", path: "/devices", icon: "V", badge: "Soon" },
-      { label: "Add Device", path: "/devices/new", icon: "+", badge: "Soon" },
+      { label: "Devices", path: "/devices", icon: "V" },
+      { label: "Add Device", path: "/monitors/new", icon: "+" },
       { label: "Groups", path: "/groups", icon: "G", badge: "Soon" },
       { label: "Credentials", path: "/credentials", icon: "K", badge: "Soon" },
     ],

@@ -111,6 +111,7 @@ enum MonitorType {
   TLS_CERT
   DNS
   SNMP
+  SYSTEM
   DOCKER
   DATABASE
 }
