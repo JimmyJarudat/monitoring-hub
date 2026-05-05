@@ -103,7 +103,9 @@ type DeviceMetadata = {
     operStatus: number;
     inOctets: number;
     outOctets: number;
+    inDiscards: number;
     inErrors: number;
+    outDiscards: number;
     outErrors: number;
   }>;
 };
@@ -640,7 +642,9 @@ const MonitorDetailPage = () => {
       {
         inSeries?: DeviceMetricSeries;
         outSeries?: DeviceMetricSeries;
+        inDiscards?: DeviceMetricSeries;
         inErrors?: DeviceMetricSeries;
+        outDiscards?: DeviceMetricSeries;
         outErrors?: DeviceMetricSeries;
         operStatus?: DeviceMetricSeries;
       }
@@ -652,7 +656,9 @@ const MonitorDetailPage = () => {
 
       if (series.metricKey === "net.in_octets") current.inSeries = series;
       if (series.metricKey === "net.out_octets") current.outSeries = series;
+      if (series.metricKey === "net.in_discards") current.inDiscards = series;
       if (series.metricKey === "net.in_errors") current.inErrors = series;
+      if (series.metricKey === "net.out_discards") current.outDiscards = series;
       if (series.metricKey === "net.out_errors") current.outErrors = series;
       if (series.metricKey === "net.oper_status") current.operStatus = series;
 
@@ -692,7 +698,11 @@ const MonitorDetailPage = () => {
 
         const latestRxRate = rxRates[rxRates.length - 1]?.rateBps ?? 0;
         const latestTxRate = txRates[txRates.length - 1]?.rateBps ?? 0;
+        const latestInDiscards =
+          current.inDiscards?.points[current.inDiscards.points.length - 1]?.value ?? 0;
         const latestInErrors = current.inErrors?.points[current.inErrors.points.length - 1]?.value ?? 0;
+        const latestOutDiscards =
+          current.outDiscards?.points[current.outDiscards.points.length - 1]?.value ?? 0;
         const latestOutErrors =
           current.outErrors?.points[current.outErrors.points.length - 1]?.value ?? 0;
         const latestOperStatus =
@@ -704,7 +714,9 @@ const MonitorDetailPage = () => {
           txRates,
           latestRxRate,
           latestTxRate,
+          latestInDiscards,
           latestInErrors,
+          latestOutDiscards,
           latestOutErrors,
           latestOperStatus,
           totalRateBps: latestRxRate + latestTxRate,
@@ -1328,12 +1340,13 @@ const MonitorDetailPage = () => {
                         <th className="px-4 py-3">RX rate</th>
                         <th className="px-4 py-3">TX rate</th>
                         <th className="px-4 py-3">Errors</th>
+                        <th className="px-4 py-3">Discards</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {!interfaceAnalytics.topInterfaces.length ? (
                         <tr>
-                          <td className="px-4 py-8 text-center text-slate-500" colSpan={5}>
+                          <td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
                             ยังไม่มีข้อมูล interface
                           </td>
                         </tr>
@@ -1348,6 +1361,9 @@ const MonitorDetailPage = () => {
                             <td className="px-4 py-3 text-slate-600">{formatBitsPerSecond(iface.latestTxRate)}</td>
                             <td className="px-4 py-3 text-slate-600">
                               in {Math.round(iface.latestInErrors)} · out {Math.round(iface.latestOutErrors)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              in {Math.round(iface.latestInDiscards)} · out {Math.round(iface.latestOutDiscards)}
                             </td>
                           </tr>
                         ))

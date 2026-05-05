@@ -52,7 +52,9 @@ export interface SystemMetrics {
     operStatus: number;
     inOctets: number;
     outOctets: number;
+    inDiscards: number;
     inErrors: number;
+    outDiscards: number;
     outErrors: number;
   }>;
 }
@@ -241,9 +243,23 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
         },
         {
           metricGroup: "NET",
+          metricKey: "net.in_discards",
+          instance: iface.name,
+          value: iface.inDiscards,
+          unit: "count",
+        },
+        {
+          metricGroup: "NET",
           metricKey: "net.in_errors",
           instance: iface.name,
           value: iface.inErrors,
+          unit: "count",
+        },
+        {
+          metricGroup: "NET",
+          metricKey: "net.out_discards",
+          instance: iface.name,
+          value: iface.outDiscards,
           unit: "count",
         },
         {

@@ -127,7 +127,7 @@
 - [x] Interface traffic graph เป็น bps/Kbps/Mbps/Gbps แบบอ่านง่าย
 - [x] Top interfaces / busiest links ในหน้า detail
 - [ ] ยังไม่มี port/interface inventory page แยก
-- [ ] Error / discard counters ยังไม่ครบแบบ NMS เต็มตัว
+- [x] Error / discard counters ในหน้า detail
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 
 ### Inventory flow
@@ -145,7 +145,7 @@
 - [x] Add interface-focused device detail
   - [x] top active interfaces
   - [x] interface operational status
-  - [ ] error / discard counters ให้ครบขึ้น
+  - [x] error / discard counters ให้ครบขึ้น
 - [ ] Add group-aware views
   - filter devices by group
   - filter monitors by group

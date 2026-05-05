@@ -86,7 +86,9 @@ export async function snmpCheck(config: SnmpConfig): Promise<CheckResult> {
         operStatus: iface.operStatus,
         inOctets: iface.inOctets,
         outOctets: iface.outOctets,
+        inDiscards: iface.inDiscards,
         inErrors: iface.inErrors,
+        outDiscards: iface.outDiscards,
         outErrors: iface.outErrors,
       }));
 
@@ -108,9 +110,23 @@ export async function snmpCheck(config: SnmpConfig): Promise<CheckResult> {
           },
           {
             metricGroup: "NET",
+            metricKey: "net.in_discards",
+            instance: iface.name,
+            value: iface.inDiscards,
+            unit: "count",
+          },
+          {
+            metricGroup: "NET",
             metricKey: "net.in_errors",
             instance: iface.name,
             value: iface.inErrors,
+            unit: "count",
+          },
+          {
+            metricGroup: "NET",
+            metricKey: "net.out_discards",
+            instance: iface.name,
+            value: iface.outDiscards,
             unit: "count",
           },
           {

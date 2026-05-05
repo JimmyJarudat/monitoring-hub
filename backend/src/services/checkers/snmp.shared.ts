@@ -5,7 +5,9 @@ export const IFACE_OIDS = {
   ifOperStatus: "1.3.6.1.2.1.2.2.1.8",
   ifInOctets: "1.3.6.1.2.1.2.2.1.10",
   ifOutOctets: "1.3.6.1.2.1.2.2.1.16",
+  ifInDiscards: "1.3.6.1.2.1.2.2.1.13",
   ifInErrors: "1.3.6.1.2.1.2.2.1.14",
+  ifOutDiscards: "1.3.6.1.2.1.2.2.1.19",
   ifOutErrors: "1.3.6.1.2.1.2.2.1.20",
   ifHCInOctets: "1.3.6.1.2.1.31.1.1.1.6",
   ifHCOutOctets: "1.3.6.1.2.1.31.1.1.1.10",
@@ -63,7 +65,9 @@ export type InterfaceMetric = {
   operStatus: number;
   inOctets: number;
   outOctets: number;
+  inDiscards: number;
   inErrors: number;
+  outDiscards: number;
   outErrors: number;
 };
 
@@ -72,7 +76,9 @@ export const collectInterfaceMetrics = async (session: snmp.Session) => {
     const [
       descrVbs,
       operStatusVbs,
+      inDiscardsVbs,
       inErrorsVbs,
+      outDiscardsVbs,
       outErrorsVbs,
       inHcOctetVbs,
       outHcOctetVbs,
@@ -82,7 +88,9 @@ export const collectInterfaceMetrics = async (session: snmp.Session) => {
       await Promise.all([
         snmpSubtreeWalk(session, IFACE_OIDS.ifDescr),
         snmpSubtreeWalk(session, IFACE_OIDS.ifOperStatus),
+        snmpSubtreeWalk(session, IFACE_OIDS.ifInDiscards),
         snmpSubtreeWalk(session, IFACE_OIDS.ifInErrors),
+        snmpSubtreeWalk(session, IFACE_OIDS.ifOutDiscards),
         snmpSubtreeWalk(session, IFACE_OIDS.ifOutErrors),
         snmpSubtreeWalk(session, IFACE_OIDS.ifHCInOctets),
         snmpSubtreeWalk(session, IFACE_OIDS.ifHCOutOctets),
@@ -106,7 +114,9 @@ export const collectInterfaceMetrics = async (session: snmp.Session) => {
       interfaces.push({
         name,
         operStatus: safeNumber(operStatusVbs.find((vb) => vb.oid.endsWith(`.${idx}`))?.value),
+        inDiscards: safeNumber(inDiscardsVbs.find((vb) => vb.oid.endsWith(`.${idx}`))?.value),
         inErrors: safeNumber(inErrorsVbs.find((vb) => vb.oid.endsWith(`.${idx}`))?.value),
+        outDiscards: safeNumber(outDiscardsVbs.find((vb) => vb.oid.endsWith(`.${idx}`))?.value),
         outErrors: safeNumber(outErrorsVbs.find((vb) => vb.oid.endsWith(`.${idx}`))?.value),
         inOctets: hcInOctets > 0 ? hcInOctets : fallbackInOctets,
         outOctets: hcOutOctets > 0 ? hcOutOctets : fallbackOutOctets,
