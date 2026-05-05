@@ -389,7 +389,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Auth type</span>
+                    <span className="text-sm font-medium text-slate-700">Auth type <span className="font-normal text-slate-400">(optional)</span></span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpAuthType}
@@ -441,16 +441,16 @@ const AddMonitorPage = () => {
                     </label>
                   ) : null}
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">Expected body text</span>
+                    <span className="text-sm font-medium text-slate-700">Expected body text <span className="font-normal text-slate-400">(optional)</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedBodyText}
                       onChange={(event) => updateField("httpExpectedBodyText", event.target.value)}
-                      placeholder="Text that must appear in the response body"
+                      placeholder="ข้อความที่ต้องมีใน response body เช่น ok, healthy"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Expected header name</span>
+                    <span className="text-sm font-medium text-slate-700">Expected header name <span className="font-normal text-slate-400">(optional)</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedHeaderKey}
@@ -459,7 +459,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Expected header value</span>
+                    <span className="text-sm font-medium text-slate-700">Expected header value <span className="font-normal text-slate-400">(optional)</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedHeaderValue}
@@ -468,13 +468,13 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Latency threshold ms</span>
+                    <span className="text-sm font-medium text-slate-700">Latency threshold ms <span className="font-normal text-slate-400">(optional)</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
                       value={form.httpLatencyThresholdMs}
                       onChange={(event) => updateField("httpLatencyThresholdMs", event.target.value)}
-                      placeholder="DEGRADED if slower than this"
+                      placeholder="DEGRADED ถ้า response ช้ากว่านี้ เช่น 2000"
                     />
                   </label>
                 </>
