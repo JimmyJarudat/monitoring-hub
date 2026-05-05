@@ -19,6 +19,8 @@ export interface DatabaseConfig {
   user?: string;
   password?: string;
   database?: string;
+  uri?: string;
+  authSource?: string;
   timeoutMs?: number;
   filename?: string;
   encrypt?: boolean;
@@ -92,7 +94,16 @@ async function doCheck(config: DatabaseConfig): Promise<Omit<CheckResult, "respo
     }
 
     case "mongodb": {
-      const url = `mongodb://${config.user ? `${config.user}:${config.password}@` : ""}${config.host}:${config.port}/${config.database ?? ""}`;
+      const credentials =
+        config.user
+          ? `${encodeURIComponent(config.user)}:${encodeURIComponent(config.password ?? "")}@`
+          : "";
+      const query = config.authSource
+        ? `?authSource=${encodeURIComponent(config.authSource)}`
+        : "";
+      const url =
+        config.uri ??
+        `mongodb://${credentials}${config.host}:${config.port}/${config.database ?? ""}${query}`;
       const client = new MongoClient(url, { serverSelectionTimeoutMS: 5000 });
       await client.connect();
       const admin = client.db().admin();

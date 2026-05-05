@@ -20,6 +20,10 @@ type FormState = {
   user: string;
   password: string;
   database: string;
+  mongoUri: string;
+  authSource: string;
+  encrypt: boolean;
+  trustServerCertificate: boolean;
   portainerUrl: string;
   apiKey: string;
   endpointId: string;
@@ -57,6 +61,10 @@ const initialForm: FormState = {
   user: "",
   password: "",
   database: "",
+  mongoUri: "",
+  authSource: "admin",
+  encrypt: false,
+  trustServerCertificate: true,
   portainerUrl: "",
   apiKey: "",
   endpointId: "1",
@@ -117,6 +125,20 @@ const buildConfig = (form: FormState) => {
     });
   }
 
+  if (form.databaseType === "mongodb") {
+    return compactConfig({
+      type: form.databaseType,
+      uri: form.mongoUri,
+      host: form.host,
+      port: Number(form.port),
+      user: form.user,
+      password: form.password,
+      database: form.database,
+      authSource: form.authSource,
+      timeoutMs,
+    });
+  }
+
   return compactConfig({
     type: form.databaseType,
     host: form.host,
@@ -125,6 +147,11 @@ const buildConfig = (form: FormState) => {
     password: form.password,
     database: form.database,
     timeoutMs,
+    encrypt: form.databaseType === "sqlserver" || form.databaseType === "mssql" ? form.encrypt : undefined,
+    trustServerCertificate:
+      form.databaseType === "sqlserver" || form.databaseType === "mssql"
+        ? form.trustServerCertificate
+        : undefined,
   });
 };
 
@@ -133,7 +160,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "TCP") return "Required: host, port";
   if (type === "HTTP") return "Required: url";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
-  return "Required: database type, host, port. SQLite uses database file path.";
+  return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
 
 const AddMonitorPage = () => {
@@ -147,6 +174,11 @@ const AddMonitorPage = () => {
     [form.type],
   );
   const usesSqlite = form.type === "DATABASE" && form.databaseType === "sqlite";
+  const usesMongoDb = form.type === "DATABASE" && form.databaseType === "mongodb";
+  const usesSqlServer =
+    form.type === "DATABASE" &&
+    (form.databaseType === "sqlserver" || form.databaseType === "mssql");
+  const usesMongoUri = usesMongoDb && form.mongoUri.trim().length > 0;
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -294,7 +326,9 @@ const AddMonitorPage = () => {
                 </>
               ) : null}
 
-              {form.type === "PING" || form.type === "TCP" || (form.type === "DATABASE" && !usesSqlite) ? (
+              {form.type === "PING" ||
+              form.type === "TCP" ||
+              (form.type === "DATABASE" && !usesSqlite && !usesMongoUri) ? (
                 <>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Host</span>
@@ -303,7 +337,7 @@ const AddMonitorPage = () => {
                       value={form.host}
                       onChange={(event) => updateField("host", event.target.value)}
                       placeholder="10.10.0.1"
-                      required
+                      required={form.type === "PING" || form.type === "TCP" || (form.type === "DATABASE" && !usesMongoUri)}
                     />
                   </label>
 
@@ -316,7 +350,7 @@ const AddMonitorPage = () => {
                         value={form.port}
                         onChange={(event) => updateField("port", event.target.value)}
                         placeholder="443"
-                        required
+                        required={form.type === "TCP" || (form.type === "DATABASE" && !usesMongoUri)}
                       />
                     </label>
                   ) : null}
@@ -352,6 +386,17 @@ const AddMonitorPage = () => {
                       placeholder={form.databaseType === "sqlite" ? "C:\\data\\app.db" : "monitoring"}
                     />
                   </label>
+                  {usesMongoDb ? (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">MongoDB URI</span>
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.mongoUri}
+                        onChange={(event) => updateField("mongoUri", event.target.value)}
+                        placeholder="mongodb://user:password@172.17.234.1:27017/app?authSource=admin"
+                      />
+                    </label>
+                  ) : null}
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">User</span>
                     <input
@@ -370,6 +415,43 @@ const AddMonitorPage = () => {
                       onChange={(event) => updateField("password", event.target.value)}
                     />
                   </label>
+                  {usesMongoDb ? (
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Auth source</span>
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.authSource}
+                        onChange={(event) => updateField("authSource", event.target.value)}
+                        placeholder="admin"
+                      />
+                    </label>
+                  ) : null}
+                  {usesSqlServer ? (
+                    <>
+                      <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <input
+                          checked={form.encrypt}
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                          type="checkbox"
+                          onChange={(event) => updateField("encrypt", event.target.checked)}
+                        />
+                        <span className="text-sm font-medium text-slate-700">Encrypt connection</span>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <input
+                          checked={form.trustServerCertificate}
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                          type="checkbox"
+                          onChange={(event) =>
+                            updateField("trustServerCertificate", event.target.checked)
+                          }
+                        />
+                        <span className="text-sm font-medium text-slate-700">
+                          Trust server certificate
+                        </span>
+                      </label>
+                    </>
+                  ) : null}
                 </>
               ) : null}
 

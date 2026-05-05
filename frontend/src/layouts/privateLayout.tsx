@@ -66,12 +66,12 @@ const PrivateLayout = () => {
 
   // 🌐 Web Mode Layout
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <div className="flex-shrink-0">
         <Sidebar />
       </div>
 
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Fixed Navbar */}
         <div className="sticky top-0 z-50 bg-white shadow-sm">
           <Navbar />

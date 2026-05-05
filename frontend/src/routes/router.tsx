@@ -8,6 +8,7 @@ import LoginPage from "@/pages/auth/login";
 import Dashboard from "@/pages/dashboard";
 import MonitorsPage from "@/pages/monitors";
 import AddMonitorPage from "@/pages/monitors/new";
+import MonitorDetailPage from "@/pages/monitors/detail";
 
 const routes: RouteObject[] = [
   {
@@ -25,6 +26,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ index: true, element: <Dashboard /> }),
       createProtectedRoute({ path: "monitors", element: <MonitorsPage /> }),
       createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage /> }),
+      createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
     ],
   },
 ];

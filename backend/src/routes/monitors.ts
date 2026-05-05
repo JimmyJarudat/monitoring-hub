@@ -5,10 +5,24 @@ import { fail, ok } from "../lib/response";
 import { runMonitorCheck } from "../services/monitor.Runner";
 
 const monitorTypes = ["PING", "TCP", "HTTP", "DOCKER", "DATABASE"] as const;
+const databaseTypes = [
+  "postgresql",
+  "mariadb",
+  "redis",
+  "mongodb",
+  "mysql",
+  "sqlite",
+  "sqlserver",
+  "mssql",
+] as const;
 type MonitorType = (typeof monitorTypes)[number];
 
 type MonitorConfig = Prisma.InputJsonObject;
 type SummaryStatus = "UP" | "DOWN" | "DEGRADED" | "UNKNOWN";
+type CheckedAtFilter = {
+  gte?: Date;
+  lte?: Date;
+};
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -46,8 +60,12 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
   }
 
   if (type === "DATABASE") {
-    if (!config.type) {
+    if (typeof config.type !== "string") {
       return "DATABASE monitor ต้องระบุ config.type";
+    }
+
+    if (!databaseTypes.includes(config.type as (typeof databaseTypes)[number])) {
+      return `DATABASE monitor ไม่รองรับ config.type: ${config.type}`;
     }
 
     if (config.type === "sqlite") {
@@ -55,6 +73,10 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
         return "SQLite monitor ต้องระบุ config.filename หรือ config.database";
       }
 
+      return null;
+    }
+
+    if (config.type === "mongodb" && typeof config.uri === "string" && config.uri.trim()) {
       return null;
     }
 
@@ -177,13 +199,30 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   })
   .get(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, query, set }) => {
+      const requestedResultsLimit = Number(query.resultsLimit ?? 20);
+      const resultsLimit = Number.isFinite(requestedResultsLimit)
+        ? Math.min(Math.max(Math.trunc(requestedResultsLimit), 1), 200)
+        : 20;
+      const checkedAt: CheckedAtFilter = {};
+      const from = typeof query.from === "string" ? new Date(query.from) : null;
+      const to = typeof query.to === "string" ? new Date(query.to) : null;
+
+      if (from && !Number.isNaN(from.getTime())) {
+        checkedAt.gte = from;
+      }
+
+      if (to && !Number.isNaN(to.getTime())) {
+        checkedAt.lte = to;
+      }
+
       const monitor = await prisma.monitor.findUnique({
         where: { id: params.id },
         include: {
           results: {
+            where: Object.keys(checkedAt).length > 0 ? { checkedAt } : undefined,
             orderBy: { checkedAt: "desc" },
-            take: 20,
+            take: resultsLimit + 1,
           },
           alertRules: true,
           incidents: {
@@ -198,10 +237,21 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail("ไม่พบ monitor");
       }
 
-      return ok(monitor);
+      const hasMoreResults = monitor.results.length > resultsLimit;
+
+      return ok({
+        ...monitor,
+        results: monitor.results.slice(0, resultsLimit),
+        hasMoreResults,
+      });
     },
     {
       params: t.Object({ id: t.String() }),
+      query: t.Object({
+        resultsLimit: t.Optional(t.Numeric({ minimum: 1, maximum: 200 })),
+        from: t.Optional(t.String()),
+        to: t.Optional(t.String()),
+      }),
     },
   )
   .post(

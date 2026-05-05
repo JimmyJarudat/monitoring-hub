@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
@@ -50,6 +50,13 @@ type EditForm = {
   configText: string;
 };
 
+type OpenMenuState = {
+  id: string;
+  top: number;
+  left: number;
+  direction: "up" | "down";
+};
+
 const statusStyles: Record<MonitorStatus | "PENDING" | "DISABLED", string> = {
   UP: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
   DOWN: "bg-rose-50 text-rose-700 ring-rose-600/20",
@@ -67,8 +74,19 @@ const getTarget = (monitor: MonitorRow) => {
   }
   if (typeof config.host === "string") return config.host;
   if (typeof config.portainerUrl === "string") return config.portainerUrl;
+  if (typeof config.filename === "string") return config.filename;
+  if (config.type === "sqlite" && typeof config.database === "string") return config.database;
 
   return "-";
+};
+
+const getOpenUrl = (monitor: MonitorRow) => {
+  const config = monitor.config;
+
+  if (typeof config.url === "string") return config.url;
+  if (typeof config.portainerUrl === "string") return config.portainerUrl;
+
+  return null;
 };
 
 const formatDateTime = (value: string | null | undefined) => {
@@ -93,8 +111,10 @@ const MonitorsPage = () => {
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<OpenMenuState | null>(null);
   const [editingMonitor, setEditingMonitor] = useState<MonitorRow | null>(null);
   const [deletingMonitor, setDeletingMonitor] = useState<MonitorRow | null>(null);
+  const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [editForm, setEditForm] = useState<EditForm>({
     name: "",
     type: "HTTP",
@@ -150,6 +170,7 @@ const MonitorsPage = () => {
   }, [monitors]);
 
   const handleCheckNow = async (monitor: MonitorRow) => {
+    setOpenMenu(null);
     setBusyId(monitor.id);
 
     try {
@@ -170,6 +191,7 @@ const MonitorsPage = () => {
   };
 
   const handleToggleEnabled = async (monitor: MonitorRow) => {
+    setOpenMenu(null);
     setBusyId(monitor.id);
 
     try {
@@ -192,6 +214,7 @@ const MonitorsPage = () => {
   };
 
   const openEditModal = (monitor: MonitorRow) => {
+    setOpenMenu(null);
     setEditingMonitor(monitor);
     setEditForm({
       name: monitor.name,
@@ -262,6 +285,7 @@ const MonitorsPage = () => {
   const handleDeleteMonitor = async () => {
     if (!deletingMonitor) return;
 
+    setOpenMenu(null);
     setBusyId(deletingMonitor.id);
 
     try {
@@ -283,6 +307,53 @@ const MonitorsPage = () => {
       setBusyId(null);
     }
   };
+
+  const toggleMenu = (monitorId: string) => {
+    if (openMenu?.id === monitorId) {
+      setOpenMenu(null);
+      return;
+    }
+
+    const button = menuButtonRefs.current[monitorId];
+    const rect = button?.getBoundingClientRect();
+    const menuHeight = 170;
+    const menuWidth = 176;
+    const spacing = 8;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const spaceBelow = viewportHeight - (rect?.bottom ?? 0);
+    const spaceAbove = rect?.top ?? 0;
+    const shouldOpenUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+    if (!rect) return;
+
+    const top = shouldOpenUpward ? rect.top - spacing : rect.bottom + spacing;
+    const unclampedLeft = rect.right - menuWidth;
+    const left = Math.min(Math.max(unclampedLeft, 8), viewportWidth - menuWidth - 8);
+
+    setOpenMenu({
+      id: monitorId,
+      top,
+      left,
+      direction: shouldOpenUpward ? "up" : "down",
+    });
+  };
+
+  useEffect(() => {
+    if (!openMenu) return;
+
+    const handleWindowChange = () => {
+      setOpenMenu(null);
+    };
+
+    window.addEventListener("scroll", handleWindowChange, true);
+    window.addEventListener("resize", handleWindowChange);
+
+    return () => {
+      window.removeEventListener("scroll", handleWindowChange, true);
+      window.removeEventListener("resize", handleWindowChange);
+    };
+  }, [openMenu]);
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
@@ -322,7 +393,7 @@ const MonitorsPage = () => {
         ))}
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-950">Active monitor inventory</h2>
           <p className="text-xs text-slate-500">{isLoading ? "Loading..." : `${monitors.length} monitors`}</p>
@@ -357,16 +428,36 @@ const MonitorsPage = () => {
                   : "DISABLED";
                 const latestResult = monitor.latestResult ?? monitor.results?.[0] ?? null;
                 const isBusy = busyId === monitor.id;
+                const openUrl = getOpenUrl(monitor);
+                const target = getTarget(monitor);
 
                 return (
                   <tr className="transition hover:bg-slate-50" key={monitor.id}>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="font-medium text-slate-950">{monitor.name}</div>
+                      <Link
+                        className="font-medium text-cyan-700 underline-offset-2 transition hover:text-cyan-900 hover:underline"
+                        to={`/dashboard/monitors/${monitor.id}`}
+                      >
+                        {monitor.name}
+                      </Link>
                       <div className="text-xs text-slate-500">
                         {monitor.type} · every {monitor.interval}s
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{getTarget(monitor)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {openUrl ? (
+                        <a
+                          className="text-cyan-700 underline-offset-2 transition hover:text-cyan-900 hover:underline"
+                          href={openUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {target}
+                        </a>
+                      ) : (
+                        target
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusStyles[latestStatus]}`}
@@ -394,38 +485,37 @@ const MonitorsPage = () => {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={() => void handleCheckNow(monitor)}
-                          disabled={isBusy || !monitor.enabled}
+                        {openUrl ? (
+                          <a
+                            className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                            href={openUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open
+                          </a>
+                        ) : null}
+                        <Link
+                          className="rounded-md border border-cyan-200 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
+                          to={`/dashboard/monitors/${monitor.id}`}
                         >
-                          Check now
-                        </button>
-                        <button
-                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={() => void handleToggleEnabled(monitor)}
-                          disabled={isBusy}
-                        >
-                          {monitor.enabled ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={() => openEditModal(monitor)}
-                          disabled={isBusy}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={() => setDeletingMonitor(monitor)}
-                          disabled={isBusy}
-                        >
-                          Delete
-                        </button>
+                          View
+                        </Link>
+                        <div className="relative">
+                          <button
+                            aria-expanded={openMenu?.id === monitor.id}
+                            aria-label={`More actions for ${monitor.name}`}
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            ref={(element) => {
+                              menuButtonRefs.current[monitor.id] = element;
+                            }}
+                            onClick={() => toggleMenu(monitor.id)}
+                            disabled={isBusy}
+                          >
+                            <span className="text-lg leading-none">⋮</span>
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -576,6 +666,72 @@ const MonitorsPage = () => {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {openMenu ? (
+        <>
+          <button
+            aria-label="Close actions menu"
+            className="fixed inset-0 z-30 cursor-default bg-transparent"
+            type="button"
+            onClick={() => setOpenMenu(null)}
+          />
+          <div
+            className={`fixed z-40 w-44 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg transition-all duration-200 ${
+              openMenu.direction === "up"
+                ? "-translate-y-full origin-bottom-right"
+                : "origin-top-right"
+            }`}
+            style={{ left: openMenu.left, top: openMenu.top }}
+          >
+            {(() => {
+              const activeMonitor = monitors.find((monitor) => monitor.id === openMenu.id);
+              const isMenuBusy = busyId === openMenu.id;
+
+              if (!activeMonitor) return null;
+
+              return (
+                <>
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={() => void handleCheckNow(activeMonitor)}
+                    disabled={isMenuBusy || !activeMonitor.enabled}
+                  >
+                    Check now
+                  </button>
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={() => void handleToggleEnabled(activeMonitor)}
+                    disabled={isMenuBusy}
+                  >
+                    {activeMonitor.enabled ? "Disable" : "Enable"}
+                  </button>
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={() => openEditModal(activeMonitor)}
+                    disabled={isMenuBusy}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      setDeletingMonitor(activeMonitor);
+                    }}
+                    disabled={isMenuBusy}
+                  >
+                    Delete
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </>
       ) : null}
     </div>
   );
