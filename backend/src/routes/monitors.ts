@@ -4,7 +4,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { runMonitorCheck } from "../services/monitor.Runner";
 
-const monitorTypes = ["PING", "TCP", "HTTP", "TLS_CERT", "DOCKER", "DATABASE"] as const;
+const monitorTypes = ["PING", "TCP", "HTTP", "TLS_CERT", "DNS", "DOCKER", "DATABASE"] as const;
 const databaseTypes = [
   "postgresql",
   "mariadb",
@@ -32,6 +32,7 @@ const monitorBody = t.Object({
     t.Literal("TCP"),
     t.Literal("HTTP"),
     t.Literal("TLS_CERT"),
+    t.Literal("DNS"),
     t.Literal("DOCKER"),
     t.Literal("DATABASE"),
   ]),
@@ -63,6 +64,10 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
     !(typeof config.host === "string" && config.host.trim())
   ) {
     return "TLS certificate monitor ต้องระบุ config.url หรือ config.host";
+  }
+
+  if (type === "DNS" && !(typeof config.host === "string" && config.host.trim())) {
+    return "DNS monitor ต้องระบุ config.host";
   }
 
   if (type === "DOCKER" && (!config.portainerUrl || !config.apiKey || !config.endpointId)) {
@@ -291,6 +296,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
             t.Literal("TCP"),
             t.Literal("HTTP"),
             t.Literal("TLS_CERT"),
+            t.Literal("DNS"),
             t.Literal("DOCKER"),
             t.Literal("DATABASE"),
           ]),

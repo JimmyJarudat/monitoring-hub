@@ -109,6 +109,7 @@ enum MonitorType {
   TCP
   HTTP
   TLS_CERT
+  DNS
   DOCKER
   DATABASE
 }

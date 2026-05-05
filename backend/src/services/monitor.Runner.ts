@@ -3,6 +3,7 @@ import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
 import { databaseCheck } from "./checkers/database.Checker";
+import { dnsCheck } from "./checkers/dns.Checker";
 import { dockerCheck } from "./checkers/docker.Checker";
 import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
@@ -41,6 +42,8 @@ const runChecker = async (
       return httpCheck(config as unknown as Parameters<typeof httpCheck>[0]);
     case "TLS_CERT":
       return tlsCheck(config as unknown as Parameters<typeof tlsCheck>[0]);
+    case "DNS":
+      return dnsCheck(config as unknown as Parameters<typeof dnsCheck>[0]);
     case "DOCKER":
       return dockerCheck(config as unknown as Parameters<typeof dockerCheck>[0]);
     case "DATABASE":

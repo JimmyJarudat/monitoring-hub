@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "DOCKER" | "DATABASE";
 
 type FormState = {
   name: string;
@@ -17,6 +17,9 @@ type FormState = {
   expectedStatus: string;
   timeoutMs: string;
   warningDays: string;
+  dnsRecordType: string;
+  dnsExpectedValue: string;
+  dnsServer: string;
   databaseType: string;
   user: string;
   password: string;
@@ -48,6 +51,11 @@ const monitorTypes: Array<{ label: string; value: MonitorType; description: stri
     value: "TLS_CERT",
     description: "Check certificate expiry and warn before expiration",
   },
+  {
+    label: "DNS",
+    value: "DNS",
+    description: "Resolve DNS records and optionally match an expected value",
+  },
   { label: "Docker", value: "DOCKER", description: "Check Portainer endpoint or container" },
   { label: "Database", value: "DATABASE", description: "Check database connection health" },
 ];
@@ -64,6 +72,9 @@ const initialForm: FormState = {
   expectedStatus: "200",
   timeoutMs: "5000",
   warningDays: "30",
+  dnsRecordType: "A",
+  dnsExpectedValue: "",
+  dnsServer: "",
   databaseType: "postgresql",
   user: "",
   password: "",
@@ -123,6 +134,16 @@ const buildConfig = (form: FormState) => {
     });
   }
 
+  if (form.type === "DNS") {
+    return compactConfig({
+      host: form.host,
+      recordType: form.dnsRecordType,
+      expectedValue: form.dnsExpectedValue,
+      server: form.dnsServer,
+      timeoutMs,
+    });
+  }
+
   if (form.type === "DOCKER") {
     return compactConfig({
       portainerUrl: form.portainerUrl,
@@ -175,6 +196,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "TCP") return "Required: host, port";
   if (type === "HTTP") return "Required: url";
   if (type === "TLS_CERT") return "Required: url. Optional: warning days";
+  if (type === "DNS") return "Required: host. Optional: record type, expected value, DNS server";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
   return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
@@ -362,6 +384,54 @@ const AddMonitorPage = () => {
                       min={1}
                       value={form.warningDays}
                       onChange={(event) => updateField("warningDays", event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {form.type === "DNS" ? (
+                <>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Host</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.host}
+                      onChange={(event) => updateField("host", event.target.value)}
+                      placeholder="example.com"
+                      required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Record type</span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.dnsRecordType}
+                      onChange={(event) => updateField("dnsRecordType", event.target.value)}
+                    >
+                      <option value="A">A</option>
+                      <option value="AAAA">AAAA</option>
+                      <option value="CNAME">CNAME</option>
+                      <option value="MX">MX</option>
+                      <option value="NS">NS</option>
+                      <option value="TXT">TXT</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">DNS server</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.dnsServer}
+                      onChange={(event) => updateField("dnsServer", event.target.value)}
+                      placeholder="8.8.8.8"
+                    />
+                  </label>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Expected value</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.dnsExpectedValue}
+                      onChange={(event) => updateField("dnsExpectedValue", event.target.value)}
+                      placeholder="Expected IP, hostname, TXT content, or MX exchange"
                     />
                   </label>
                 </>

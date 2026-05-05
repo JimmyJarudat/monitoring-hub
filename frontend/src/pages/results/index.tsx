@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "DOCKER" | "DATABASE";
 
 type ApiSuccess<T> = {
   success: true;
@@ -70,6 +70,7 @@ const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
   { label: "TCP", value: "TCP" },
   { label: "HTTP", value: "HTTP" },
   { label: "TLS_CERT", value: "TLS_CERT" },
+  { label: "DNS", value: "DNS" },
   { label: "DOCKER", value: "DOCKER" },
   { label: "DATABASE", value: "DATABASE" },
 ];
@@ -113,6 +114,9 @@ const getTarget = (monitor: ResultMonitor) => {
   const config = monitor.config;
 
   if (typeof config.url === "string") return config.url;
+  if (typeof config.host === "string" && typeof config.recordType === "string") {
+    return `${config.host} (${config.recordType})`;
+  }
   if (typeof config.host === "string" && typeof config.port === "number") {
     return `${config.host}:${config.port}`;
   }

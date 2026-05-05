@@ -102,6 +102,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
             t.Literal("TCP"),
             t.Literal("HTTP"),
             t.Literal("TLS_CERT"),
+            t.Literal("DNS"),
             t.Literal("DOCKER"),
             t.Literal("DATABASE"),
           ]),
