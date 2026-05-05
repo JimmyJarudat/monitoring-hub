@@ -1,5 +1,5 @@
 import Elysia from "elysia";
-import { authController } from "../controllers/authController";
+import { authController } from "../controllers/auth.Controller";
 import { authMiddleware } from "../middleware/auth";
 import prisma from "../lib/prisma";
 

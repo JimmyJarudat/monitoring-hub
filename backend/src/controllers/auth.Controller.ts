@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
-import { authService } from "../services/authService";
+import { authService } from "../services/auth.Service";
 import { config } from "../config";
 
 export const authController = new Elysia({ prefix: "/auth" })
