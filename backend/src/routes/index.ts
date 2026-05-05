@@ -2,10 +2,11 @@ import Elysia from "elysia";
 import { authController } from "../controllers/auth.Controller";
 import { authProtectedRoutes } from "./auth";
 import { authMiddleware } from "../middleware/auth";
+import { ok } from "../lib/response";
 
 // Public routes — ไม่ต้องมี token
 export const publicRoutes = new Elysia()
-  .get("/health", () => ({ status: "ok" }))
+  .get("/health", () => ok({ status: "ok" }))
   .use(authController); // /auth/register, /auth/login, /auth/refresh, /auth/logout
 
 // Protected routes — ต้องมี token ทุก route
