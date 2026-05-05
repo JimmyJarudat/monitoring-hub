@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
@@ -57,6 +57,30 @@ type MonitorPayload = {
   enabled: boolean;
   config: Record<string, unknown>;
 };
+
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+
+type CredentialRow = {
+  id: string;
+  name: string;
+  type: CredentialType;
+  username: string | null;
+  secret: string;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+type ApiSuccess<T> = {
+  success: true;
+  data: T;
+};
+
+type ApiFailure = {
+  success: false;
+  message: string;
+};
+
+type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 const monitorTypes: Array<{ label: string; value: MonitorType; description: string }> = [
   { label: "Ping", value: "PING", description: "Basic host reachability check" },
@@ -339,7 +363,7 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
     tip: "ถ้า domain ไม่มี record จะ DOWN ทันที — ต้องใช้ subdomain เช่น api.example.com ไม่ใช่ example.com",
   },
   SNMP: {
-    summary: "ส่ง SNMP GET query ไปยัง network device แล้วดึงข้อมูล sysName, sysDescr, sysUpTime",
+    summary: "ส่ง SNMP GET query ไปยัง network device แล้วดึงข้อมูล sysName, sysDescr, sysUpTime และ interface counters",
     fields: [
       { name: "Host", desc: "IP address ของ device เช่น 192.168.1.1", required: true },
       { name: "Community", desc: 'SNMP community string เช่น "public" (read-only) หรือที่กำหนดเอง' },
@@ -347,17 +371,17 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
       { name: "Port", desc: "UDP port ของ SNMP agent — default 161" },
       { name: "Custom OIDs", desc: "OID ที่ต้องการ GET คั่นด้วย comma เช่น 1.3.6.1.2.1.1.5.0,1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime" },
     ],
-    tip: "ตรวจสอบให้แน่ใจว่า device เปิด SNMP ไว้ และ community string ถูกต้อง — ส่วนใหญ่ใช้ \"public\" สำหรับ read-only",
+    tip: "ตอนนี้ SNMP monitor จะเก็บ traffic/error counters ต่อ interface แบบ time-series ด้วย เหมาะกับ router, switch, firewall",
   },
   SYSTEM: {
-    summary: "ดึงข้อมูล CPU, RAM, Disk จาก Linux server ผ่าน SNMP — ต้องติดตั้ง snmpd ก่อน",
+    summary: "ดึงข้อมูล CPU, RAM, Disk และ Network จาก Linux server ผ่าน SNMP — ต้องติดตั้ง snmpd ก่อน",
     fields: [
       { name: "Host", desc: "IP address ของ server เช่น 10.8.0.1", required: true },
       { name: "Community", desc: 'SNMP community string เช่น "public" หรือที่กำหนดเอง' },
       { name: "Version", desc: "SNMP version — 2c รองรับดีที่สุด" },
       { name: "Port", desc: "UDP port ของ SNMP — default 161" },
     ],
-    tip: "ต้องเปิด UCD-SNMP MIB บน snmpd.conf — ตรวจสอบว่า rocommunity อนุญาต host ของ monitoring hub",
+    tip: "SYSTEM monitor จะเก็บ metric samples แยกไว้สำหรับทำกราฟ CPU/RAM/Disk/Net ต่อภายหลัง",
   },
   DOCKER: {
     summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ endpoint หรือ container เฉพาะตัว",
@@ -394,12 +418,32 @@ const getRequiredHint = (type: MonitorType) => {
   return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
 
+const credentialTypeLabels: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "SNMP Community",
+  USERNAME_PASSWORD: "Username / Password",
+  API_TOKEN: "API Token",
+  SSH_KEY: "SSH Key",
+};
+
+const getCompatibleCredentialTypes = (
+  form: Pick<FormState, "type" | "httpAuthType" | "databaseType">,
+): CredentialType[] => {
+  if (form.type === "SNMP" || form.type === "SYSTEM") return ["SNMP_COMMUNITY"];
+  if (form.type === "HTTP" && form.httpAuthType === "basic") return ["USERNAME_PASSWORD"];
+  if (form.type === "HTTP" && form.httpAuthType === "bearer") return ["API_TOKEN"];
+  if (form.type === "DOCKER") return ["API_TOKEN"];
+  if (form.type === "DATABASE" && form.databaseType !== "sqlite") return ["USERNAME_PASSWORD"];
+  return [];
+};
+
 const AddMonitorPage = () => {
   const navigate = useNavigate();
-  const { post } = useApi();
+  const { api, post } = useApi();
   const [form, setForm] = useState<FormState>(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
+  const [selectedCredentialId, setSelectedCredentialId] = useState("");
 
   const selectedType = useMemo(
     () => monitorTypes.find((item) => item.value === form.type) ?? monitorTypes[0],
@@ -411,9 +455,85 @@ const AddMonitorPage = () => {
     form.type === "DATABASE" &&
     (form.databaseType === "sqlserver" || form.databaseType === "mssql");
   const usesMongoUri = usesMongoDb && form.mongoUri.trim().length > 0;
+  const compatibleCredentialTypes = useMemo(
+    () => getCompatibleCredentialTypes(form),
+    [form],
+  );
+  const availableCredentials = useMemo(
+    () => credentials.filter((credential) => compatibleCredentialTypes.includes(credential.type)),
+    [compatibleCredentialTypes, credentials],
+  );
+  const selectedCredential = useMemo(
+    () => availableCredentials.find((credential) => credential.id === selectedCredentialId) ?? null,
+    [availableCredentials, selectedCredentialId],
+  );
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        const response = await api.get<ApiResponse<CredentialRow[]>>("/credentials");
+        if (response.data.success) {
+          setCredentials(response.data.data);
+        }
+      } catch {
+        // leave silent; monitor form still works without credentials inventory
+      }
+    };
+
+    void loadCredentials();
+  }, [api]);
+
+  useEffect(() => {
+    setSelectedCredentialId("");
+  }, [form.type, form.httpAuthType, form.databaseType]);
+
+  const applyCredential = (credentialId: string) => {
+    setSelectedCredentialId(credentialId);
+    const credential = availableCredentials.find((item) => item.id === credentialId);
+
+    if (!credential) return;
+
+    setForm((current) => {
+      const next = { ...current };
+      const metadata = credential.metadata ?? {};
+
+      if (current.type === "SNMP" || current.type === "SYSTEM") {
+        next.snmpCommunity = credential.secret;
+        if (typeof metadata.version === "string" && (metadata.version === "1" || metadata.version === "2c")) {
+          next.snmpVersion = metadata.version;
+        }
+        if (metadata.port !== undefined && metadata.port !== null) {
+          next.snmpPort = String(metadata.port);
+        }
+      }
+
+      if (current.type === "HTTP" && current.httpAuthType === "basic") {
+        next.httpAuthUsername = credential.username ?? "";
+        next.httpAuthPassword = credential.secret;
+      }
+
+      if (current.type === "HTTP" && current.httpAuthType === "bearer") {
+        next.httpAuthToken = credential.secret;
+      }
+
+      if (current.type === "DOCKER") {
+        next.apiKey = credential.secret;
+      }
+
+      if (current.type === "DATABASE" && current.databaseType !== "sqlite") {
+        next.user = credential.username ?? "";
+        next.password = credential.secret;
+        if (current.databaseType === "mongodb" && typeof metadata.authSource === "string") {
+          next.authSource = metadata.authSource;
+        }
+      }
+
+      return next;
+    });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -552,6 +672,61 @@ const AddMonitorPage = () => {
                     💡 {TYPE_GUIDES[form.type].tip}
                   </p>
                 ) : null}
+              </div>
+            ) : null}
+
+            {compatibleCredentialTypes.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-violet-950">Credential preset</h3>
+                    <p className="mt-1 text-sm text-violet-800">
+                      ประเภทนี้เลือกใช้ได้เฉพาะ{" "}
+                      {compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")}
+                    </p>
+                  </div>
+                  <Link
+                    className="shrink-0 rounded-md border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
+                    to="/credentials"
+                  >
+                    Manage credentials
+                  </Link>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-[1fr,auto]">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Choose credential</span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={selectedCredentialId}
+                      onChange={(event) => applyCredential(event.target.value)}
+                    >
+                      <option value="">Don't use preset</option>
+                      {availableCredentials.map((credential) => (
+                        <option key={credential.id} value={credential.id}>
+                          {credential.name} · {credentialTypeLabels[credential.type]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {selectedCredential ? (
+                    <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-xs text-slate-600">
+                      <div className="font-semibold text-slate-900">{selectedCredential.name}</div>
+                      <div className="mt-1">{selectedCredential.notes || "ไม่มี notes"}</div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {availableCredentials.length === 0 ? (
+                  <p className="mt-3 text-xs text-violet-700">
+                    ยังไม่มี credential ที่ตรงประเภทนี้ ไปสร้างที่หน้า /credentials ก่อนแล้วค่อยกลับมาเลือกได้
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-violet-700">
+                    เมื่อเลือกแล้ว ระบบจะเติม field ที่เกี่ยวข้องให้อัตโนมัติ แต่คุณยังแก้ไขต่อเองได้
+                  </p>
+                )}
               </div>
             ) : null}
 

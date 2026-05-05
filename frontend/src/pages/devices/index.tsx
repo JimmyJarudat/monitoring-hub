@@ -21,6 +21,14 @@ type SystemMetadata = {
   load1?: number;
   load5?: number;
   load15?: number;
+  interfaces?: Array<{
+    name: string;
+    operStatus: number;
+    inOctets: number;
+    outOctets: number;
+    inErrors: number;
+    outErrors: number;
+  }>;
 };
 
 type LatestResult = {
@@ -34,7 +42,7 @@ type LatestResult = {
 type Device = {
   id: string;
   name: string;
-  type: string;
+  type: "SNMP" | "SYSTEM";
   enabled: boolean;
   interval: number;
   config: { host?: string; community?: string };
@@ -44,9 +52,14 @@ type Device = {
 
 type ApiResponse<T> = { data: T };
 
-const fmt = (n: number, unit: string) => `${n.toFixed(1)}${unit}`;
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
 
-const fmtBytes = (kb: number) => {
+const fmt = (n: number | null | undefined, unit: string) =>
+  isFiniteNumber(n) ? `${n.toFixed(1)}${unit}` : "-";
+
+const fmtBytes = (kb: number | null | undefined) => {
+  if (!isFiniteNumber(kb)) return "-";
   if (kb >= 1024 * 1024) return `${(kb / 1024 / 1024).toFixed(1)} GB`;
   if (kb >= 1024) return `${(kb / 1024).toFixed(0)} MB`;
   return `${kb} KB`;
@@ -58,6 +71,98 @@ const statusColor = {
   DEGRADED: "bg-amber-100 text-amber-700",
 };
 
+const vendorLogos: Array<{
+  name: string;
+  matchers: RegExp[];
+  logoUrl: string;
+}> = [
+  {
+    name: "MikroTik",
+    matchers: [/mikrotik/i, /routeros/i],
+    logoUrl: "https://cdn.simpleicons.org/mikrotik/2563eb",
+  },
+  {
+    name: "Cisco",
+    matchers: [/cisco/i],
+    logoUrl: "https://cdn.simpleicons.org/cisco/0f62fe",
+  },
+  {
+    name: "Ubiquiti",
+    matchers: [/ubiquiti/i, /\buni?fi\b/i, /edgeos/i],
+    logoUrl: "https://cdn.simpleicons.org/ubiquiti/0559c9",
+  },
+  {
+    name: "Juniper",
+    matchers: [/juniper/i, /\bjunos\b/i],
+    logoUrl: "https://cdn.simpleicons.org/junipernetworks/84b135",
+  },
+  {
+    name: "Fortinet",
+    matchers: [/fortinet/i, /fortigate/i],
+    logoUrl: "https://cdn.simpleicons.org/fortinet/ee3124",
+  },
+  {
+    name: "Aruba",
+    matchers: [/aruba/i],
+    logoUrl: "https://cdn.simpleicons.org/aruba/ff8300",
+  },
+  {
+    name: "HPE",
+    matchers: [/hewlett packard/i, /\bhpe\b/i, /procurve/i],
+    logoUrl: "https://cdn.simpleicons.org/hewlettpackardenterprise/00b388",
+  },
+  {
+    name: "TP-Link",
+    matchers: [/tp-link/i],
+    logoUrl: "https://cdn.simpleicons.org/tplink/4acbd6",
+  },
+  {
+    name: "Synology",
+    matchers: [/synology/i],
+    logoUrl: "https://cdn.simpleicons.org/synology/b5b5b6",
+  },
+  {
+    name: "QNAP",
+    matchers: [/\bqnap\b/i],
+    logoUrl: "https://cdn.simpleicons.org/qnap/0f7bc0",
+  },
+  {
+    name: "OpenWrt",
+    matchers: [/openwrt/i],
+    logoUrl: "https://cdn.simpleicons.org/openwrt/00b5e2",
+  },
+  {
+    name: "pfSense",
+    matchers: [/pfsense/i],
+    logoUrl: "https://cdn.simpleicons.org/pfsense/212121",
+  },
+  {
+    name: "Ubuntu",
+    matchers: [/ubuntu/i],
+    logoUrl: "https://cdn.simpleicons.org/ubuntu/e95420",
+  },
+  {
+    name: "Debian",
+    matchers: [/debian/i],
+    logoUrl: "https://cdn.simpleicons.org/debian/a81d33",
+  },
+  {
+    name: "Rocky Linux",
+    matchers: [/rocky/i],
+    logoUrl: "https://cdn.simpleicons.org/rockylinux/10b981",
+  },
+  {
+    name: "AlmaLinux",
+    matchers: [/alma/i],
+    logoUrl: "https://cdn.simpleicons.org/almalinux/2563eb",
+  },
+  {
+    name: "CentOS",
+    matchers: [/centos/i],
+    logoUrl: "https://cdn.simpleicons.org/centos/8a2be2",
+  },
+];
+
 const fmtUptime = (seconds: number) => {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
@@ -67,13 +172,30 @@ const fmtUptime = (seconds: number) => {
   return `${m}m`;
 };
 
-const gaugeColor = (pct: number) => {
+const detectVendor = (device: Device, meta: SystemMetadata | null) => {
+  const candidates = [device.name, device.config.host, meta?.osDescr]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+
+  return vendorLogos.find((vendor) => vendor.matchers.some((matcher) => matcher.test(candidates))) ?? null;
+};
+
+const gaugeColor = (pct: number | null | undefined) => {
+  if (!isFiniteNumber(pct)) return "bg-slate-300";
   if (pct >= 90) return "bg-red-500";
   if (pct >= 75) return "bg-amber-400";
   return "bg-emerald-400";
 };
 
-const Gauge = ({ label, pct, detail }: { label: string; pct: number; detail: string }) => (
+const Gauge = ({
+  label,
+  pct,
+  detail,
+}: {
+  label: string;
+  pct: number | null | undefined;
+  detail: string;
+}) => (
   <div className="min-w-0">
     <div className="flex items-center justify-between text-xs text-slate-500">
       <span className="font-medium text-slate-700">{label}</span>
@@ -82,7 +204,7 @@ const Gauge = ({ label, pct, detail }: { label: string; pct: number; detail: str
     <div className="mt-1.5 h-2 w-full rounded-full bg-slate-100">
       <div
         className={`h-2 rounded-full transition-all ${gaugeColor(pct)}`}
-        style={{ width: `${Math.min(pct, 100)}%` }}
+        style={{ width: `${isFiniteNumber(pct) ? Math.min(pct, 100) : 0}%` }}
       />
     </div>
     <p className="mt-0.5 text-[11px] text-slate-400">{detail}</p>
@@ -95,18 +217,58 @@ const DeviceCard = ({ device }: { device: Device }) => {
   const status = result?.status ?? "UNKNOWN";
   const checkedAt = result?.checkedAt ? new Date(result.checkedAt) : null;
   const host = device.config.host ?? "";
+  const hasSystemMetrics =
+    !!meta &&
+    (isFiniteNumber(meta.cpuUsedPct) ||
+      isFiniteNumber(meta.memUsedPct) ||
+      (Array.isArray(meta.disks) && meta.disks.length > 0));
+  const loadDetail =
+    isFiniteNumber(meta?.load1) && isFiniteNumber(meta?.load5) && isFiniteNumber(meta?.load15)
+      ? ` · load ${meta.load1.toFixed(2)} / ${meta.load5.toFixed(2)} / ${meta.load15.toFixed(2)}`
+      : "";
+  const vendor = detectVendor(device, meta);
+  const badgeText =
+    vendor?.name?.slice(0, 2).toUpperCase() ||
+    (device.type === "SYSTEM" ? "SV" : "NW");
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            to={`/monitors/${device.id}`}
-            className="truncate font-semibold text-slate-950 hover:text-cyan-600"
-          >
-            {device.name}
-          </Link>
-          <p className="mt-0.5 text-sm text-slate-400">{host}</p>
+        <div className="flex min-w-0 items-start gap-3">
+          {vendor ? (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white p-2">
+              <img
+                alt={`${vendor.name} logo`}
+                className="h-full w-full object-contain"
+                src={vendor.logoUrl}
+                loading="lazy"
+              />
+            </div>
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-bold text-slate-500">
+              {badgeText}
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <Link
+              to={`/monitors/${device.id}`}
+              className="truncate font-semibold text-slate-950 hover:text-cyan-600"
+            >
+              {device.name}
+            </Link>
+            <p className="mt-0.5 text-sm text-slate-400">{host}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                {device.type}
+              </span>
+              {vendor ? (
+                <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-700">
+                  {vendor.name}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           {status !== "UNKNOWN" ? (
@@ -136,28 +298,51 @@ const DeviceCard = ({ device }: { device: Device }) => {
               Uptime <span className="font-medium text-slate-700">{fmtUptime(meta.uptimeSeconds)}</span>
             </p>
           ) : null}
-          <Gauge
-            label="CPU"
-            pct={meta.cpuUsedPct}
-            detail={
-              meta.load1 !== undefined
-                ? `${fmt(meta.cpuUsedPct, "% used")} · load ${meta.load1?.toFixed(2)} / ${meta.load5?.toFixed(2)} / ${meta.load15?.toFixed(2)}`
-                : `${fmt(meta.cpuUsedPct, "% used")}`
-            }
-          />
-          <Gauge
-            label="RAM"
-            pct={meta.memUsedPct}
-            detail={`${fmtBytes(meta.memUsedKb)} / ${fmtBytes(meta.memTotalKb)}`}
-          />
-          {meta.disks?.map((disk) => (
-            <Gauge
-              key={disk.mount}
-              label={`Disk ${disk.mount}`}
-              pct={disk.usedPct}
-              detail={`${fmtBytes(disk.usedKb)} / ${fmtBytes(disk.totalKb)}`}
-            />
-          ))}
+          {hasSystemMetrics ? (
+            <>
+              <Gauge
+                label="CPU"
+                pct={meta.cpuUsedPct}
+                detail={`${fmt(meta.cpuUsedPct, "% used")}${loadDetail}`}
+              />
+              <Gauge
+                label="RAM"
+                pct={meta.memUsedPct}
+                detail={`${fmtBytes(meta.memUsedKb)} / ${fmtBytes(meta.memTotalKb)}`}
+              />
+              {meta.disks?.map((disk) => (
+                <Gauge
+                  key={disk.mount}
+                  label={`Disk ${disk.mount}`}
+                  pct={disk.usedPct}
+                  detail={`${fmtBytes(disk.usedKb)} / ${fmtBytes(disk.totalKb)}`}
+                />
+              ))}
+            </>
+          ) : (
+            <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-400">
+              ยังไม่มี metrics CPU/RAM/Disk สำหรับอุปกรณ์นี้
+            </div>
+          )}
+          {meta.interfaces?.length ? (
+            <div>
+              <p className="text-xs font-medium text-slate-700">Interfaces</p>
+              <div className="mt-2 space-y-1">
+                {meta.interfaces.slice(0, 3).map((iface) => (
+                  <div
+                    key={iface.name}
+                    className="flex items-center justify-between rounded-md bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-500"
+                  >
+                    <span className="truncate font-medium text-slate-700">{iface.name}</span>
+                    <span>
+                      RX {isFiniteNumber(iface.inOctets) ? iface.inOctets.toLocaleString() : "-"} · TX{" "}
+                      {isFiniteNumber(iface.outOctets) ? iface.outOctets.toLocaleString() : "-"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 rounded-md bg-slate-50 px-3 py-4 text-center text-sm text-slate-400">
@@ -188,8 +373,11 @@ const DevicesPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await get<ApiResponse<Device[]>>("/monitors?type=SYSTEM");
-        setDevices(res.data.data ?? []);
+        const res = await get<ApiResponse<Device[]>>("/monitors");
+        const items = (res.data.data ?? []).filter(
+          (device) => device.type === "SYSTEM" || device.type === "SNMP",
+        );
+        setDevices(items as Device[]);
       } finally {
         setLoading(false);
       }
@@ -208,7 +396,7 @@ const DevicesPage = () => {
           <p className="text-sm font-medium text-cyan-700">Monitoring</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-950">Devices</h1>
           <p className="mt-1 text-sm text-slate-500">
-            System monitors — CPU, RAM, Disk via SNMP
+            SNMP devices และ system monitors สำหรับดู CPU, RAM, Disk และ traffic counters
           </p>
         </div>
         <Link
@@ -243,6 +431,7 @@ const DevicesPage = () => {
             <p className="font-medium text-slate-700">ยังไม่มี device</p>
             <p className="mt-1 text-sm text-slate-400">
               สร้าง monitor ประเภท SYSTEM แล้วระบบจะดึงข้อมูล CPU/RAM/Disk ผ่าน SNMP
+              หรือใช้ SNMP monitor เพื่อเก็บข้อมูล device identity และ interface counters
             </p>
             <Link
               to="/monitors/new"

@@ -1,0 +1,647 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "react-toastify";
+import { useApi } from "@/hooks/useApi";
+
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+
+type ApiSuccess<T> = {
+  success: true;
+  data: T;
+};
+
+type ApiFailure = {
+  success: false;
+  message: string;
+};
+
+type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+type CredentialRow = {
+  id: string;
+  name: string;
+  type: CredentialType;
+  username: string | null;
+  secret: string;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CredentialForm = {
+  name: string;
+  type: CredentialType;
+  username: string;
+  secret: string;
+  notes: string;
+  metadataText: string;
+};
+
+const credentialTypeLabels: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "SNMP Community",
+  USERNAME_PASSWORD: "Username / Password",
+  API_TOKEN: "API Token",
+  SSH_KEY: "SSH Key",
+};
+
+const typeBadgeStyles: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "bg-cyan-50 text-cyan-700 ring-cyan-600/20",
+  USERNAME_PASSWORD: "bg-violet-50 text-violet-700 ring-violet-600/20",
+  API_TOKEN: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  SSH_KEY: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+};
+
+const credentialTypeGuides: Record<
+  CredentialType,
+  {
+    summary: string;
+    requiredFields: string[];
+    optionalFields: string[];
+    usedFor: string[];
+  }
+> = {
+  SNMP_COMMUNITY: {
+    summary: "ใช้เก็บ SNMP community string สำหรับ SNMP และ SYSTEM monitor",
+    requiredFields: ["Name", "Secret (community string)"],
+    optionalFields: ["Notes", "Metadata JSON เช่น version, port, vendor"],
+    usedFor: ["SNMP monitor", "SYSTEM monitor"],
+  },
+  USERNAME_PASSWORD: {
+    summary: "ใช้เก็บชุด username/password สำหรับ database, HTTP basic auth และงานที่ต้อง login",
+    requiredFields: ["Name", "Username", "Secret (password)"],
+    optionalFields: ["Notes", "Metadata JSON เช่น authSource, databaseType"],
+    usedFor: ["Database monitor", "HTTP basic auth"],
+  },
+  API_TOKEN: {
+    summary: "ใช้เก็บ token หรือ API key เช่น Bearer token หรือ Portainer API key",
+    requiredFields: ["Name", "Secret (token / api key)"],
+    optionalFields: ["Username", "Notes", "Metadata JSON เช่น header name, scope"],
+    usedFor: ["HTTP bearer auth", "Docker / Portainer monitor"],
+  },
+  SSH_KEY: {
+    summary: "ใช้เก็บ SSH private key เผื่อรอบถัดไปสำหรับ monitor หรือ agent flow ที่ต้องใช้ key",
+    requiredFields: ["Name", "Secret (private key)"],
+    optionalFields: ["Username", "Notes", "Metadata JSON เช่น port, passphrase hint"],
+    usedFor: ["Future SSH-based monitor", "Future agent/bootstrap flow"],
+  },
+};
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(value),
+  );
+
+const maskSecret = (secret: string) => {
+  if (!secret) return "-";
+  if (secret.length <= 6) return "•".repeat(secret.length);
+  return `${secret.slice(0, 2)}${"•".repeat(Math.max(secret.length - 4, 4))}${secret.slice(-2)}`;
+};
+
+const emptyForm = (): CredentialForm => ({
+  name: "",
+  type: "SNMP_COMMUNITY",
+  username: "",
+  secret: "",
+  notes: "",
+  metadataText: "{}",
+});
+
+const CredentialsPage = () => {
+  const { api } = useApi();
+  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingCredential, setEditingCredential] = useState<CredentialRow | null>(null);
+  const [deletingCredential, setDeletingCredential] = useState<CredentialRow | null>(null);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [form, setForm] = useState<CredentialForm>(() => emptyForm());
+  const [guideType, setGuideType] = useState<CredentialType>("SNMP_COMMUNITY");
+
+  const loadCredentials = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await api.get<ApiResponse<CredentialRow[]>>("/credentials");
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      setCredentials(response.data.data);
+    } catch {
+      toast.error("โหลด credentials ไม่สำเร็จ");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void loadCredentials();
+  }, [loadCredentials]);
+
+  const summary = useMemo(() => {
+    return {
+      total: credentials.length,
+      snmp: credentials.filter((item) => item.type === "SNMP_COMMUNITY").length,
+      auth: credentials.filter((item) => item.type === "USERNAME_PASSWORD").length,
+      token: credentials.filter((item) => item.type === "API_TOKEN" || item.type === "SSH_KEY")
+        .length,
+    };
+  }, [credentials]);
+
+  const selectedGuide = credentialTypeGuides[guideType];
+  const modalGuide = credentialTypeGuides[form.type];
+
+  const closeModal = () => {
+    setIsCreateOpen(false);
+    setEditingCredential(null);
+    setForm(emptyForm());
+  };
+
+  const openCreate = () => {
+    setEditingCredential(null);
+    setForm(emptyForm());
+    setIsCreateOpen(true);
+  };
+
+  const openEdit = (credential: CredentialRow) => {
+    setIsCreateOpen(false);
+    setEditingCredential(credential);
+    setForm({
+      name: credential.name,
+      type: credential.type,
+      username: credential.username ?? "",
+      secret: credential.secret,
+      notes: credential.notes ?? "",
+      metadataText: JSON.stringify(credential.metadata ?? {}, null, 2),
+    });
+  };
+
+  const handleSubmit = async () => {
+    let metadata: Record<string, unknown> | undefined;
+
+    try {
+      const parsed = JSON.parse(form.metadataText || "{}") as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        metadata = parsed as Record<string, unknown>;
+      } else {
+        toast.error("Metadata ต้องเป็น JSON object");
+        return;
+      }
+    } catch {
+      toast.error("Metadata JSON ไม่ถูกต้อง");
+      return;
+    }
+
+    if (!form.name.trim() || !form.secret.trim()) {
+      toast.error("กรุณากรอกชื่อและ secret ให้ครบ");
+      return;
+    }
+
+    if (form.type === "USERNAME_PASSWORD" && !form.username.trim()) {
+      toast.error("Credential แบบ Username / Password ต้องกรอก username");
+      return;
+    }
+
+    const payload = {
+      name: form.name.trim(),
+      type: form.type,
+      username: form.username.trim() || undefined,
+      secret: form.secret,
+      notes: form.notes.trim() || undefined,
+      metadata,
+    };
+
+    setBusyId(editingCredential?.id ?? "create");
+
+    try {
+      const response = editingCredential
+        ? await api.patch<ApiResponse<CredentialRow>>(
+            `/credentials/${editingCredential.id}`,
+            payload,
+          )
+        : await api.post<ApiResponse<CredentialRow>>("/credentials", payload);
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      toast.success(editingCredential ? "อัปเดต credential แล้ว" : "สร้าง credential แล้ว");
+      closeModal();
+      await loadCredentials();
+    } catch {
+      toast.error(editingCredential ? "อัปเดต credential ไม่สำเร็จ" : "สร้าง credential ไม่สำเร็จ");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingCredential) return;
+
+    setBusyId(deletingCredential.id);
+
+    try {
+      const response = await api.delete<ApiResponse<{ message: string }>>(
+        `/credentials/${deletingCredential.id}`,
+      );
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      toast.success("ลบ credential แล้ว");
+      setDeletingCredential(null);
+      await loadCredentials();
+    } catch {
+      toast.error("ลบ credential ไม่สำเร็จ");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="min-h-full bg-slate-50 p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-cyan-700">Inventory</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Credentials</h1>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            เก็บ credential inventory แบบรวมศูนย์สำหรับ SNMP, SSH, API และ username/password
+            เพื่อให้หน้า monitor ใช้อ้างอิงต่อได้ในรอบถัดไป
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            type="button"
+            onClick={() => void loadCredentials()}
+          >
+            Refresh
+          </button>
+          <button
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            type="button"
+            onClick={openCreate}
+          >
+            New Credential
+          </button>
+        </div>
+      </div>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Total", value: summary.total, tone: "text-slate-950" },
+          { label: "SNMP", value: summary.snmp, tone: "text-cyan-700" },
+          { label: "User / Pass", value: summary.auth, tone: "text-violet-700" },
+          { label: "Token / Key", value: summary.token, tone: "text-emerald-700" },
+        ].map((item) => (
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={item.label}>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className={`mt-3 text-2xl font-semibold ${item.tone}`}>{item.value}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">Credential vault</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {isLoading ? "Loading..." : `${credentials.length} credentials loaded`}
+            </p>
+          </div>
+          <p className="text-xs text-slate-400">ตอนนี้ยังเป็น inventory page ก่อน ยังไม่ bind เข้า monitor form อัตโนมัติ</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Username</th>
+                <th className="px-4 py-3">Secret</th>
+                <th className="px-4 py-3">Notes</th>
+                <th className="px-4 py-3">Updated</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {!isLoading && credentials.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={7}>
+                    ยังไม่มี credential
+                  </td>
+                </tr>
+              ) : null}
+
+              {credentials.map((credential) => {
+                const isRevealed = revealedId === credential.id;
+
+                return (
+                  <tr className="transition hover:bg-slate-50" key={credential.id}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{credential.name}</div>
+                      {credential.metadata && Object.keys(credential.metadata).length > 0 ? (
+                        <div className="mt-1 text-xs text-slate-400">
+                          metadata {Object.keys(credential.metadata).join(", ")}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${typeBadgeStyles[credential.type]}`}
+                      >
+                        {credentialTypeLabels[credential.type]}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {credential.username || "-"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                          {isRevealed ? credential.secret : maskSecret(credential.secret)}
+                        </code>
+                        <button
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                          type="button"
+                          onClick={() =>
+                            setRevealedId((current) => (current === credential.id ? null : credential.id))
+                          }
+                        >
+                          {isRevealed ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="max-w-sm px-4 py-3 text-slate-500">
+                      <div className="truncate" title={credential.notes ?? undefined}>
+                        {credential.notes || "-"}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      {formatDate(credential.updatedAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                          type="button"
+                          onClick={() => openEdit(credential)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                          type="button"
+                          onClick={() => setDeletingCredential(credential)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">Credential type guide</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              แต่ละประเภทใช้ไม่เหมือนกัน และตอนสร้าง monitor จะเลือกได้เฉพาะประเภทที่เกี่ยวข้อง
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              Object.keys(credentialTypeLabels) as CredentialType[]
+            ).map((type) => {
+              const active = form.type === type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className={[
+                    "rounded-md border px-3 py-1.5 text-sm font-medium transition",
+                    active
+                      ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                      : "border-slate-300 text-slate-600 hover:border-slate-400 hover:bg-slate-100",
+                  ].join(" ")}
+                  onClick={() => setGuideType(type)}
+                >
+                  {credentialTypeLabels[type]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-medium text-slate-900">{selectedGuide.summary}</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Required</p>
+              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                {selectedGuide.requiredFields.map((field) => (
+                  <li key={field}>- {field}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional</p>
+              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                {selectedGuide.optionalFields.map((field) => (
+                  <li key={field}>- {field}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used In</p>
+              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                {selectedGuide.usedFor.map((field) => (
+                  <li key={field}>- {field}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {(isCreateOpen || editingCredential) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">
+                {editingCredential ? "Edit credential" : "Create credential"}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                เก็บข้อมูลการเชื่อมต่อสำหรับใช้อ้างอิงซ้ำใน monitor หลายตัว
+              </p>
+            </div>
+
+            <div className="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2">
+              <div className="rounded-lg border border-cyan-100 bg-cyan-50 p-4 text-sm sm:col-span-2">
+                <p className="font-medium text-cyan-900">{modalGuide.summary}</p>
+                <p className="mt-2 text-cyan-800">
+                  Required: {modalGuide.requiredFields.join(", ")}
+                </p>
+                <p className="mt-1 text-cyan-700">
+                  Used in: {modalGuide.usedFor.join(", ")}
+                </p>
+              </div>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Name</span>
+                <input
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  type="text"
+                  value={form.name}
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Type</span>
+                <select
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  value={form.type}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      type: event.target.value as CredentialType,
+                    }))
+                  }
+                >
+                  {Object.entries(credentialTypeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">
+                  Username
+                  {form.type === "USERNAME_PASSWORD" ? (
+                    <span className="ml-1 text-rose-500">*</span>
+                  ) : (
+                    <span className="ml-1 font-normal text-slate-400">(optional)</span>
+                  )}
+                </span>
+                <input
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  type="text"
+                  value={form.username}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, username: event.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">
+                  Secret <span className="ml-1 text-rose-500">*</span>
+                </span>
+                <textarea
+                  className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  value={form.secret}
+                  onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
+                />
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Notes</span>
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  value={form.notes}
+                  onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                />
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Metadata JSON</span>
+                <textarea
+                  className="mt-2 min-h-44 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  value={form.metadataText}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, metadataText: event.target.value }))
+                  }
+                  spellCheck={false}
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                type="button"
+                onClick={closeModal}
+                disabled={busyId !== null}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={busyId !== null}
+              >
+                {editingCredential ? "Save changes" : "Create credential"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingCredential ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">Delete credential</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                ลบรายการออกจาก inventory นี้ ยังไม่มีความสัมพันธ์บังคับกับ monitor ในตอนนี้
+              </p>
+            </div>
+
+            <div className="p-5 text-sm text-slate-600">
+              ต้องการลบ <span className="font-semibold text-slate-950">{deletingCredential.name}</span>{" "}
+              ใช่ไหม?
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                type="button"
+                onClick={() => setDeletingCredential(null)}
+                disabled={busyId === deletingCredential.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={busyId === deletingCredential.id}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+export default CredentialsPage;

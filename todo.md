@@ -1,62 +1,216 @@
 # Monitoring Hub TODO
 
+## Current Direction
+
+- ตอนนี้โฟกัสหลักคือ **ทำ capability ของ monitor ให้แน่นก่อน**
+- **Dashboard** และ **Notification / Channels** จะเก็บไว้ช่วงท้าย
+- แนวทางผลิตภัณฑ์คือ:
+  - เอาความง่ายแบบ uptime tools
+  - เอาความลึกด้านอุปกรณ์แบบ NMS
+  - เอาความยืดหยุ่นของ inventory / grouping / credentials
+  - แต่ตัดความรก, ตัดฟอร์มงง ๆ, และตัด setup ที่หนักเกินจำเป็น
+
 ## Done
 
-### Monitor types
+### Core monitor types
 - [x] PING
 - [x] TCP
-- [x] HTTP (พร้อม auth, body/header/JSON path check, latency threshold, redirect)
-- [x] TLS Certificate (ตรวจวันหมดอายุ cert)
-- [x] DNS (resolve record + expected value)
-- [x] SNMP (sysName, sysDescr, sysUpTime, custom OIDs)
-- [x] SYSTEM (CPU%, RAM%, Disk%, load average, uptime ผ่าน SNMP)
+- [x] HTTP
+- [x] HTTP advanced
+  - auth
+  - body text match
+  - header match
+  - JSON path / expected value
+  - latency threshold
+  - redirect control
+- [x] TLS Certificate
+  - cert expiry
+  - warning days
+- [x] DNS
+  - resolve record
+  - expected value
+  - custom DNS server
+- [x] SNMP
+  - sysName
+  - sysDescr
+  - sysUpTime
+  - custom OIDs
+  - interface counters
+- [x] SYSTEM via SNMP
+  - CPU
+  - RAM
+  - Disk
+  - load average
+  - uptime
+  - interface metrics
 - [x] DOCKER via Portainer
-- [x] DATABASE (PostgreSQL, MySQL, MariaDB, Redis, MongoDB, SQLite, SQL Server/MSSQL)
+- [x] DATABASE
+  - PostgreSQL
+  - MySQL
+  - MariaDB
+  - Redis
+  - MongoDB
+  - SQLite
+  - SQL Server / MSSQL
 
 ### Monitor UX
 - [x] Monitors list page
-- [x] Add monitor page (พร้อม type guide panel, TCP presets)
+- [x] Add monitor page
+- [x] Type guide panel
+- [x] TCP presets
 - [x] Monitor detail page
-- [x] Check now / enable-disable / edit / delete
-- [x] Recent results table + time range filter + load more
-- [x] Response time chart, status timeline, availability map
+- [x] Check now
+- [x] Enable / Disable
+- [x] Edit / Delete
+- [x] Recent results table
+- [x] Time range filter
+- [x] Load more results
+- [x] Response time chart
+- [x] Status timeline
+- [x] Availability map
 
-### Devices
-- [x] Devices page — แสดง CPU/RAM/Disk gauge สำหรับ SYSTEM monitors
-- [x] Uptime, load average, OS description (optional ถ้า device ไม่มี)
+### Device / NMS foundation
+- [x] Devices page
+- [x] Vendor logo cards from URL
+- [x] CPU / RAM / Disk gauges
+- [x] Uptime / load / OS description
+- [x] Device metric samples แยกออกจาก monitor_results
+- [x] Metrics API สำหรับกราฟย้อนหลัง
+- [x] Device detail graph section
+- [x] Day / Week / Month / Custom filter สำหรับ metrics analysis
+- [x] SNMP network counters fallback 32-bit / 64-bit
 
-### Incident engine
-- [x] Auto create incident เมื่อ DOWN/DEGRADED
-- [x] Auto resolve incident เมื่อ UP กลับมา
-- [x] Incidents page
+### Results / incidents
+- [x] Global results page `/results`
+- [x] Filter day / week / month / custom
+- [x] Incident page `/incidents`
+- [x] Resolve / Reopen / Delete incident
+- [x] Runner auto-create incident เมื่อ DOWN / DEGRADED
+- [x] Runner auto-resolve incident เมื่อกลับมา UP
 
-### Backend/API
+### Inventory / organization
+- [x] Devices page route
+- [x] Groups page `/groups`
+- [x] Create / edit / delete group
+- [x] Assign monitors into groups
+- [x] Credentials page `/credentials`
+- [x] Credential inventory types
+  - SNMP community
+  - username / password
+  - API token
+  - SSH key
+- [x] Credential type guide
+- [x] Credential preset selection in New Monitor
+- [x] Auto-fill monitor fields from selected credential preset
+
+### Backend / API
 - [x] Manual check endpoint
 - [x] Monitor summary endpoint
-- [x] Incident CRUD endpoint
+- [x] Global results endpoint
+- [x] Incidents CRUD endpoint
+- [x] Groups CRUD endpoint
+- [x] Credentials CRUD endpoint
+- [x] Metrics timeseries endpoint
 
-## Still Missing
+## Known Gaps Right Now
 
-### Priority 1 — Dashboard Overview
-- [ ] Stat cards: total monitors, UP/DOWN/DEGRADED, open incidents, uptime 24h%, avg response
-- [ ] Monitors needing attention (DOWN/DEGRADED list)
-- [ ] Open incidents list
+### Credentials
+- [ ] Monitor ยังใช้ credential แบบ **copy ลง config**
+- [ ] ยังไม่ได้เก็บ `credentialId` บน monitor
+- [ ] ถ้าแก้ credential ภายหลัง monitor เดิมจะไม่เปลี่ยนตาม
+- [ ] Secret ยังไม่ได้เข้ารหัสใน DB
+- [ ] ยังไม่มี permission control เรื่องใครดู secret ได้
+- [ ] ยังไม่มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
 
-### Priority 2 — Alert / Notification engine
-- [ ] ส่ง LINE / Email เมื่อ monitor DOWN
-- [ ] Alert rules management page
-- [ ] Notification channels management page
+### Device / network analytics
+- [ ] Network UI ยังควรแสดง **rate** มากกว่า raw counters
+- [ ] Interface traffic graph ยังไม่เป็น bps/Kbps/Mbps แบบ NMS เต็มตัว
+- [ ] ยังไม่มี top interfaces / busiest links
+- [ ] ยังไม่มี port/interface inventory page แยก
+- [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 
-### Priority 3 — History retention
-- [ ] ตั้งค่าเก็บ raw results ได้ เช่น 7 / 14 / 30 / 90 วัน
+### Inventory flow
+- [ ] Filter monitors/devices/results/incidents by group
+- [ ] Group summary page แบบ uptime/health ต่อกลุ่ม
+- [ ] Bind credential usage ให้เห็นจาก group / device context
+
+## Next Recommended Work
+
+### Priority 1 — Make device monitoring feel like a real NMS
+- [ ] Convert network counters to traffic rate
+  - RX/TX bps
+  - Kbps / Mbps / Gbps formatting
+  - per-interface history
+- [ ] Add interface-focused device detail
+  - top active interfaces
+  - error / discard counters
+  - interface operational status
+- [ ] Add group-aware views
+  - filter devices by group
+  - filter monitors by group
+  - results/incidents by group
+
+### Priority 2 — Make credentials first-class
+- [ ] Store `credentialId` on monitor config/model
+- [ ] Resolve credential in checker/runner at runtime
+- [ ] Update monitor automatically when shared credential changes
+- [ ] Encrypt credential secret at rest
+- [ ] Show credential usage map
+- [ ] Add “used by X monitors” in credentials page
+
+### Priority 3 — Retention and storage hygiene
+- [ ] History retention settings
+  - 7 / 14 / 30 / 90 days
 - [ ] Auto cleanup ตาม schedule
-- [ ] Manual clear history ราย monitor
+- [ ] Manual clear history
+- [ ] Rollup summaries สำหรับ long-term charts
 
-## Nice to Have Later
+## Deliberately Later
 
-- [ ] Status page สำหรับแชร์ให้คนอื่นดู
-- [ ] PING: packet loss, jitter, multiple probes
-- [ ] DATABASE: custom query, expected result
-- [ ] Agent-based Linux monitor (metrics ลึกกว่า SNMP)
-- [ ] Uptime SLA summaries
-- [ ] Cert expiry warning views
+### Notifications / alerting
+- [ ] Notification channels page
+- [ ] LINE / Email / Slack / Discord delivery
+- [ ] Alert rules management page
+- [ ] Cooldown / dedupe / escalation
+
+### Dashboard
+- [ ] Dashboard overview
+- [ ] Stat cards
+- [ ] attention list
+- [ ] open incidents summary
+- [ ] group/device summary widgets
+
+## Product Strategy — Take the Best, Cut the Worst
+
+### What to keep
+- [ ] **From uptime tools**
+  - setup ง่าย
+  - monitor create flow ตรงไปตรงมา
+  - อ่านสถานะเร็ว
+- [ ] **From NMS tools**
+  - device identity
+  - interface metrics
+  - CPU/RAM/Disk history
+  - grouped inventory
+- [ ] **From modern infra tools**
+  - graph ดูง่าย
+  - filter ช่วงเวลาเร็ว
+  - reusable credentials
+  - clean API-first structure
+
+### What to avoid
+- [ ] ฟอร์มที่บังคับกรอกเยอะทั้งที่ไม่จำเป็น
+- [ ] แยกหน้าเยอะเกินจนหาไม่เจอว่าอะไรอยู่ตรงไหน
+- [ ] raw counters ที่คนอ่านไม่รู้เรื่อง
+- [ ] credential กระจายอยู่หลายหน้าแบบไม่รู้ว่าตัวไหนใช้อยู่
+- [ ] dashboard สวยแต่ไม่ช่วย action
+- [ ] monitor type เยอะ แต่ใช้งานจริงแล้วไม่ลึกพอ
+
+## Target Shape
+
+ถ้าพัฒนาไปตามแนวนี้ ตัวระบบควรออกมาเป็น:
+
+- สร้าง monitor ง่ายแบบ lightweight monitoring
+- ดูอุปกรณ์ลึกพอสำหรับงาน network/server จริง
+- reuse credential และ group ได้เป็นระบบ
+- ขยายไป alerting/dashboard ทีหลังโดยไม่ต้องรื้อแกนข้อมูลใหม่

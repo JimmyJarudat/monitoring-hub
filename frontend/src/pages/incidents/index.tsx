@@ -4,7 +4,16 @@ import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type IncidentStatus = "OPEN" | "RESOLVED";
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "DOCKER" | "DATABASE";
+type MonitorType =
+  | "PING"
+  | "TCP"
+  | "HTTP"
+  | "TLS_CERT"
+  | "DNS"
+  | "SNMP"
+  | "SYSTEM"
+  | "DOCKER"
+  | "DATABASE";
 
 type ApiSuccess<T> = {
   success: true;
@@ -81,6 +90,7 @@ const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
   { label: "TLS_CERT", value: "TLS_CERT" },
   { label: "DNS", value: "DNS" },
   { label: "SNMP", value: "SNMP" },
+  { label: "SYSTEM", value: "SYSTEM" },
   { label: "DOCKER", value: "DOCKER" },
   { label: "DATABASE", value: "DATABASE" },
 ];

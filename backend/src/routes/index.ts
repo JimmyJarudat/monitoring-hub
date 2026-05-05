@@ -4,6 +4,8 @@ import { authProtectedRoutes } from "./auth";
 import { authMiddleware } from "../middleware/auth";
 import { monitorRoutes } from "./monitors";
 import { incidentRoutes } from "./incidents";
+import { groupRoutes } from "./groups";
+import { credentialRoutes } from "./credentials";
 import { ok } from "../lib/response";
 
 // Public routes — ไม่ต้องมี token
@@ -16,5 +18,7 @@ export const protectedRoutes = new Elysia()
   .use(authMiddleware)
   .use(authProtectedRoutes) // /auth/me
   .use(monitorRoutes) // /monitors
-  .use(incidentRoutes); // /incidents
+  .use(incidentRoutes) // /incidents
+  .use(groupRoutes) // /groups
+  .use(credentialRoutes); // /credentials
   // เพิ่ม routes อื่นๆ ที่ต้องการ auth ที่นี่

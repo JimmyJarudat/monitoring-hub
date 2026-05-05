@@ -24,6 +24,7 @@ type CheckedAtFilter = {
   lte?: Date;
 };
 type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
+type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -313,6 +314,91 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
             t.Literal("DATABASE"),
           ]),
         ),
+      }),
+    },
+  )
+  .get(
+    "/:id/metrics",
+    async ({ params, query, set }) => {
+      const existing = await prisma.monitor.findUnique({
+        where: { id: params.id },
+        select: { id: true, name: true, type: true },
+      });
+
+      if (!existing) {
+        set.status = 404;
+        return fail("ไม่พบ monitor");
+      }
+
+      const requestedLimit = Number(query.limit ?? 5000);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20000)
+        : 5000;
+      const collectedAt: CheckedAtFilter = {};
+      const from = typeof query.from === "string" ? new Date(query.from) : null;
+      const to = typeof query.to === "string" ? new Date(query.to) : null;
+
+      if (from && !Number.isNaN(from.getTime())) collectedAt.gte = from;
+      if (to && !Number.isNaN(to.getTime())) collectedAt.lte = to;
+
+      const samples = await prisma.deviceMetricSample.findMany({
+        where: {
+          monitorId: params.id,
+          ...(Object.keys(collectedAt).length > 0 ? { collectedAt } : {}),
+          ...(query.metricGroup ? { metricGroup: query.metricGroup } : {}),
+          ...(query.metricKey ? { metricKey: query.metricKey } : {}),
+          ...(query.instance ? { instance: query.instance } : {}),
+        },
+        orderBy: [{ collectedAt: "asc" }, { metricKey: "asc" }, { instance: "asc" }],
+        take: limit,
+      });
+
+      const grouped = new Map<
+        string,
+        {
+          metricGroup: DeviceMetricGroup;
+          metricKey: string;
+          instance: string | null;
+          unit: string;
+          points: Array<{ collectedAt: Date; value: number }>;
+        }
+      >();
+
+      for (const sample of samples) {
+        const key = `${sample.metricGroup}:${sample.metricKey}:${sample.instance ?? ""}`;
+        const current = grouped.get(key);
+
+        if (!current) {
+          grouped.set(key, {
+            metricGroup: sample.metricGroup as DeviceMetricGroup,
+            metricKey: sample.metricKey,
+            instance: sample.instance,
+            unit: sample.unit,
+            points: [{ collectedAt: sample.collectedAt, value: sample.value }],
+          });
+          continue;
+        }
+
+        current.points.push({ collectedAt: sample.collectedAt, value: sample.value });
+      }
+
+      return ok({
+        monitor: existing,
+        sampleCount: samples.length,
+        series: Array.from(grouped.values()),
+      });
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      query: t.Object({
+        from: t.Optional(t.String()),
+        to: t.Optional(t.String()),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20000 })),
+        metricGroup: t.Optional(
+          t.Union([t.Literal("SYSTEM"), t.Literal("DISK"), t.Literal("NET")]),
+        ),
+        metricKey: t.Optional(t.String()),
+        instance: t.Optional(t.String()),
       }),
     },
   )

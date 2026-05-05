@@ -1,4 +1,6 @@
 import * as snmp from "net-snmp";
+import type { DeviceMetricSample } from "./metric.types";
+import { collectInterfaceMetrics, safeNumber, snmpGet, snmpSubtreeWalk, snmpVersion } from "./snmp.shared";
 
 const OIDS = {
   cpuIdle: "1.3.6.1.4.1.2021.11.11.0",
@@ -45,6 +47,14 @@ export interface SystemMetrics {
   load15?: number;
   uptimeSeconds?: number;
   osDescr?: string;
+  interfaces?: Array<{
+    name: string;
+    operStatus: number;
+    inOctets: number;
+    outOctets: number;
+    inErrors: number;
+    outErrors: number;
+  }>;
 }
 
 export interface CheckResult {
@@ -52,43 +62,12 @@ export interface CheckResult {
   responseTimeMs?: number;
   message?: string;
   metadata?: Record<string, unknown>;
+  metrics?: DeviceMetricSample[];
 }
-
-const snmpVersion = (v?: string) =>
-  v === "1" ? snmp.Version1 : snmp.Version2c;
-
-const snmpGet = (
-  session: snmp.Session,
-  oids: string[],
-): Promise<snmp.Varbind[]> =>
-  new Promise((resolve, reject) => {
-    session.get(oids, (err: Error | null, vbs: snmp.Varbind[] | undefined) => {
-      if (err) return reject(err);
-      resolve(vbs ?? []);
-    });
-  });
-
-const snmpSubtreeWalk = (
-  session: snmp.Session,
-  oid: string,
-): Promise<snmp.Varbind[]> =>
-  new Promise((resolve) => {
-    const results: snmp.Varbind[] = [];
-    session.subtree(
-      oid,
-      20,
-      (vbs: snmp.Varbind[]) => {
-        for (const vb of vbs) {
-          if (!snmp.isVarbindError(vb)) results.push(vb);
-        }
-      },
-      () => resolve(results),
-    );
-  });
 
 const valOf = (vbs: snmp.Varbind[], oid: string): number => {
   const vb = vbs.find((v) => v.oid === oid);
-  return vb ? Number(vb.value) : 0;
+  return vb ? safeNumber(vb.value) : 0;
 };
 
 export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
@@ -125,11 +104,12 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
     const load5 = load5Vb ? parseFloat(load5Vb.value?.toString() ?? "") : undefined;
     const load15 = load15Vb ? parseFloat(load15Vb.value?.toString() ?? "") : undefined;
 
-    const [descrVbs, allocVbs, sizeVbs, usedVbs] = await Promise.all([
+    const [descrVbs, allocVbs, sizeVbs, usedVbs, interfaces] = await Promise.all([
       snmpSubtreeWalk(session, DISK_DESCR_OID),
       snmpSubtreeWalk(session, DISK_ALLOC_OID),
       snmpSubtreeWalk(session, DISK_SIZE_OID),
       snmpSubtreeWalk(session, DISK_USED_OID),
+      collectInterfaceMetrics(session),
     ]);
 
     const DISK_EXCLUDE = [
@@ -178,6 +158,7 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
       memUsedKb,
       memUsedPct,
       disks,
+      ...(interfaces.length > 0 ? { interfaces } : {}),
       ...(uptimeSeconds !== undefined ? { uptimeSeconds } : {}),
       ...(osDescr ? { osDescr } : {}),
       ...(!Number.isNaN(load1) && load1 !== undefined ? { load1 } : {}),
@@ -185,11 +166,109 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
       ...(!Number.isNaN(load15) && load15 !== undefined ? { load15 } : {}),
     };
 
+    const metricSamples: DeviceMetricSample[] = [
+      { metricGroup: "SYSTEM", metricKey: "cpu.used_pct", value: cpuUsedPct, unit: "percent" },
+      { metricGroup: "SYSTEM", metricKey: "memory.used_pct", value: memUsedPct, unit: "percent" },
+      { metricGroup: "SYSTEM", metricKey: "memory.used_kb", value: memUsedKb, unit: "kb" },
+      { metricGroup: "SYSTEM", metricKey: "memory.total_kb", value: memTotal, unit: "kb" },
+    ];
+
+    if (uptimeSeconds !== undefined) {
+      metricSamples.push({
+        metricGroup: "SYSTEM",
+        metricKey: "system.uptime_seconds",
+        value: uptimeSeconds,
+        unit: "seconds",
+      });
+    }
+
+    for (const loadMetric of [
+      { key: "system.load1", value: load1 },
+      { key: "system.load5", value: load5 },
+      { key: "system.load15", value: load15 },
+    ]) {
+      if (typeof loadMetric.value === "number" && !Number.isNaN(loadMetric.value)) {
+        metricSamples.push({
+          metricGroup: "SYSTEM",
+          metricKey: loadMetric.key,
+          value: loadMetric.value,
+          unit: "load",
+        });
+      }
+    }
+
+    for (const disk of disks) {
+      metricSamples.push(
+        {
+          metricGroup: "DISK",
+          metricKey: "disk.used_pct",
+          instance: disk.mount,
+          value: disk.usedPct,
+          unit: "percent",
+        },
+        {
+          metricGroup: "DISK",
+          metricKey: "disk.used_kb",
+          instance: disk.mount,
+          value: disk.usedKb,
+          unit: "kb",
+        },
+        {
+          metricGroup: "DISK",
+          metricKey: "disk.total_kb",
+          instance: disk.mount,
+          value: disk.totalKb,
+          unit: "kb",
+        },
+      );
+    }
+
+    for (const iface of interfaces) {
+      metricSamples.push(
+        {
+          metricGroup: "NET",
+          metricKey: "net.in_octets",
+          instance: iface.name,
+          value: iface.inOctets,
+          unit: "bytes",
+        },
+        {
+          metricGroup: "NET",
+          metricKey: "net.out_octets",
+          instance: iface.name,
+          value: iface.outOctets,
+          unit: "bytes",
+        },
+        {
+          metricGroup: "NET",
+          metricKey: "net.in_errors",
+          instance: iface.name,
+          value: iface.inErrors,
+          unit: "count",
+        },
+        {
+          metricGroup: "NET",
+          metricKey: "net.out_errors",
+          instance: iface.name,
+          value: iface.outErrors,
+          unit: "count",
+        },
+        {
+          metricGroup: "NET",
+          metricKey: "net.oper_status",
+          instance: iface.name,
+          value: iface.operStatus,
+          unit: "state",
+        },
+      );
+    }
+
     return {
       status: warnings.length > 0 ? "DEGRADED" : "UP",
       responseTimeMs,
       message: warnings.length > 0 ? `High usage: ${warnings.join(", ")}` : undefined,
       metadata: { host: config.host, ...metrics, disks },
+      metrics: metricSamples,
     };
   } catch (err) {
     return {

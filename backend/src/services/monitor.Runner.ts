@@ -2,6 +2,7 @@ import type { Monitor } from "../generated/prisma/client";
 import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
+import type { DeviceMetricSample } from "./checkers/metric.types";
 import { databaseCheck } from "./checkers/database.Checker";
 import { dnsCheck } from "./checkers/dns.Checker";
 import { snmpCheck } from "./checkers/snmp.Checker";
@@ -17,6 +18,7 @@ type CheckResult = {
   responseTimeMs?: number;
   message?: string;
   metadata?: Record<string, unknown>;
+  metrics?: DeviceMetricSample[];
 };
 
 const TICK_MS = 5_000;
@@ -130,14 +132,39 @@ export const runMonitorCheck = async (monitor: Monitor) => {
 
   const result = await runChecker(monitor.type, monitor.config);
 
-  const createdResult = await prisma.monitorResult.create({
-    data: {
-      monitorId: monitor.id,
-      status: result.status,
-      responseTimeMs: result.responseTimeMs,
-      message: result.message,
-      metadata: result.metadata as Prisma.InputJsonObject | undefined,
-    },
+  const createdResult = await prisma.$transaction(async (tx) => {
+    const monitorResult = await tx.monitorResult.create({
+      data: {
+        monitorId: monitor.id,
+        status: result.status,
+        responseTimeMs: result.responseTimeMs,
+        message: result.message,
+        metadata: result.metadata as Prisma.InputJsonObject | undefined,
+      },
+    });
+
+    const metricRows = (result.metrics ?? []).filter(
+      (metric) =>
+        Number.isFinite(metric.value) &&
+        metric.metricKey.trim().length > 0 &&
+        metric.unit.trim().length > 0,
+    );
+
+    if (metricRows.length > 0) {
+      await tx.deviceMetricSample.createMany({
+        data: metricRows.map((metric) => ({
+          monitorId: monitor.id,
+          metricGroup: metric.metricGroup,
+          metricKey: metric.metricKey,
+          instance: metric.instance,
+          value: metric.value,
+          unit: metric.unit,
+          collectedAt: monitorResult.checkedAt,
+        })),
+      });
+    }
+
+    return monitorResult;
   });
 
   await reconcileIncident(monitor, {

@@ -1,4 +1,6 @@
 import * as snmp from "net-snmp";
+import type { DeviceMetricSample } from "./metric.types";
+import { collectInterfaceMetrics, snmpGet, snmpVersion } from "./snmp.shared";
 
 const SYS_OIDS = {
   sysDescr: "1.3.6.1.2.1.1.1.0",
@@ -20,10 +22,8 @@ export interface CheckResult {
   responseTimeMs?: number;
   message?: string;
   metadata?: Record<string, unknown>;
+  metrics?: DeviceMetricSample[];
 }
-
-const snmpVersion = (v?: string) =>
-  v === "1" ? snmp.Version1 : snmp.Version2c;
 
 const formatUptime = (timeticks: number) => {
   const totalSeconds = Math.floor(timeticks / 100);
@@ -47,46 +47,105 @@ export async function snmpCheck(config: SnmpConfig): Promise<CheckResult> {
     retries: 1,
   });
 
-  return new Promise<CheckResult>((resolve) => {
-    session.get(targetOids, (error: Error | null, varbinds: snmp.Varbind[] | undefined) => {
-      const responseTimeMs = Date.now() - start;
-      session.close();
+  try {
+    const [varbinds, interfaces] = await Promise.all([
+      snmpGet(session, targetOids),
+      collectInterfaceMetrics(session),
+    ]);
+    const responseTimeMs = Date.now() - start;
+    const metadata: Record<string, unknown> = { host: config.host };
+    const issues: string[] = [];
+    const metrics: DeviceMetricSample[] = [];
 
-      if (error) {
-        resolve({
-          status: "DOWN",
-          responseTimeMs,
-          message: error.message,
-          metadata: { host: config.host },
+    for (const vb of varbinds ?? []) {
+      if (snmp.isVarbindError(vb)) {
+        issues.push(`OID ${vb.oid}: ${snmp.varbindError(vb)}`);
+        continue;
+      }
+
+      const oidKey = Object.entries(SYS_OIDS).find(([, v]) => v === vb.oid)?.[0] ?? vb.oid;
+
+      if (vb.oid === SYS_OIDS.sysUpTime) {
+        const ticks = Number(vb.value);
+        const uptimeSeconds = Math.floor(ticks / 100);
+        metadata[oidKey] = formatUptime(ticks);
+        metrics.push({
+          metricGroup: "SYSTEM",
+          metricKey: "system.uptime_seconds",
+          value: uptimeSeconds,
+          unit: "seconds",
         });
-        return;
+      } else {
+        metadata[oidKey] = vb.value?.toString() ?? "";
       }
+    }
 
-      const metadata: Record<string, unknown> = { host: config.host };
-      const issues: string[] = [];
+    if (interfaces.length > 0) {
+      metadata.interfaces = interfaces.map((iface) => ({
+        name: iface.name,
+        operStatus: iface.operStatus,
+        inOctets: iface.inOctets,
+        outOctets: iface.outOctets,
+        inErrors: iface.inErrors,
+        outErrors: iface.outErrors,
+      }));
 
-      for (const vb of varbinds ?? []) {
-        if (snmp.isVarbindError(vb)) {
-          issues.push(`OID ${vb.oid}: ${snmp.varbindError(vb)}`);
-          continue;
-        }
-
-        const oidKey = Object.entries(SYS_OIDS).find(([, v]) => v === vb.oid)?.[0] ?? vb.oid;
-
-        if (vb.oid === SYS_OIDS.sysUpTime) {
-          const ticks = vb.value as number;
-          metadata[oidKey] = formatUptime(ticks);
-        } else {
-          metadata[oidKey] = vb.value?.toString() ?? "";
-        }
+      for (const iface of interfaces) {
+        metrics.push(
+          {
+            metricGroup: "NET",
+            metricKey: "net.in_octets",
+            instance: iface.name,
+            value: iface.inOctets,
+            unit: "bytes",
+          },
+          {
+            metricGroup: "NET",
+            metricKey: "net.out_octets",
+            instance: iface.name,
+            value: iface.outOctets,
+            unit: "bytes",
+          },
+          {
+            metricGroup: "NET",
+            metricKey: "net.in_errors",
+            instance: iface.name,
+            value: iface.inErrors,
+            unit: "count",
+          },
+          {
+            metricGroup: "NET",
+            metricKey: "net.out_errors",
+            instance: iface.name,
+            value: iface.outErrors,
+            unit: "count",
+          },
+          {
+            metricGroup: "NET",
+            metricKey: "net.oper_status",
+            instance: iface.name,
+            value: iface.operStatus,
+            unit: "state",
+          },
+        );
       }
+    }
 
-      resolve({
-        status: issues.length > 0 ? "DEGRADED" : "UP",
-        responseTimeMs,
-        message: issues.length > 0 ? issues.join(" | ") : undefined,
-        metadata,
-      });
-    });
-  });
+    return {
+      status: issues.length > 0 ? "DEGRADED" : "UP",
+      responseTimeMs,
+      message: issues.length > 0 ? issues.join(" | ") : undefined,
+      metadata,
+      metrics,
+    };
+  } catch (error) {
+    return {
+      status: "DOWN",
+      responseTimeMs: Date.now() - start,
+      message: error instanceof Error ? error.message : "SNMP error",
+      metadata: { host: config.host },
+    };
+  } finally {
+    session.close();
+  }
 }

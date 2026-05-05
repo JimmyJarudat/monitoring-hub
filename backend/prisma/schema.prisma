@@ -97,6 +97,8 @@ model Monitor {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   results     MonitorResult[]
+  deviceMetrics DeviceMetricSample[]
+  groups      MonitorGroupMember[]
   alertRules  AlertRule[]
   incidents   Incident[]
 
@@ -135,6 +137,75 @@ enum MonitorStatus {
   UP
   DOWN
   DEGRADED
+}
+
+model DeviceMetricSample {
+  id          String            @id @default(cuid())
+  monitorId   String
+  monitor     Monitor           @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  metricGroup DeviceMetricGroup
+  metricKey   String
+  instance    String?
+  value       Float
+  unit        String
+  collectedAt DateTime          @default(now())
+
+  @@index([monitorId, collectedAt])
+  @@index([monitorId, metricGroup, collectedAt])
+  @@index([monitorId, metricKey, instance, collectedAt])
+  @@map("device_metric_samples")
+}
+
+enum DeviceMetricGroup {
+  SYSTEM
+  DISK
+  NET
+}
+
+model MonitorGroup {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  description String?
+  color       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  monitors    MonitorGroupMember[]
+
+  @@map("monitor_groups")
+}
+
+model MonitorGroupMember {
+  groupId    String
+  monitorId  String
+  group      MonitorGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  monitor    Monitor      @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+
+  @@id([groupId, monitorId])
+  @@index([monitorId])
+  @@map("monitor_group_members")
+}
+
+model Credential {
+  id          String         @id @default(cuid())
+  name        String
+  type        CredentialType
+  username    String?
+  secret      String
+  notes       String?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([type, createdAt])
+  @@map("credentials")
+}
+
+enum CredentialType {
+  SNMP_COMMUNITY
+  USERNAME_PASSWORD
+  API_TOKEN
+  SSH_KEY
 }
 
 model AlertRule {

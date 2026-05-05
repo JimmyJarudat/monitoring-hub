@@ -16,7 +16,16 @@ import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "DOCKER" | "DATABASE";
+type MonitorType =
+  | "PING"
+  | "TCP"
+  | "HTTP"
+  | "TLS_CERT"
+  | "DNS"
+  | "SNMP"
+  | "SYSTEM"
+  | "DOCKER"
+  | "DATABASE";
 type IncidentStatus = "OPEN" | "RESOLVED";
 
 type ApiSuccess<T> = {
@@ -72,6 +81,47 @@ type MonitorDetail = {
   updatedAt: string;
 };
 
+type DeviceMetadata = {
+  host?: string;
+  cpuUsedPct?: number;
+  memTotalKb?: number;
+  memUsedKb?: number;
+  memUsedPct?: number;
+  uptimeSeconds?: number;
+  osDescr?: string;
+  load1?: number;
+  load5?: number;
+  load15?: number;
+  disks?: Array<{
+    mount: string;
+    totalKb: number;
+    usedKb: number;
+    usedPct: number;
+  }>;
+  interfaces?: Array<{
+    name: string;
+    operStatus: number;
+    inOctets: number;
+    outOctets: number;
+    inErrors: number;
+    outErrors: number;
+  }>;
+};
+
+type DeviceMetricSeries = {
+  metricGroup: "SYSTEM" | "DISK" | "NET";
+  metricKey: string;
+  instance: string | null;
+  unit: string;
+  points: Array<{ collectedAt: string; value: number }>;
+};
+
+type DeviceMetricsResponse = {
+  monitor: { id: string; name: string; type: MonitorType };
+  sampleCount: number;
+  series: DeviceMetricSeries[];
+};
+
 type EditForm = {
   name: string;
   type: MonitorType;
@@ -85,9 +135,16 @@ type TimeRangePreset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 const timeRangeOptions: Array<{ label: string; value: TimeRangePreset }> = [
   { label: "1h", value: "1h" },
   { label: "6h", value: "6h" },
-  { label: "24h", value: "24h" },
-  { label: "7d", value: "7d" },
-  { label: "30d", value: "30d" },
+  { label: "Day", value: "24h" },
+  { label: "Week", value: "7d" },
+  { label: "Month", value: "30d" },
+  { label: "Custom", value: "custom" },
+];
+
+const deviceAnalysisOptions: Array<{ label: string; value: TimeRangePreset }> = [
+  { label: "Day", value: "24h" },
+  { label: "Week", value: "7d" },
+  { label: "Month", value: "30d" },
   { label: "Custom", value: "custom" },
 ];
 
@@ -209,6 +266,37 @@ const toConfigText = (config: Record<string, unknown>) => {
   return JSON.stringify(config, null, 2);
 };
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const formatPercent = (value: number | null | undefined) =>
+  isFiniteNumber(value) ? `${value.toFixed(1)}%` : "-";
+
+const formatKb = (value: number | null | undefined) => {
+  if (!isFiniteNumber(value)) return "-";
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} GB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(0)} MB`;
+  return `${value.toFixed(0)} KB`;
+};
+
+const formatUptime = (seconds: number | null | undefined) => {
+  if (!isFiniteNumber(seconds)) return "-";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+};
+
+const formatBytes = (value: number | null | undefined) => {
+  if (!isFiniteNumber(value)) return "-";
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(0)} KB`;
+  return `${value.toFixed(0)} B`;
+};
+
 const MonitorDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -234,6 +322,8 @@ const MonitorDetailPage = () => {
     enabled: true,
     configText: "{}",
   });
+  const [metricSeries, setMetricSeries] = useState<DeviceMetricSeries[]>([]);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   const fetchMonitor = useCallback(async () => {
     if (!id) return;
@@ -261,6 +351,36 @@ const MonitorDetailPage = () => {
   useEffect(() => {
     void fetchMonitor();
   }, [fetchMonitor]);
+
+  const fetchDeviceMetrics = useCallback(async () => {
+    if (!id || !monitor || (monitor.type !== "SYSTEM" && monitor.type !== "SNMP")) {
+      setMetricSeries([]);
+      return;
+    }
+
+    setMetricsLoading(true);
+
+    try {
+      const response = await api.get<ApiResponse<DeviceMetricsResponse>>(`/monitors/${id}/metrics`, {
+        params: { from: appliedFrom, to: appliedTo, limit: 5000 },
+      });
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      setMetricSeries(response.data.data.series);
+    } catch {
+      toast.error("โหลด device metrics ไม่สำเร็จ");
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [api, appliedFrom, appliedTo, id, monitor]);
+
+  useEffect(() => {
+    void fetchDeviceMetrics();
+  }, [fetchDeviceMetrics]);
 
   const handleLoadMoreResults = () => {
     setResultsLimit((current) => Math.min(current + 20, 200));
@@ -385,6 +505,127 @@ const MonitorDetailPage = () => {
       hours: Array.from({ length: 24 }, (_, hour) => hour),
     };
   }, [monitor]);
+
+  const isDeviceMonitor = monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
+  const latestMetadata = (latestResult?.metadata as DeviceMetadata | null) ?? null;
+
+  const utilizationChartData = useMemo(() => {
+    const cpuSeries = metricSeries.find(
+      (series) => series.metricKey === "cpu.used_pct" && series.metricGroup === "SYSTEM",
+    );
+    const memSeries = metricSeries.find(
+      (series) => series.metricKey === "memory.used_pct" && series.metricGroup === "SYSTEM",
+    );
+    const uptimeSeries = metricSeries.find(
+      (series) => series.metricKey === "system.uptime_seconds" && series.metricGroup === "SYSTEM",
+    );
+    const bucket = new Map<
+      string,
+      {
+        checkedAt: string;
+        timeLabel: string;
+        cpu?: number;
+        memory?: number;
+        uptimeSeconds?: number;
+      }
+    >();
+
+    for (const series of [cpuSeries, memSeries, uptimeSeries]) {
+      for (const point of series?.points ?? []) {
+        const current = bucket.get(point.collectedAt) ?? {
+          checkedAt: point.collectedAt,
+          timeLabel: formatShortTime(point.collectedAt),
+        };
+
+        if (series?.metricKey === "cpu.used_pct") current.cpu = point.value;
+        if (series?.metricKey === "memory.used_pct") current.memory = point.value;
+        if (series?.metricKey === "system.uptime_seconds") current.uptimeSeconds = point.value;
+
+        bucket.set(point.collectedAt, current);
+      }
+    }
+
+    return Array.from(bucket.values()).sort(
+      (a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
+    );
+  }, [metricSeries]);
+
+  const diskSeries = useMemo(
+    () =>
+      metricSeries
+        .filter((series) => series.metricGroup === "DISK" && series.metricKey === "disk.used_pct")
+        .sort((a, b) => {
+          const latestA = a.points[a.points.length - 1]?.value ?? 0;
+          const latestB = b.points[b.points.length - 1]?.value ?? 0;
+          return latestB - latestA;
+        })
+        .slice(0, 4),
+    [metricSeries],
+  );
+
+  const diskChartData = useMemo(() => {
+    const bucket = new Map<string, Record<string, string | number | undefined>>();
+
+    for (const series of diskSeries) {
+      const key = series.instance ?? series.metricKey;
+
+      for (const point of series.points) {
+        const current = bucket.get(point.collectedAt) ?? {
+          checkedAt: point.collectedAt,
+          timeLabel: formatShortTime(point.collectedAt),
+        };
+        current[key] = point.value;
+        bucket.set(point.collectedAt, current);
+      }
+    }
+
+    return Array.from(bucket.values()).sort(
+      (a, b) => new Date(String(a.checkedAt)).getTime() - new Date(String(b.checkedAt)).getTime(),
+    );
+  }, [diskSeries]);
+
+  const netCounterChartData = useMemo(() => {
+    const inSeries = metricSeries.filter(
+      (series) => series.metricGroup === "NET" && series.metricKey === "net.in_octets",
+    );
+    const outSeries = metricSeries.filter(
+      (series) => series.metricGroup === "NET" && series.metricKey === "net.out_octets",
+    );
+    const bucket = new Map<
+      string,
+      { checkedAt: string; timeLabel: string; inOctets: number; outOctets: number }
+    >();
+
+    for (const series of inSeries) {
+      for (const point of series.points) {
+        const current = bucket.get(point.collectedAt) ?? {
+          checkedAt: point.collectedAt,
+          timeLabel: formatShortTime(point.collectedAt),
+          inOctets: 0,
+          outOctets: 0,
+        };
+        current.inOctets += point.value;
+        bucket.set(point.collectedAt, current);
+      }
+    }
+
+    for (const series of outSeries) {
+      for (const point of series.points) {
+        const current = bucket.get(point.collectedAt) ?? {
+          checkedAt: point.collectedAt,
+          timeLabel: formatShortTime(point.collectedAt),
+          inOctets: 0,
+          outOctets: 0,
+        };
+        current.outOctets += point.value;
+        bucket.set(point.collectedAt, current);
+      }
+    }
+
+    return Array.from(bucket.values()).sort(
+      (a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
+    );
+  }, [metricSeries]);
 
   const openEditModal = () => {
     if (!monitor) return;
@@ -644,6 +885,248 @@ const MonitorDetailPage = () => {
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
+          {isDeviceMonitor ? (
+            <>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-950">Device metrics</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      CPU, memory, disk และ network counters สำหรับอุปกรณ์/เซิร์ฟเวอร์
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-start gap-2 lg:items-end">
+                    <div className="flex flex-wrap gap-2">
+                      {deviceAnalysisOptions.map((option) => {
+                        const isActive = timeRange === option.value;
+
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={[
+                              "rounded-md border px-3 py-1.5 text-xs font-semibold transition",
+                              isActive
+                                ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                                : "border-slate-300 text-slate-600 hover:bg-slate-100",
+                            ].join(" ")}
+                            onClick={() => handleTimeRangeChange(option.value)}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {metricsLoading ? "Loading metrics..." : `${metricSeries.length} series in selected range`}
+                    </p>
+                  </div>
+                </div>
+
+                {timeRange === "custom" ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <input
+                      className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="datetime-local"
+                      value={customFrom}
+                      onChange={(event) => setCustomFrom(event.target.value)}
+                    />
+                    <input
+                      className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="datetime-local"
+                      value={customTo}
+                      onChange={(event) => setCustomTo(event.target.value)}
+                    />
+                    <button
+                      className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      type="button"
+                      onClick={handleApplyCustomRange}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">CPU</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                      {formatPercent(latestMetadata?.cpuUsedPct)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      load {isFiniteNumber(latestMetadata?.load1) ? latestMetadata?.load1?.toFixed(2) : "-"} /{" "}
+                      {isFiniteNumber(latestMetadata?.load5) ? latestMetadata?.load5?.toFixed(2) : "-"} /{" "}
+                      {isFiniteNumber(latestMetadata?.load15) ? latestMetadata?.load15?.toFixed(2) : "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Memory</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                      {formatPercent(latestMetadata?.memUsedPct)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatKb(latestMetadata?.memUsedKb)} / {formatKb(latestMetadata?.memTotalKb)}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Uptime</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                      {formatUptime(latestMetadata?.uptimeSeconds)}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-slate-500" title={latestMetadata?.osDescr}>
+                      {latestMetadata?.osDescr ?? "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Interfaces</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                      {latestMetadata?.interfaces?.length ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {latestMetadata?.disks?.length ?? 0} disks tracked
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-6 2xl:grid-cols-2">
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-slate-950">CPU and memory</h2>
+                  </div>
+                  <div className="h-72 p-4">
+                    {utilizationChartData.length === 0 ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                        ยังไม่มี time-series metrics
+                      </div>
+                    ) : (
+                      <ResponsiveContainer height="100%" width="100%">
+                        <LineChart data={utilizationChartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                          <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                          <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
+                          <Tooltip
+                            formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
+                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
+                          />
+                          <Line dataKey="cpu" name="CPU" stroke="#0f766e" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          <Line dataKey="memory" name="Memory" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-slate-950">Network counters</h2>
+                  </div>
+                  <div className="h-72 p-4">
+                    {netCounterChartData.length === 0 ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                        ยังไม่มี network counters
+                      </div>
+                    ) : (
+                      <ResponsiveContainer height="100%" width="100%">
+                        <LineChart data={netCounterChartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                          <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                          <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
+                          <YAxis tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => formatBytes(Number(value))} tickLine={false} width={64} />
+                          <Tooltip
+                            formatter={(value, name) => [formatBytes(Number(value)), name === "inOctets" ? "RX total" : "TX total"]}
+                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
+                          />
+                          <Line dataKey="inOctets" name="RX total" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                          <Line dataKey="outOctets" name="TX total" stroke="#ea580c" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <h2 className="text-sm font-semibold text-slate-950">Disk usage</h2>
+                </div>
+                <div className="h-72 p-4">
+                  {diskChartData.length === 0 || diskSeries.length === 0 ? (
+                    <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                      ยังไม่มี disk metrics
+                    </div>
+                  ) : (
+                    <ResponsiveContainer height="100%" width="100%">
+                      <LineChart data={diskChartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                        <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
+                        <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
+                        <Tooltip
+                          formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
+                          labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt)) : "")}
+                        />
+                        {diskSeries.map((series, index) => {
+                          const key = series.instance ?? series.metricKey;
+                          const colors = ["#16a34a", "#dc2626", "#9333ea", "#0ea5e9"];
+                          return (
+                            <Line
+                              key={key}
+                              dataKey={key}
+                              name={key}
+                              stroke={colors[index % colors.length]}
+                              strokeWidth={2}
+                              dot={{ r: 2 }}
+                              connectNulls
+                            />
+                          );
+                        })}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <h2 className="text-sm font-semibold text-slate-950">Latest interfaces</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Interface</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">RX</th>
+                        <th className="px-4 py-3">TX</th>
+                        <th className="px-4 py-3">Errors</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {!latestMetadata?.interfaces?.length ? (
+                        <tr>
+                          <td className="px-4 py-8 text-center text-slate-500" colSpan={5}>
+                            ยังไม่มีข้อมูล interface
+                          </td>
+                        </tr>
+                      ) : (
+                        latestMetadata.interfaces.map((iface) => (
+                          <tr className="hover:bg-slate-50" key={iface.name}>
+                            <td className="px-4 py-3 font-medium text-slate-800">{iface.name}</td>
+                            <td className="px-4 py-3 text-slate-600">{iface.operStatus === 1 ? "UP" : "DOWN"}</td>
+                            <td className="px-4 py-3 text-slate-600">{formatBytes(iface.inOctets)}</td>
+                            <td className="px-4 py-3 text-slate-600">{formatBytes(iface.outOctets)}</td>
+                            <td className="px-4 py-3 text-slate-600">
+                              in {iface.inErrors ?? 0} · out {iface.outErrors ?? 0}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-3">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -1017,6 +1500,7 @@ const MonitorDetailPage = () => {
                     <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DNS">DNS</option>
                     <option value="SNMP">SNMP</option>
+                    <option value="SYSTEM">SYSTEM</option>
                     <option value="DOCKER">DOCKER</option>
                   </select>
                 </label>
