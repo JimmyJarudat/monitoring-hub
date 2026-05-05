@@ -8,7 +8,6 @@ const OIDS = {
   memCached: "1.3.6.1.4.1.2021.4.15.0",
 };
 
-const DISK_STORAGE_TYPE_OID = "1.3.6.1.2.1.25.2.1.4"; // hrStorageFixedDisk
 const DISK_TABLE_BASE = "1.3.6.1.2.1.25.2.3.1";
 const DISK_DESCR_OID = `${DISK_TABLE_BASE}.3`;
 const DISK_ALLOC_OID = `${DISK_TABLE_BASE}.4`;
@@ -113,12 +112,24 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
       snmpSubtreeWalk(session, DISK_USED_OID),
     ]);
 
+    const DISK_EXCLUDE = [
+      /docker/i,
+      /^\/run/,
+      /^\/sys/,
+      /^\/proc/,
+      /^\/snap/,
+      /^\/dev/,
+      /overlay/i,
+      /^\/var\/lib\/lxc/,
+    ];
+
     const disks: DiskInfo[] = [];
     for (const descrVb of descrVbs) {
       const idx = descrVb.oid.split(".").pop();
       if (!idx) continue;
       const descr = descrVb.value?.toString() ?? "";
-      if (!descr.startsWith("/") || descr.startsWith("/dev")) continue;
+      if (!descr.startsWith("/")) continue;
+      if (DISK_EXCLUDE.some((re) => re.test(descr))) continue;
 
       const allocUnit = Number(allocVbs.find((v) => v.oid.endsWith(`.${idx}`))?.value ?? 1);
       const size = Number(sizeVbs.find((v) => v.oid.endsWith(`.${idx}`))?.value ?? 0);
@@ -126,6 +137,9 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
 
       const totalKb = Math.round((size * allocUnit) / 1024);
       const usedKb = Math.round((used * allocUnit) / 1024);
+
+      if (totalKb < 50 * 1024) continue;
+
       const usedPct = totalKb > 0 ? Math.round((usedKb / totalKb) * 1000) / 10 : 0;
 
       disks.push({ mount: descr, totalKb, usedKb, usedPct });
