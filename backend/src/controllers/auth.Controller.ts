@@ -1,16 +1,11 @@
 import Elysia, { t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { authService } from "../services/auth.Service";
+import { tokenService } from "../services/token.Service";
 import { config } from "../config";
 
 export const authController = new Elysia({ prefix: "/auth" })
-  .use(
-    jwt({
-      name: "jwt",
-      secret: config.jwtSecret,
-      exp: "7d",
-    })
-  )
+  .use(jwt({ name: "jwt", secret: config.jwtSecret, exp: "15m" }))
   .post(
     "/register",
     async ({ body, jwt, set }) => {
@@ -27,9 +22,10 @@ export const authController = new Elysia({ prefix: "/auth" })
       }
 
       const user = await authService.createUser(body.username, body.email, body.password);
-      const token = await jwt.sign({ sub: user.id, role: user.role.name });
+      const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
+      const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
 
-      return { token, user };
+      return { accessToken, refreshToken, user };
     },
     {
       body: t.Object({
@@ -42,7 +38,6 @@ export const authController = new Elysia({ prefix: "/auth" })
   .post(
     "/login",
     async ({ body, jwt, set }) => {
-      // รับได้ทั้ง username และ email
       const user = await authService.findByUsernameOrEmail(body.identifier);
       if (!user) {
         set.status = 401;
@@ -55,15 +50,50 @@ export const authController = new Elysia({ prefix: "/auth" })
         return { message: "Invalid credentials" };
       }
 
-      const token = await jwt.sign({ sub: user.id, role: user.role.name });
+      const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
+      const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
       const { password: _, ...safeUser } = user;
 
-      return { token, user: safeUser };
+      return { accessToken, refreshToken, user: safeUser };
     },
     {
       body: t.Object({
         identifier: t.String({ description: "username or email" }),
         password: t.String(),
+      }),
+    }
+  )
+  .post(
+    "/refresh",
+    async ({ body, jwt, set }) => {
+      const record = await tokenService.findValid(body.refreshToken);
+      if (!record) {
+        set.status = 401;
+        return { message: "Invalid or expired refresh token" };
+      }
+
+      // rotate: revoke เดิม ออกใหม่
+      await tokenService.revoke(body.refreshToken);
+      const accessToken = await jwt.sign({ sub: record.userId, role: record.user.role.name });
+      const { token: newRefreshToken } = await tokenService.createRefreshToken(record.userId);
+
+      return { accessToken, refreshToken: newRefreshToken };
+    },
+    {
+      body: t.Object({
+        refreshToken: t.String(),
+      }),
+    }
+  )
+  .post(
+    "/logout",
+    async ({ body, set }) => {
+      await tokenService.revoke(body.refreshToken);
+      set.status = 204;
+    },
+    {
+      body: t.Object({
+        refreshToken: t.String(),
       }),
     }
   );

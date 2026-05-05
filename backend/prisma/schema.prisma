@@ -8,18 +8,33 @@ datasource db {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  username     String         @unique
-  email        String         @unique
-  password     String
-  roleId       String
-  role         Role           @relation(fields: [roleId], references: [id])
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  auditLogs    AuditLog[]
-  loginHistory LoginHistory[]
+  id             String         @id @default(cuid())
+  username       String         @unique
+  email          String         @unique
+  password       String
+  roleId         String
+  role           Role           @relation(fields: [roleId], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  auditLogs      AuditLog[]
+  loginHistory   LoginHistory[]
+  refreshTokens  RefreshToken[]
 
   @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
 }
 
 model Role {
