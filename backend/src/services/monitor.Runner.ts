@@ -47,20 +47,78 @@ const runChecker = async (
   }
 };
 
+const reconcileIncident = async (
+  monitor: Monitor,
+  result: {
+    status: MonitorStatus;
+    message: string | null;
+    checkedAt: Date;
+  },
+) => {
+  const openIncident = await prisma.incident.findFirst({
+    where: {
+      monitorId: monitor.id,
+      status: "OPEN",
+    },
+    orderBy: { startedAt: "desc" },
+  });
+
+  if (result.status === "UP") {
+    if (!openIncident) return;
+
+    await prisma.incident.update({
+      where: { id: openIncident.id },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: result.checkedAt,
+        message: result.message ?? openIncident.message,
+      },
+    });
+    return;
+  }
+
+  if (openIncident) {
+    await prisma.incident.update({
+      where: { id: openIncident.id },
+      data: {
+        message: result.message ?? openIncident.message,
+      },
+    });
+    return;
+  }
+
+  await prisma.incident.create({
+    data: {
+      monitorId: monitor.id,
+      status: "OPEN",
+      message: result.message ?? `Monitor ${monitor.name} reported ${result.status}`,
+      startedAt: result.checkedAt,
+    },
+  });
+};
+
 export const runMonitorCheck = async (monitor: Monitor) => {
   if (!isConfigObject(monitor.config)) {
-    return prisma.monitorResult.create({
+    const createdResult = await prisma.monitorResult.create({
       data: {
         monitorId: monitor.id,
         status: "DOWN",
         message: "config ต้องเป็น object",
       },
     });
+
+    await reconcileIncident(monitor, {
+      status: createdResult.status,
+      message: createdResult.message,
+      checkedAt: createdResult.checkedAt,
+    });
+
+    return createdResult;
   }
 
   const result = await runChecker(monitor.type, monitor.config);
 
-  return prisma.monitorResult.create({
+  const createdResult = await prisma.monitorResult.create({
     data: {
       monitorId: monitor.id,
       status: result.status,
@@ -69,6 +127,14 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       metadata: result.metadata as Prisma.InputJsonObject | undefined,
     },
   });
+
+  await reconcileIncident(monitor, {
+    status: createdResult.status,
+    message: createdResult.message,
+    checkedAt: createdResult.checkedAt,
+  });
+
+  return createdResult;
 };
 
 const shouldRun = (monitor: Monitor, now: number) => {

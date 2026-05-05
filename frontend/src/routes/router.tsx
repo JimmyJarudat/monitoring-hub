@@ -10,6 +10,7 @@ import { createProtectedRoute } from "@/utils/routeProtected";
 import App from "../App";
 import LoginPage from "@/pages/auth/login";
 import Dashboard from "@/pages/dashboard";
+import IncidentsPage from "@/pages/incidents";
 import MonitorsPage from "@/pages/monitors";
 import AddMonitorPage from "@/pages/monitors/new";
 import MonitorDetailPage from "@/pages/monitors/detail";
@@ -39,6 +40,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage /> }),
       createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),
+      createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
       createProtectedRoute({
         path: "dashboard/monitors",
         element: <Navigate replace to="/monitors" />,
@@ -54,6 +56,10 @@ const routes: RouteObject[] = [
       createProtectedRoute({
         path: "dashboard/results",
         element: <Navigate replace to="/results" />,
+      }),
+      createProtectedRoute({
+        path: "dashboard/incidents",
+        element: <Navigate replace to="/incidents" />,
       }),
     ],
   },
