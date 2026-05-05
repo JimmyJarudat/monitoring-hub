@@ -84,3 +84,130 @@ enum LoginStatus {
   SUCCESS
   FAILED
 }
+
+// ─── Monitoring ───────────────────────────────────────────────
+
+model Monitor {
+  id          String        @id @default(cuid())
+  name        String
+  type        MonitorType
+  config      Json          // host/url/port/credentials ฯลฯ
+  interval    Int           @default(60) // วินาที
+  enabled     Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  results     MonitorResult[]
+  alertRules  AlertRule[]
+  incidents   Incident[]
+
+  @@index([type, enabled])
+  @@map("monitors")
+}
+
+enum MonitorType {
+  PING
+  TCP
+  HTTP
+  DOCKER
+  DATABASE
+}
+
+model MonitorResult {
+  id             String        @id @default(cuid())
+  monitorId      String
+  monitor        Monitor       @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  status         MonitorStatus
+  responseTimeMs Int?
+  message        String?
+  metadata       Json?         // raw metrics เพิ่มเติม
+  checkedAt      DateTime      @default(now())
+
+  @@index([monitorId, checkedAt])
+  @@index([checkedAt])
+  @@map("monitor_results")
+}
+
+enum MonitorStatus {
+  UP
+  DOWN
+  DEGRADED
+}
+
+model AlertRule {
+  id          String             @id @default(cuid())
+  monitorId   String
+  monitor     Monitor            @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  metric      String             // "status" | "response_time"
+  operator    AlertOperator
+  threshold   Float
+  severity    AlertSeverity
+  enabled     Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  channels    AlertRuleChannel[]
+  incidents   Incident[]
+
+  @@map("alert_rules")
+}
+
+enum AlertOperator {
+  GT
+  LT
+  EQ
+  NEQ
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model NotificationChannel {
+  id        String             @id @default(cuid())
+  name      String
+  type      ChannelType
+  config    Json               // token/webhookUrl/smtp — เข้ารหัสก่อนเก็บ
+  enabled   Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  rules     AlertRuleChannel[]
+
+  @@map("notification_channels")
+}
+
+enum ChannelType {
+  LINE
+  EMAIL
+  SLACK
+  DISCORD
+}
+
+model AlertRuleChannel {
+  alertRuleId String
+  channelId   String
+  alertRule   AlertRule           @relation(fields: [alertRuleId], references: [id], onDelete: Cascade)
+  channel     NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([alertRuleId, channelId])
+  @@map("alert_rule_channels")
+}
+
+model Incident {
+  id          String         @id @default(cuid())
+  monitorId   String
+  monitor     Monitor        @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  alertRuleId String?
+  alertRule   AlertRule?     @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
+  status      IncidentStatus @default(OPEN)
+  message     String?
+  startedAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+
+  @@index([monitorId, status])
+  @@index([status, startedAt])
+  @@map("incidents")
+}
+
+enum IncidentStatus {
+  OPEN
+  RESOLVED
+}
