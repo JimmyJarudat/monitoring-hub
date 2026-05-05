@@ -109,6 +109,14 @@ const buildConfig = (form: FormState) => {
     });
   }
 
+  if (form.databaseType === "sqlite") {
+    return compactConfig({
+      type: form.databaseType,
+      filename: form.database,
+      timeoutMs,
+    });
+  }
+
   return compactConfig({
     type: form.databaseType,
     host: form.host,
@@ -125,7 +133,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "TCP") return "Required: host, port";
   if (type === "HTTP") return "Required: url";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
-  return "Required: database type, host, port";
+  return "Required: database type, host, port. SQLite uses database file path.";
 };
 
 const AddMonitorPage = () => {
@@ -138,6 +146,7 @@ const AddMonitorPage = () => {
     () => monitorTypes.find((item) => item.value === form.type) ?? monitorTypes[0],
     [form.type],
   );
+  const usesSqlite = form.type === "DATABASE" && form.databaseType === "sqlite";
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -285,7 +294,7 @@ const AddMonitorPage = () => {
                 </>
               ) : null}
 
-              {form.type === "PING" || form.type === "TCP" || form.type === "DATABASE" ? (
+              {form.type === "PING" || form.type === "TCP" || (form.type === "DATABASE" && !usesSqlite) ? (
                 <>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Host</span>
@@ -328,15 +337,19 @@ const AddMonitorPage = () => {
                       <option value="mariadb">MariaDB</option>
                       <option value="redis">Redis</option>
                       <option value="mongodb">MongoDB</option>
+                      <option value="sqlserver">SQL Server</option>
+                      <option value="sqlite">SQLite</option>
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Database name</span>
+                    <span className="text-sm font-medium text-slate-700">
+                      {form.databaseType === "sqlite" ? "SQLite file path" : "Database name"}
+                    </span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.database}
                       onChange={(event) => updateField("database", event.target.value)}
-                      placeholder="monitoring"
+                      placeholder={form.databaseType === "sqlite" ? "C:\\data\\app.db" : "monitoring"}
                     />
                   </label>
                   <label className="block">

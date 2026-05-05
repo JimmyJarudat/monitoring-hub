@@ -8,6 +8,7 @@ const monitorTypes = ["PING", "TCP", "HTTP", "DOCKER", "DATABASE"] as const;
 type MonitorType = (typeof monitorTypes)[number];
 
 type MonitorConfig = Prisma.InputJsonObject;
+type SummaryStatus = "UP" | "DOWN" | "DEGRADED" | "UNKNOWN";
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -44,8 +45,22 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
     return "DOCKER monitor ต้องระบุ config.portainerUrl, config.apiKey และ config.endpointId";
   }
 
-  if (type === "DATABASE" && (!config.type || !config.host || !config.port)) {
-    return "DATABASE monitor ต้องระบุ config.type, config.host และ config.port";
+  if (type === "DATABASE") {
+    if (!config.type) {
+      return "DATABASE monitor ต้องระบุ config.type";
+    }
+
+    if (config.type === "sqlite") {
+      if (!config.filename && !config.database) {
+        return "SQLite monitor ต้องระบุ config.filename หรือ config.database";
+      }
+
+      return null;
+    }
+
+    if (!config.host || !config.port) {
+      return "DATABASE monitor ต้องระบุ config.host และ config.port";
+    }
   }
 
   return null;
@@ -56,6 +71,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
     const type = typeof query.type === "string" ? query.type : undefined;
     const enabled =
       query.enabled === "true" ? true : query.enabled === "false" ? false : undefined;
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const monitors = await prisma.monitor.findMany({
       where: {
@@ -70,10 +86,94 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           orderBy: { checkedAt: "desc" },
           take: 1,
         },
+        incidents: {
+          where: { status: "OPEN" },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+        },
       },
     });
 
-    return ok(monitors);
+    const monitorStats = await Promise.all(
+      monitors.map(async (monitor) => {
+        const [lastDown, recentResults] = await Promise.all([
+          prisma.monitorResult.findFirst({
+            where: {
+              monitorId: monitor.id,
+              status: "DOWN",
+            },
+            orderBy: { checkedAt: "desc" },
+          }),
+          prisma.monitorResult.findMany({
+            where: {
+              monitorId: monitor.id,
+              checkedAt: { gte: since24h },
+            },
+            select: { status: true },
+          }),
+        ]);
+
+        const upCount = recentResults.filter((result) => result.status === "UP").length;
+        const downCount = recentResults.filter((result) => result.status === "DOWN").length;
+        const uptime24h =
+          recentResults.length > 0 ? Math.round((upCount / recentResults.length) * 10000) / 100 : null;
+
+        return {
+          ...monitor,
+          latestResult: monitor.results[0] ?? null,
+          lastDownAt: lastDown?.checkedAt ?? null,
+          downCount24h: downCount,
+          checkCount24h: recentResults.length,
+          uptime24h,
+          activeIncident: monitor.incidents[0] ?? null,
+        };
+      }),
+    );
+
+    return ok(monitorStats);
+  })
+  .get("/summary", async () => {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const monitors = await prisma.monitor.findMany({
+      where: { enabled: true },
+      include: {
+        results: {
+          orderBy: { checkedAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    const latestStatuses: SummaryStatus[] = monitors.map(
+      (monitor) => monitor.results[0]?.status ?? "UNKNOWN",
+    );
+    const [openIncidents, results24h] = await Promise.all([
+      prisma.incident.count({ where: { status: "OPEN" } }),
+      prisma.monitorResult.findMany({
+        where: { checkedAt: { gte: since24h } },
+        select: { status: true, responseTimeMs: true },
+      }),
+    ]);
+    const upCount24h = results24h.filter((result) => result.status === "UP").length;
+    const responseTimes = results24h
+      .map((result) => result.responseTimeMs)
+      .filter((time): time is number => typeof time === "number");
+
+    return ok({
+      total: monitors.length,
+      up: latestStatuses.filter((status) => status === "UP").length,
+      degraded: latestStatuses.filter((status) => status === "DEGRADED").length,
+      down: latestStatuses.filter((status) => status === "DOWN").length,
+      unknown: latestStatuses.filter((status) => status === "UNKNOWN").length,
+      openIncidents,
+      uptime24h:
+        results24h.length > 0 ? Math.round((upCount24h / results24h.length) * 10000) / 100 : null,
+      avgResponseTimeMs:
+        responseTimes.length > 0
+          ? Math.round(responseTimes.reduce((total, time) => total + time, 0) / responseTimes.length)
+          : null,
+    });
   })
   .get(
     "/:id",
