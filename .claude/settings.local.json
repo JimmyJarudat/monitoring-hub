@@ -20,7 +20,8 @@
       "Read(//tmp/**)",
       "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt)",
       "Bash(bun add *)",
-      "Bash(bunx prisma *)"
+      "Bash(bunx prisma *)",
+      "Bash(git commit *)"
     ]
   }
 }

@@ -16,6 +16,11 @@ type SystemMetadata = {
   memUsedKb: number;
   memUsedPct: number;
   disks: DiskInfo[];
+  uptimeSeconds?: number;
+  osDescr?: string;
+  load1?: number;
+  load5?: number;
+  load15?: number;
 };
 
 type LatestResult = {
@@ -51,6 +56,15 @@ const statusColor = {
   UP: "bg-emerald-100 text-emerald-700",
   DOWN: "bg-red-100 text-red-700",
   DEGRADED: "bg-amber-100 text-amber-700",
+};
+
+const fmtUptime = (seconds: number) => {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 };
 
 const gaugeColor = (pct: number) => {
@@ -112,10 +126,24 @@ const DeviceCard = ({ device }: { device: Device }) => {
 
       {meta ? (
         <div className="mt-4 space-y-3">
+          {meta.osDescr ? (
+            <p className="truncate text-xs text-slate-400" title={meta.osDescr}>
+              {meta.osDescr}
+            </p>
+          ) : null}
+          {meta.uptimeSeconds !== undefined ? (
+            <p className="text-xs text-slate-500">
+              Uptime <span className="font-medium text-slate-700">{fmtUptime(meta.uptimeSeconds)}</span>
+            </p>
+          ) : null}
           <Gauge
             label="CPU"
             pct={meta.cpuUsedPct}
-            detail={`${fmt(meta.cpuUsedPct, "% used")}`}
+            detail={
+              meta.load1 !== undefined
+                ? `${fmt(meta.cpuUsedPct, "% used")} · load ${meta.load1?.toFixed(2)} / ${meta.load5?.toFixed(2)} / ${meta.load15?.toFixed(2)}`
+                : `${fmt(meta.cpuUsedPct, "% used")}`
+            }
           />
           <Gauge
             label="RAM"

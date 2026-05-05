@@ -6,6 +6,11 @@ const OIDS = {
   memFree: "1.3.6.1.4.1.2021.4.6.0",
   memBuffer: "1.3.6.1.4.1.2021.4.14.0",
   memCached: "1.3.6.1.4.1.2021.4.15.0",
+  sysUpTime: "1.3.6.1.2.1.1.3.0",
+  sysDescr: "1.3.6.1.2.1.1.1.0",
+  load1: "1.3.6.1.4.1.2021.10.1.3.1",
+  load5: "1.3.6.1.4.1.2021.10.1.3.2",
+  load15: "1.3.6.1.4.1.2021.10.1.3.3",
 };
 
 const DISK_TABLE_BASE = "1.3.6.1.2.1.25.2.3.1";
@@ -35,6 +40,11 @@ export interface SystemMetrics {
   memUsedKb: number;
   memUsedPct: number;
   disks: DiskInfo[];
+  load1?: number;
+  load5?: number;
+  load15?: number;
+  uptimeSeconds?: number;
+  osDescr?: string;
 }
 
 export interface CheckResult {
@@ -99,11 +109,21 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
     const memFree = valOf(baseVbs, OIDS.memFree);
     const memBuffer = valOf(baseVbs, OIDS.memBuffer);
     const memCached = valOf(baseVbs, OIDS.memCached);
+    const sysUpTimeTicks = valOf(baseVbs, OIDS.sysUpTime);
+    const sysDescrVb = baseVbs.find((v) => v.oid === OIDS.sysDescr);
+    const load1Vb = baseVbs.find((v) => v.oid === OIDS.load1);
+    const load5Vb = baseVbs.find((v) => v.oid === OIDS.load5);
+    const load15Vb = baseVbs.find((v) => v.oid === OIDS.load15);
 
     const cpuUsedPct = Math.round((100 - cpuIdle) * 10) / 10;
     const memUsedKb = memTotal - memFree - memBuffer - memCached;
     const memUsedPct =
       memTotal > 0 ? Math.round((memUsedKb / memTotal) * 1000) / 10 : 0;
+    const uptimeSeconds = sysUpTimeTicks > 0 ? Math.floor(sysUpTimeTicks / 100) : undefined;
+    const osDescr = sysDescrVb?.value?.toString().split("\n")[0]?.trim() || undefined;
+    const load1 = load1Vb ? parseFloat(load1Vb.value?.toString() ?? "") : undefined;
+    const load5 = load5Vb ? parseFloat(load5Vb.value?.toString() ?? "") : undefined;
+    const load15 = load15Vb ? parseFloat(load15Vb.value?.toString() ?? "") : undefined;
 
     const [descrVbs, allocVbs, sizeVbs, usedVbs] = await Promise.all([
       snmpSubtreeWalk(session, DISK_DESCR_OID),
@@ -158,6 +178,11 @@ export async function systemCheck(config: SystemConfig): Promise<CheckResult> {
       memUsedKb,
       memUsedPct,
       disks,
+      ...(uptimeSeconds !== undefined ? { uptimeSeconds } : {}),
+      ...(osDescr ? { osDescr } : {}),
+      ...(!Number.isNaN(load1) && load1 !== undefined ? { load1 } : {}),
+      ...(!Number.isNaN(load5) && load5 !== undefined ? { load5 } : {}),
+      ...(!Number.isNaN(load15) && load15 !== undefined ? { load15 } : {}),
     };
 
     return {
