@@ -4,6 +4,7 @@ import { publicRoutes, protectedRoutes } from "./routes";
 import { AuthError } from "./middleware/auth";
 import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
+import { monitorRunner } from "./services/monitor.Runner";
 
 const app = new Elysia()
   .use(securityMiddleware)
@@ -18,5 +19,7 @@ const app = new Elysia()
   .use(publicRoutes)
   .use(protectedRoutes)
   .listen({ port: config.port, hostname: config.host });
+
+monitorRunner.start();
 
 console.log(`Server running at http://${app.server?.hostname}:${app.server?.port}`);

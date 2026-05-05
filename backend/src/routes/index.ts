@@ -2,6 +2,7 @@ import Elysia from "elysia";
 import { authController } from "../controllers/auth.Controller";
 import { authProtectedRoutes } from "./auth";
 import { authMiddleware } from "../middleware/auth";
+import { monitorRoutes } from "./monitors";
 import { ok } from "../lib/response";
 
 // Public routes — ไม่ต้องมี token
@@ -12,5 +13,6 @@ export const publicRoutes = new Elysia()
 // Protected routes — ต้องมี token ทุก route
 export const protectedRoutes = new Elysia()
   .use(authMiddleware)
-  .use(authProtectedRoutes); // /auth/me
+  .use(authProtectedRoutes) // /auth/me
+  .use(monitorRoutes); // /monitors
   // เพิ่ม routes อื่นๆ ที่ต้องการ auth ที่นี่

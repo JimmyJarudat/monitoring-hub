@@ -10,8 +10,13 @@ export interface CheckResult {
 
 export async function pingCheck(config: PingConfig): Promise<CheckResult> {
   const start = Date.now();
+  const args =
+    process.platform === "win32"
+      ? ["ping", "-n", "1", "-w", "3000", config.host]
+      : ["ping", "-c", "1", "-W", "3", config.host];
+
   try {
-    const proc = Bun.spawn(["ping", "-c", "1", "-W", "3", config.host], {
+    const proc = Bun.spawn(args, {
       stdout: "pipe",
       stderr: "pipe",
     });
