@@ -23,6 +23,7 @@ type CheckedAtFilter = {
   gte?: Date;
   lte?: Date;
 };
+type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -197,6 +198,96 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           : null,
     });
   })
+  .get(
+    "/results",
+    async ({ query }) => {
+      const requestedLimit = Number(query.limit ?? 50);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+        : 50;
+      const requestedPage = Number(query.page ?? 1);
+      const page = Number.isFinite(requestedPage)
+        ? Math.max(Math.trunc(requestedPage), 1)
+        : 1;
+      const skip = (page - 1) * limit;
+      const checkedAt: CheckedAtFilter = {};
+      const from = typeof query.from === "string" ? new Date(query.from) : null;
+      const to = typeof query.to === "string" ? new Date(query.to) : null;
+
+      if (from && !Number.isNaN(from.getTime())) {
+        checkedAt.gte = from;
+      }
+
+      if (to && !Number.isNaN(to.getTime())) {
+        checkedAt.lte = to;
+      }
+
+      const where: Prisma.MonitorResultWhereInput = {
+        ...(Object.keys(checkedAt).length > 0 ? { checkedAt } : {}),
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.monitorId ? { monitorId: query.monitorId } : {}),
+        ...(query.type ? { monitor: { type: query.type } } : {}),
+      };
+
+      const results = await prisma.monitorResult.findMany({
+        where,
+        orderBy: [{ checkedAt: "desc" }, { id: "desc" }],
+        skip,
+        take: limit + 1,
+        include: {
+          monitor: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              enabled: true,
+              interval: true,
+              config: true,
+            },
+          },
+        },
+      });
+
+      const hasMore = results.length > limit;
+      const items = results.slice(0, limit);
+      const statusCounts = items.reduce(
+        (counts, result) => {
+          counts[result.status] += 1;
+          return counts;
+        },
+        { UP: 0, DOWN: 0, DEGRADED: 0 } as Record<MonitorStatusFilter, number>,
+      );
+
+      return ok({
+        items,
+        page,
+        limit,
+        hasMore,
+        statusCounts,
+      });
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.Numeric({ minimum: 1 })),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 200 })),
+        from: t.Optional(t.String()),
+        to: t.Optional(t.String()),
+        status: t.Optional(
+          t.Union([t.Literal("UP"), t.Literal("DOWN"), t.Literal("DEGRADED")]),
+        ),
+        monitorId: t.Optional(t.String()),
+        type: t.Optional(
+          t.Union([
+            t.Literal("PING"),
+            t.Literal("TCP"),
+            t.Literal("HTTP"),
+            t.Literal("DOCKER"),
+            t.Literal("DATABASE"),
+          ]),
+        ),
+      }),
+    },
+  )
   .get(
     "/:id",
     async ({ params, query, set }) => {

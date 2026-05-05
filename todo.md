@@ -79,6 +79,12 @@
 - [ ] Alert rules management page
 - [ ] Notification channels management page
 - [ ] Incidents page
+- [ ] History retention settings
+  - per monitor หรือ global retention policy
+  - ตั้งค่าเก็บ raw results ได้ เช่น 7 / 14 / 30 / 90 วัน
+  - auto cleanup ตาม schedule
+  - manual clear history ได้ตาม policy หรือเคลียร์ราย monitor
+  - อนาคตค่อยเพิ่ม rollup summaries สำหรับเก็บ long-term stats แบบประหยัดพื้นที่
 
 ## Recommended Next Order
 
@@ -96,6 +102,7 @@
 - ใกล้ LibreNMS มากที่สุด
 - เติมช่องว่างฝั่งอุปกรณ์/network โดยตรง
 - ต่อไปหน้า detail ของ device ได้อีกเยอะ
+- เป็นแนวทางหลักสำหรับอุปกรณ์ที่ติดตั้ง agent ไม่ได้ เช่น router, switch, firewall
 
 ### Priority 2
 - [ ] HTTPS/TLS certificate monitor
@@ -125,6 +132,7 @@
 
 ### Priority 6
 - [ ] Alert / incident / notification engine
+- [ ] History retention + cleanup policy
 
 ## Dashboard
 
@@ -142,6 +150,17 @@
 - [ ] Uptime SLA summaries
 - [ ] Cert expiry warning views
 - [ ] Per-monitor threshold presets
+- [ ] Agent-based Linux / Ubuntu monitor as optional enhancement
+  - ใช้เป็นตัวเสริมสำหรับ server หรือ VM
+  - ไม่ใช่แนวทางหลักของ device monitoring
+  - เหมาะกับเครื่องที่ติดตั้ง agent ได้และต้องการ metrics ลึกกว่า SNMP
+
+## Monitoring Strategy
+
+แนวทางหลักที่ใช้ต่อจากนี้:
+- `SNMP` เป็น primary strategy สำหรับ network devices
+- `Agent-based monitor` เป็น optional strategy สำหรับ Ubuntu/Linux servers
+- `PING/TCP/HTTP` เป็น baseline checks ที่ใช้ประกอบกัน
 
 ## Next Best Step
 

@@ -43,7 +43,7 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Monitors", path: "/dashboard/monitors", icon: "M" },
       { label: "Add Monitor", path: "/dashboard/monitors/new", icon: "+" },
-      { label: "Results", path: "/dashboard/results", icon: "T", badge: "Soon" },
+      { label: "Results", path: "/dashboard/results", icon: "T" },
       { label: "Incidents", path: "/dashboard/incidents", icon: "I", badge: "Soon" },
     ],
   },
