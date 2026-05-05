@@ -9,7 +9,16 @@
       "Bash(curl -s http://localhost:3000/auth/me -H \"Authorization: Bearer fake.token.here\")",
       "Bash(node -e \"const e = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia'\\); console.log\\(Object.keys\\(e\\).filter\\(k => k.toLowerCase\\(\\).includes\\('error'\\)\\)\\)\")",
       "Bash(node -e \"console.log\\(require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia/package.json'\\).version\\)\")",
-      "Bash(node -e \"const e = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia'\\); console.log\\(Object.keys\\(e\\)\\)\")"
+      "Bash(node -e \"const e = require\\('c:/Users/Saranrat/Desktop/my-project/monitoring-hub/backend/node_modules/elysia'\\); console.log\\(Object.keys\\(e\\)\\)\")",
+      "Bash(bun run *)",
+      "Bash(bunx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(ls ~/.claude/projects/ 2>&1 | head -20)",
+      "Read(//c/Users/Saranrat/.claude/projects/**)",
+      "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt | \\\\ *)",
+      "Read(//tmp/**)",
+      "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt)"
     ]
   }
 }
