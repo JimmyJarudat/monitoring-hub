@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
-type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "DOCKER" | "DATABASE";
 
 type FormState = {
   name: string;
@@ -29,6 +29,10 @@ type FormState = {
   httpJsonPath: string;
   httpJsonExpected: string;
   tcpPreset: string;
+  snmpCommunity: string;
+  snmpVersion: "1" | "2c";
+  snmpPort: string;
+  snmpOids: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
   dnsServer: string;
@@ -68,6 +72,11 @@ const monitorTypes: Array<{ label: string; value: MonitorType; description: stri
     value: "DNS",
     description: "Resolve DNS records and optionally match an expected value",
   },
+  {
+    label: "SNMP",
+    value: "SNMP",
+    description: "Query SNMP agent on network devices — routers, switches, firewalls",
+  },
   { label: "Docker", value: "DOCKER", description: "Check Portainer endpoint or container" },
   { label: "Database", value: "DATABASE", description: "Check database connection health" },
 ];
@@ -102,6 +111,10 @@ const initialForm: FormState = {
   timeoutMs: "5000",
   warningDays: "30",
   tcpPreset: "custom",
+  snmpCommunity: "public",
+  snmpVersion: "2c",
+  snmpPort: "161",
+  snmpOids: "",
   httpFollowRedirect: true,
   httpAuthType: "none",
   httpAuthUsername: "",
@@ -192,6 +205,17 @@ const buildConfig = (form: FormState) => {
       recordType: form.dnsRecordType,
       expectedValue: form.dnsExpectedValue,
       server: form.dnsServer,
+      timeoutMs,
+    });
+  }
+
+  if (form.type === "SNMP") {
+    return compactConfig({
+      host: form.host,
+      port: toOptionalNumber(form.snmpPort),
+      community: form.snmpCommunity,
+      version: form.snmpVersion,
+      oids: form.snmpOids.trim() ? form.snmpOids.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
       timeoutMs,
     });
   }
@@ -299,6 +323,17 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
     ],
     tip: "ถ้า domain ไม่มี record จะ DOWN ทันที — ต้องใช้ subdomain เช่น api.example.com ไม่ใช่ example.com",
   },
+  SNMP: {
+    summary: "ส่ง SNMP GET query ไปยัง network device แล้วดึงข้อมูล sysName, sysDescr, sysUpTime",
+    fields: [
+      { name: "Host", desc: "IP address ของ device เช่น 192.168.1.1", required: true },
+      { name: "Community", desc: 'SNMP community string เช่น "public" (read-only) หรือที่กำหนดเอง' },
+      { name: "Version", desc: "SNMP version — 2c รองรับได้ดีที่สุด · 1 ใช้กับ device เก่า" },
+      { name: "Port", desc: "UDP port ของ SNMP agent — default 161" },
+      { name: "Custom OIDs", desc: "OID ที่ต้องการ GET คั่นด้วย comma เช่น 1.3.6.1.2.1.1.5.0,1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime" },
+    ],
+    tip: "ตรวจสอบให้แน่ใจว่า device เปิด SNMP ไว้ และ community string ถูกต้อง — ส่วนใหญ่ใช้ \"public\" สำหรับ read-only",
+  },
   DOCKER: {
     summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ endpoint หรือ container เฉพาะตัว",
     fields: [
@@ -328,6 +363,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "HTTP") return "Required: url. Optional: auth, body/header check, latency threshold";
   if (type === "TLS_CERT") return "Required: url. Optional: warning days";
   if (type === "DNS") return "Required: host. Optional: record type, expected value, DNS server";
+  if (type === "SNMP") return "Required: host. Optional: community, version, port, custom OIDs";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
   return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
@@ -658,6 +694,60 @@ const AddMonitorPage = () => {
                       min={1}
                       value={form.warningDays}
                       onChange={(event) => updateField("warningDays", event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {form.type === "SNMP" ? (
+                <>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Host</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.host}
+                      onChange={(event) => updateField("host", event.target.value)}
+                      placeholder="192.168.1.1"
+                      required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Community <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.snmpCommunity}
+                      onChange={(event) => updateField("snmpCommunity", event.target.value)}
+                      placeholder="public"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Version <span className="font-normal text-slate-400">(optional)</span></span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.snmpVersion}
+                      onChange={(event) => updateField("snmpVersion", event.target.value as "1" | "2c")}
+                    >
+                      <option value="2c">2c (recommended)</option>
+                      <option value="1">1 (legacy)</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Port <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      value={form.snmpPort}
+                      onChange={(event) => updateField("snmpPort", event.target.value)}
+                      placeholder="161"
+                    />
+                  </label>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Custom OIDs <span className="font-normal text-slate-400">(optional)</span></span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.snmpOids}
+                      onChange={(event) => updateField("snmpOids", event.target.value)}
+                      placeholder="1.3.6.1.2.1.1.5.0, 1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime"
                     />
                   </label>
                 </>
