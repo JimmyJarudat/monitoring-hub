@@ -108,6 +108,7 @@ enum MonitorType {
   PING
   TCP
   HTTP
+  TLS_CERT
   DOCKER
   DATABASE
 }

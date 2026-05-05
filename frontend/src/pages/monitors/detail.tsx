@@ -16,7 +16,7 @@ import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
-type MonitorType = "PING" | "TCP" | "HTTP" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DOCKER" | "DATABASE";
 type IncidentStatus = "OPEN" | "RESOLVED";
 
 type ApiSuccess<T> = {
@@ -1011,6 +1011,7 @@ const MonitorDetailPage = () => {
                     <option value="PING">PING</option>
                     <option value="TCP">TCP</option>
                     <option value="DATABASE">DATABASE</option>
+                    <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DOCKER">DOCKER</option>
                   </select>
                 </label>

@@ -38,7 +38,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
         ...(Object.keys(startedAt).length > 0 ? { startedAt } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.monitorId ? { monitorId: query.monitorId } : {}),
-        ...(query.type ? { monitor: { type: query.type } } : {}),
+        ...(query.type ? { monitor: { type: query.type as any } } : {}),
       };
 
       const incidents = await prisma.incident.findMany({
@@ -101,6 +101,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
             t.Literal("PING"),
             t.Literal("TCP"),
             t.Literal("HTTP"),
+            t.Literal("TLS_CERT"),
             t.Literal("DOCKER"),
             t.Literal("DATABASE"),
           ]),

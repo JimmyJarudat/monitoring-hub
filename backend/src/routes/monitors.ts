@@ -4,7 +4,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { runMonitorCheck } from "../services/monitor.Runner";
 
-const monitorTypes = ["PING", "TCP", "HTTP", "DOCKER", "DATABASE"] as const;
+const monitorTypes = ["PING", "TCP", "HTTP", "TLS_CERT", "DOCKER", "DATABASE"] as const;
 const databaseTypes = [
   "postgresql",
   "mariadb",
@@ -31,6 +31,7 @@ const monitorBody = t.Object({
     t.Literal("PING"),
     t.Literal("TCP"),
     t.Literal("HTTP"),
+    t.Literal("TLS_CERT"),
     t.Literal("DOCKER"),
     t.Literal("DATABASE"),
   ]),
@@ -54,6 +55,14 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
 
   if (type === "HTTP" && !config.url) {
     return "HTTP monitor ต้องระบุ config.url";
+  }
+
+  if (
+    type === "TLS_CERT" &&
+    !(typeof config.url === "string" && config.url.trim()) &&
+    !(typeof config.host === "string" && config.host.trim())
+  ) {
+    return "TLS certificate monitor ต้องระบุ config.url หรือ config.host";
   }
 
   if (type === "DOCKER" && (!config.portainerUrl || !config.apiKey || !config.endpointId)) {
@@ -99,7 +108,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
     const monitors = await prisma.monitor.findMany({
       where: {
         ...(type && monitorTypes.includes(type as MonitorType)
-          ? { type: type as MonitorType }
+          ? { type: type as any }
           : {}),
         ...(enabled !== undefined ? { enabled } : {}),
       },
@@ -226,7 +235,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         ...(Object.keys(checkedAt).length > 0 ? { checkedAt } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.monitorId ? { monitorId: query.monitorId } : {}),
-        ...(query.type ? { monitor: { type: query.type } } : {}),
+        ...(query.type ? { monitor: { type: query.type as any } } : {}),
       };
 
       const results = await prisma.monitorResult.findMany({
@@ -281,6 +290,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
             t.Literal("PING"),
             t.Literal("TCP"),
             t.Literal("HTTP"),
+            t.Literal("TLS_CERT"),
             t.Literal("DOCKER"),
             t.Literal("DATABASE"),
           ]),
@@ -361,7 +371,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       const data: Prisma.MonitorCreateInput = {
         name: body.name.trim(),
-        type: body.type,
+        type: body.type as any,
         config: body.config,
         interval: body.interval ?? 60,
         enabled: body.enabled ?? true,
@@ -410,7 +420,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       const data: Prisma.MonitorUpdateInput = {};
 
       if (body.name !== undefined) data.name = body.name.trim();
-      if (body.type !== undefined) data.type = body.type;
+      if (body.type !== undefined) data.type = body.type as any;
       if (bodyConfig !== undefined) data.config = bodyConfig;
       if (body.interval !== undefined) data.interval = body.interval;
       if (body.enabled !== undefined) data.enabled = body.enabled;

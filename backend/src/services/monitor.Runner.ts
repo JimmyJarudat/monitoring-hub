@@ -7,6 +7,7 @@ import { dockerCheck } from "./checkers/docker.Checker";
 import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
 import { tcpCheck } from "./checkers/tcp.Checker";
+import { tlsCheck } from "./checkers/tls.Checker";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -38,6 +39,8 @@ const runChecker = async (
       return tcpCheck(config as unknown as Parameters<typeof tcpCheck>[0]);
     case "HTTP":
       return httpCheck(config as unknown as Parameters<typeof httpCheck>[0]);
+    case "TLS_CERT":
+      return tlsCheck(config as unknown as Parameters<typeof tlsCheck>[0]);
     case "DOCKER":
       return dockerCheck(config as unknown as Parameters<typeof dockerCheck>[0]);
     case "DATABASE":

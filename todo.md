@@ -57,7 +57,7 @@
 
 ### New monitor types
 - [ ] SNMP สำหรับอุปกรณ์ network
-- [ ] HTTPS/TLS certificate ตรวจวันหมดอายุ cert
+- [x] HTTPS/TLS certificate ตรวจวันหมดอายุ cert
 - [ ] DNS ตรวจ resolve record
 - [ ] Keyword / content check สำหรับเว็บ
 - [ ] HTTP advanced เช่น follow redirect, auth, body match, latency threshold

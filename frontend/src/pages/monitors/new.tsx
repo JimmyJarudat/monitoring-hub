@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
-type MonitorType = "PING" | "TCP" | "HTTP" | "DOCKER" | "DATABASE";
+type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DOCKER" | "DATABASE";
 
 type FormState = {
   name: string;
@@ -16,6 +16,7 @@ type FormState = {
   method: string;
   expectedStatus: string;
   timeoutMs: string;
+  warningDays: string;
   databaseType: string;
   user: string;
   password: string;
@@ -42,6 +43,11 @@ const monitorTypes: Array<{ label: string; value: MonitorType; description: stri
   { label: "Ping", value: "PING", description: "Basic host reachability check" },
   { label: "TCP", value: "TCP", description: "Check if a host port is reachable" },
   { label: "HTTP", value: "HTTP", description: "Validate URL response and status code" },
+  {
+    label: "TLS Certificate",
+    value: "TLS_CERT",
+    description: "Check certificate expiry and warn before expiration",
+  },
   { label: "Docker", value: "DOCKER", description: "Check Portainer endpoint or container" },
   { label: "Database", value: "DATABASE", description: "Check database connection health" },
 ];
@@ -57,6 +63,7 @@ const initialForm: FormState = {
   method: "GET",
   expectedStatus: "200",
   timeoutMs: "5000",
+  warningDays: "30",
   databaseType: "postgresql",
   user: "",
   password: "",
@@ -104,6 +111,14 @@ const buildConfig = (form: FormState) => {
       url: form.url,
       method: form.method,
       expectedStatus: Number(form.expectedStatus),
+      timeoutMs,
+    });
+  }
+
+  if (form.type === "TLS_CERT") {
+    return compactConfig({
+      url: form.url,
+      warningDays: toOptionalNumber(form.warningDays),
       timeoutMs,
     });
   }
@@ -159,6 +174,7 @@ const getRequiredHint = (type: MonitorType) => {
   if (type === "PING") return "Required: host";
   if (type === "TCP") return "Required: host, port";
   if (type === "HTTP") return "Required: url";
+  if (type === "TLS_CERT") return "Required: url. Optional: warning days";
   if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
   return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
 };
@@ -321,6 +337,31 @@ const AddMonitorPage = () => {
                       value={form.expectedStatus}
                       onChange={(event) => updateField("expectedStatus", event.target.value)}
                       required
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {form.type === "TLS_CERT" ? (
+                <>
+                  <label className="block md:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">URL</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={form.url}
+                      onChange={(event) => updateField("url", event.target.value)}
+                      placeholder="https://example.com"
+                      required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Warning days</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      min={1}
+                      value={form.warningDays}
+                      onChange={(event) => updateField("warningDays", event.target.value)}
                     />
                   </label>
                 </>
