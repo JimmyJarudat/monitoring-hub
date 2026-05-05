@@ -2,9 +2,11 @@ import { Elysia } from "elysia";
 import { config } from "./config";
 import { publicRoutes, protectedRoutes } from "./routes";
 import { AuthError } from "./middleware/auth";
+import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
 
 const app = new Elysia()
+  .use(securityMiddleware)
   .onError(({ error, set }) => {
     if (error instanceof AuthError) {
       set.status = error.status;

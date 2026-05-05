@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma";
+import { config } from "../config";
 
 const safeUserSelect = {
   id: true,
@@ -28,5 +29,28 @@ export const authService = {
 
   async verifyPassword(plain: string, hashed: string) {
     return Bun.password.verify(plain, hashed);
+  },
+
+  // ตรวจว่าบัญชีถูกล็อกอยู่หรือไม่
+  async isLockedOut(userId: string): Promise<boolean> {
+    const { maxFailures, windowMinutes } = config.lockout;
+    const since = new Date(Date.now() - windowMinutes * 60_000);
+
+    const failures = await prisma.loginHistory.count({
+      where: { userId, status: "FAILED", createdAt: { gte: since } },
+    });
+
+    return failures >= maxFailures;
+  },
+
+  async recordLogin(
+    userId: string,
+    status: "SUCCESS" | "FAILED",
+    ipAddress?: string,
+    userAgent?: string
+  ) {
+    return prisma.loginHistory.create({
+      data: { userId, status, ipAddress, userAgent },
+    });
   },
 };
