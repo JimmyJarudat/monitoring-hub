@@ -6,7 +6,10 @@
     "dev": "bun run --watch src/index.ts"
   },
   "dependencies": {
-    "elysia": "latest"
+    "@elysiajs/jwt": "^1.4.2",
+    "@prisma/client": "^7.8.0",
+    "elysia": "latest",
+    "prisma": "^7.8.0"
   },
   "devDependencies": {
     "bun-types": "latest"

@@ -1,7 +1,10 @@
 import { Elysia } from "elysia";
+import { config } from "./config";
+import { authRoutes } from "./routes/auth";
 
-const app = new Elysia().get("/", () => "Hello Elysia").listen(3000);
+const app = new Elysia()
+  .get("/health", () => ({ status: "ok" }))
+  .use(authRoutes)
+  .listen({ port: config.port, hostname: config.host });
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+console.log(`Server running at http://${app.server?.hostname}:${app.server?.port}`);
