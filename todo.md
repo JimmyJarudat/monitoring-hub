@@ -117,7 +117,7 @@
 
 ### Credentials
 - [x] หน้า Edit monitor เปลี่ยนหรือ unlink credential ได้โดยตรง
-- [ ] Secret ยังไม่ได้เข้ารหัสใน DB
+- [x] Secret เข้ารหัสใน DB แล้ว (encrypt at rest)
 - [ ] ยังไม่มี permission control เรื่องใครดู secret ได้
 - [x] มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
 
@@ -157,7 +157,7 @@
 - [x] Show credential usage map
 - [x] Add “used by X monitors” in credentials page
 - [x] Edit / unlink linked credential from monitor detail
-- [ ] Encrypt credential secret at rest
+- [x] Encrypt credential secret at rest
 
 ### Priority 3 — Retention and storage hygiene
 - [ ] History retention settings

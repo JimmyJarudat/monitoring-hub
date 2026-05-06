@@ -1,4 +1,5 @@
 import Elysia, { t } from "elysia";
+import { decryptCredentialSecret, encryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 
@@ -23,6 +24,18 @@ const normalizeOptionalText = (value?: string | null) => {
   return trimmed ? trimmed : null;
 };
 
+const toCredentialResponse = <
+  T extends {
+    secret: string;
+    monitors?: unknown;
+  },
+>(
+  credential: T,
+) => ({
+  ...credential,
+  secret: decryptCredentialSecret(credential.secret),
+});
+
 export const credentialRoutes = new Elysia({ prefix: "/credentials" })
   .get("/", async () => {
     const credentials = await prisma.credential.findMany({
@@ -42,7 +55,7 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
 
     return ok(
       credentials.map((credential) => ({
-        ...credential,
+        ...toCredentialResponse(credential),
         usageCount: credential.monitors.length,
         monitors: credential.monitors,
       })),
@@ -56,13 +69,13 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
           name: body.name.trim(),
           type: body.type,
           username: normalizeOptionalText(body.username),
-          secret: body.secret,
+          secret: encryptCredentialSecret(body.secret),
           notes: normalizeOptionalText(body.notes),
           metadata: body.metadata ?? null,
         },
       });
 
-      return ok(credential);
+      return ok(toCredentialResponse(credential));
     },
     {
       body: credentialPayloadSchema,
@@ -87,13 +100,13 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
           name: body.name.trim(),
           type: body.type,
           username: normalizeOptionalText(body.username),
-          secret: body.secret,
+          secret: encryptCredentialSecret(body.secret),
           notes: normalizeOptionalText(body.notes),
           metadata: body.metadata ?? null,
         },
       });
 
-      return ok(credential);
+      return ok(toCredentialResponse(credential));
     },
     {
       params: t.Object({ id: t.String() }),
