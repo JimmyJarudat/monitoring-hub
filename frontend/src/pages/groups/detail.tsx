@@ -370,6 +370,12 @@ const GroupDetailPage = () => {
               </Link>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                to={`/interfaces?groupId=${group.id}`}
+              >
+                View interfaces in this group
+              </Link>
+              <Link
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/monitors?groupId=${group.id}`}
               >
                 View monitors in this group

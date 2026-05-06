@@ -167,10 +167,10 @@ const GroupsPage = () => {
       const pending = enabled.filter((m) => !m.latestResult).length;
       const overallStatus =
         total === 0 ? ("EMPTY" as const)
-        : down > 0 ? ("DOWN" as const)
-        : degraded > 0 ? ("DEGRADED" as const)
-        : pending === total ? ("PENDING" as const)
-        : ("UP" as const);
+          : down > 0 ? ("DOWN" as const)
+            : degraded > 0 ? ("DEGRADED" as const)
+              : pending === total ? ("PENDING" as const)
+                : ("UP" as const);
       const uptimePct = total > 0 ? Math.round((up / total) * 100) : null;
       return { group, total, up, down, degraded, pending, overallStatus, uptimePct };
     });
@@ -324,15 +324,15 @@ const GroupsPage = () => {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {groupHealth.map(({ group, total, up, down, degraded, pending, overallStatus, uptimePct }) => {
               const statusConfig = {
-                UP:       { bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: "Healthy" },
-                DEGRADED: { bar: "bg-amber-400",   badge: "bg-amber-100 text-amber-700",    label: "Degraded" },
-                DOWN:     { bar: "bg-red-500",      badge: "bg-red-100 text-red-700",        label: "Down" },
-                PENDING:  { bar: "bg-slate-300",    badge: "bg-slate-100 text-slate-500",    label: "Pending" },
-                EMPTY:    { bar: "bg-slate-200",    badge: "bg-slate-100 text-slate-400",    label: "Empty" },
+                UP: { bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: "Healthy" },
+                DEGRADED: { bar: "bg-amber-400", badge: "bg-amber-100 text-amber-700", label: "Degraded" },
+                DOWN: { bar: "bg-red-500", badge: "bg-red-100 text-red-700", label: "Down" },
+                PENDING: { bar: "bg-slate-300", badge: "bg-slate-100 text-slate-500", label: "Pending" },
+                EMPTY: { bar: "bg-slate-200", badge: "bg-slate-100 text-slate-400", label: "Empty" },
               }[overallStatus];
 
-              const upPct   = total > 0 ? (up / total) * 100 : 0;
-              const degPct  = total > 0 ? (degraded / total) * 100 : 0;
+              const upPct = total > 0 ? (up / total) * 100 : 0;
+              const degPct = total > 0 ? (degraded / total) * 100 : 0;
               const downPct = total > 0 ? (down / total) * 100 : 0;
 
               return (
@@ -361,9 +361,9 @@ const GroupsPage = () => {
 
                   {/* Stacked progress bar */}
                   <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    {upPct > 0   && <div className="bg-emerald-500 transition-all" style={{ width: `${upPct}%` }} />}
-                    {degPct > 0  && <div className="bg-amber-400 transition-all"   style={{ width: `${degPct}%` }} />}
-                    {downPct > 0 && <div className="bg-red-500 transition-all"     style={{ width: `${downPct}%` }} />}
+                    {upPct > 0 && <div className="bg-emerald-500 transition-all" style={{ width: `${upPct}%` }} />}
+                    {degPct > 0 && <div className="bg-amber-400 transition-all" style={{ width: `${degPct}%` }} />}
+                    {downPct > 0 && <div className="bg-red-500 transition-all" style={{ width: `${downPct}%` }} />}
                   </div>
 
                   {/* Count pills */}
@@ -374,8 +374,8 @@ const GroupsPage = () => {
                       <>
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{up} UP</span>
                         {degraded > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">{degraded} DEGRADED</span>}
-                        {down > 0     && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">{down} DOWN</span>}
-                        {pending > 0  && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{pending} pending</span>}
+                        {down > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">{down} DOWN</span>}
+                        {pending > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{pending} pending</span>}
                         <span className="ml-auto text-slate-400">{total} total</span>
                       </>
                     )}
@@ -477,20 +477,22 @@ const GroupsPage = () => {
                     Summary
                   </Link>
                   {isAdmin ? (
-                    <button
-                      className="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-white"
-                      type="button"
-                      onClick={() => openEdit(group)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="rounded-md border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-50"
-                      type="button"
-                      onClick={() => setDeletingGroup(group)}
-                    >
-                      Delete
-                    </button>
+                    <>
+                      <button
+                        className="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-white"
+                        type="button"
+                        onClick={() => openEdit(group)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rounded-md border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-50"
+                        type="button"
+                        onClick={() => setDeletingGroup(group)}
+                      >
+                        Delete
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -613,11 +615,10 @@ const GroupsPage = () => {
 
                     return (
                       <label
-                        className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 transition ${
-                          checked
+                        className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 transition ${checked
                             ? "border-cyan-300 bg-cyan-50"
                             : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
+                          }`}
                         key={monitor.id}
                       >
                         <input

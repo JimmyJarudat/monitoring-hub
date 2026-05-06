@@ -21,7 +21,8 @@
       "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /tmp/all_transcripts.txt)",
       "Bash(bun add *)",
       "Bash(bunx prisma *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

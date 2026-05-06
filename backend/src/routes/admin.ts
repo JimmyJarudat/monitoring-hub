@@ -69,4 +69,4 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         olderThanDays: t.Optional(t.Number({ minimum: 1, maximum: 3650 })),
       }),
     },
-  });
+  );

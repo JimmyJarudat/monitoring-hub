@@ -130,7 +130,7 @@
 - [x] Network UI แสดง **traffic rate** แทน raw counters ในหน้า detail
 - [x] Interface traffic graph เป็น bps/Kbps/Mbps/Gbps แบบอ่านง่าย
 - [x] Top interfaces / busiest links ในหน้า detail
-- [ ] ยังไม่มี port/interface inventory page แยก
+- [x] มี port/interface inventory page แยก
 - [x] Error / discard counters ในหน้า detail
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 
