@@ -42,15 +42,15 @@ const routes: RouteObject[] = [
     children: [
       createProtectedRoute({ path: "dashboard", element: <Dashboard /> }),
       createProtectedRoute({ path: "monitors", element: <MonitorsPage /> }),
-      createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage /> }),
+      createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage />, adminOnly: true }),
       createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
       createProtectedRoute({ path: "devices", element: <DevicesPage /> }),
       createProtectedRoute({ path: "groups", element: <GroupsPage /> }),
-      createProtectedRoute({ path: "credentials", element: <CredentialsPage /> }),
+      createProtectedRoute({ path: "credentials", element: <CredentialsPage />, adminOnly: true }),
       createProtectedRoute({ path: "interfaces", element: <InterfaceInventoryPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),
       createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
-      createProtectedRoute({ path: "settings", element: <SettingsPage /> }),
+      createProtectedRoute({ path: "settings", element: <SettingsPage />, adminOnly: true }),
       createProtectedRoute({
         path: "dashboard/monitors",
         element: <Navigate replace to="/monitors" />,
@@ -58,6 +58,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({
         path: "dashboard/monitors/new",
         element: <Navigate replace to="/monitors/new" />,
+        adminOnly: true,
       }),
       createProtectedRoute({
         path: "dashboard/monitors/:id",
@@ -74,6 +75,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({
         path: "dashboard/credentials",
         element: <Navigate replace to="/credentials" />,
+        adminOnly: true,
       }),
       createProtectedRoute({
         path: "dashboard/incidents",

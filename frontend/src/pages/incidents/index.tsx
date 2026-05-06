@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { isAdminUser } from "@/utils/permissions";
 
 type IncidentStatus = "OPEN" | "RESOLVED";
 type MonitorType =
@@ -168,6 +170,8 @@ const getTarget = (monitor: IncidentMonitor) => {
 
 const IncidentsPage = () => {
   const { api, del, patch } = useApi();
+  const { user } = useSession();
+  const isAdmin = isAdminUser(user);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -621,36 +625,40 @@ const IncidentsPage = () => {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        {incident.status === "OPEN" ? (
-                          <button
-                            className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            type="button"
-                            onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
-                            disabled={isBusy}
-                          >
-                            Resolve
-                          </button>
-                        ) : (
-                          <button
-                            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            type="button"
-                            onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
-                            disabled={isBusy}
-                          >
-                            Reopen
-                          </button>
-                        )}
+                      {isAdmin ? (
+                        <div className="flex justify-end gap-2">
+                          {incident.status === "OPEN" ? (
+                            <button
+                              className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="button"
+                              onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
+                              disabled={isBusy}
+                            >
+                              Resolve
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="button"
+                              onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
+                              disabled={isBusy}
+                            >
+                              Reopen
+                            </button>
+                          )}
 
-                        <button
-                          className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={() => void handleDeleteIncident(incident)}
-                          disabled={isBusy}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                          <button
+                            className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            onClick={() => void handleDeleteIncident(incident)}
+                            disabled={isBusy}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">Read only</span>
+                      )}
                     </td>
                   </tr>
                 );

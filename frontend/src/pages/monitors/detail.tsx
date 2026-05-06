@@ -14,7 +14,9 @@ import {
   ReferenceLine,
 } from "recharts";
 import { toast } from "react-toastify";
+import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { isAdminUser } from "@/utils/permissions";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -436,6 +438,8 @@ const MonitorDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { api } = useApi();
+  const { user } = useSession();
+  const isAdmin = isAdminUser(user);
   const [monitor, setMonitor] = useState<MonitorDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
@@ -491,6 +495,12 @@ const MonitorDetailPage = () => {
   }, [fetchMonitor]);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setCredentials([]);
+      setCredentialsLoaded(true);
+      return;
+    }
+
     const loadCredentials = async () => {
       try {
         const response = await api.get<ApiResponse<CredentialRow[]>>("/credentials");
@@ -505,7 +515,7 @@ const MonitorDetailPage = () => {
     };
 
     void loadCredentials();
-  }, [api]);
+  }, [api, isAdmin]);
 
   const fetchDeviceMetrics = useCallback(async () => {
     if (!id || !monitor || (monitor.type !== "SYSTEM" && monitor.type !== "SNMP")) {
@@ -1117,38 +1127,42 @@ const MonitorDetailPage = () => {
           >
             Refresh
           </button>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={() => void handleCheckNow()}
-            disabled={isBusy || !monitor.enabled}
-          >
-            Check now
-          </button>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={() => void handleToggleEnabled()}
-            disabled={isBusy}
-          >
-            {monitor.enabled ? "Disable" : "Enable"}
-          </button>
-          <button
-            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={openEditModal}
-            disabled={isBusy}
-          >
-            Edit
-          </button>
-          <button
-            className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={() => void handleDeleteMonitor()}
-            disabled={isBusy}
-          >
-            Delete
-          </button>
+          {isAdmin ? (
+            <>
+              <button
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void handleCheckNow()}
+                disabled={isBusy || !monitor.enabled}
+              >
+                Check now
+              </button>
+              <button
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void handleToggleEnabled()}
+                disabled={isBusy}
+              >
+                {monitor.enabled ? "Disable" : "Enable"}
+              </button>
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={openEditModal}
+                disabled={isBusy}
+              >
+                Edit
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void handleDeleteMonitor()}
+                disabled={isBusy}
+              >
+                Delete
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -1880,7 +1894,7 @@ const MonitorDetailPage = () => {
         </aside>
       </section>
 
-      {isEditing ? (
+      {isAdmin && isEditing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">

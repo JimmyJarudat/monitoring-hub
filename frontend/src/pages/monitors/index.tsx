@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { isAdminUser } from "@/utils/permissions";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -121,6 +123,8 @@ const toConfigText = (config: Record<string, unknown>) => {
 
 const MonitorsPage = () => {
   const { api } = useApi();
+  const { user } = useSession();
+  const isAdmin = isAdminUser(user);
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
@@ -411,12 +415,14 @@ const MonitorsPage = () => {
           >
             Refresh
           </button>
-          <Link
-            className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            to="/monitors/new"
-          >
-            Add Monitor
-          </Link>
+          {isAdmin ? (
+            <Link
+              className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              to="/monitors/new"
+            >
+              Add Monitor
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -560,21 +566,23 @@ const MonitorsPage = () => {
                         >
                           View
                         </Link>
-                        <div className="relative">
-                          <button
-                            aria-expanded={openMenu?.id === monitor.id}
-                            aria-label={`More actions for ${monitor.name}`}
-                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            type="button"
-                            ref={(element) => {
-                              menuButtonRefs.current[monitor.id] = element;
-                            }}
-                            onClick={() => toggleMenu(monitor.id)}
-                            disabled={isBusy}
-                          >
-                            <span className="text-lg leading-none">⋮</span>
-                          </button>
-                        </div>
+                        {isAdmin ? (
+                          <div className="relative">
+                            <button
+                              aria-expanded={openMenu?.id === monitor.id}
+                              aria-label={`More actions for ${monitor.name}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="button"
+                              ref={(element) => {
+                                menuButtonRefs.current[monitor.id] = element;
+                              }}
+                              onClick={() => toggleMenu(monitor.id)}
+                              disabled={isBusy}
+                            >
+                              <span className="text-lg leading-none">⋮</span>
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -585,7 +593,7 @@ const MonitorsPage = () => {
         </div>
       </section>
 
-      {editingMonitor ? (
+      {isAdmin && editingMonitor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
@@ -692,7 +700,7 @@ const MonitorsPage = () => {
         </div>
       ) : null}
 
-      {deletingMonitor ? (
+      {isAdmin && deletingMonitor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
@@ -731,7 +739,7 @@ const MonitorsPage = () => {
         </div>
       ) : null}
 
-      {openMenu ? (
+      {isAdmin && openMenu ? (
         <>
           <button
             aria-label="Close actions menu"

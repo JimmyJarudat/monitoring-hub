@@ -1,6 +1,8 @@
 import Elysia, { t } from "elysia";
+import { requireAdminRole } from "../lib/authorization";
 import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
+import { authMiddleware } from "../middleware/auth";
 
 const groupPayloadSchema = t.Object({
   name: t.String({ minLength: 1, maxLength: 120 }),
@@ -15,6 +17,7 @@ const normalizeOptionalText = (value?: string | null) => {
 };
 
 export const groupRoutes = new Elysia({ prefix: "/groups" })
+  .use(authMiddleware)
   .get("/", async () => {
     const groups = await prisma.monitorGroup.findMany({
       orderBy: [{ name: "asc" }],
@@ -69,7 +72,9 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
   })
   .post(
     "/",
-    async ({ body, set }) => {
+    async ({ body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const name = body.name.trim();
       const existing = await prisma.monitorGroup.findUnique({
         where: { name },
@@ -142,7 +147,9 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
   )
   .patch(
     "/:id",
-    async ({ params, body, set }) => {
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.monitorGroup.findUnique({
         where: { id: params.id },
         select: { id: true, name: true },
@@ -248,7 +255,9 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
   )
   .delete(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.monitorGroup.findUnique({
         where: { id: params.id },
         select: { id: true },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
+import { useSession } from "@/contexts/session.context";
 
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
 type MonitorType =
@@ -155,10 +156,11 @@ const formatDate = (value: string) =>
     new Date(value),
   );
 
-const maskSecret = (secret: string) => {
-  if (!secret) return "-";
-  if (secret.length <= 6) return "•".repeat(secret.length);
-  return `${secret.slice(0, 2)}${"•".repeat(Math.max(secret.length - 4, 4))}${secret.slice(-2)}`;
+const maskSecretValue = (value: string) => {
+  if (!value) return "-";
+  if (value.includes("•")) return value;
+  if (value.length <= 6) return "•".repeat(value.length);
+  return `${value.slice(0, 2)}${"•".repeat(Math.max(value.length - 4, 4))}${value.slice(-2)}`;
 };
 
 const emptyForm = (): CredentialForm => ({
@@ -185,12 +187,15 @@ const parseMetadataObject = (value: string) => {
 
 const CredentialsPage = () => {
   const { api } = useApi();
+  const { user } = useSession();
+  const isAdmin = (typeof user?.role === "string" ? user.role : user?.role?.name ?? "").toLowerCase() === "admin";
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingCredential, setEditingCredential] = useState<CredentialRow | null>(null);
   const [deletingCredential, setDeletingCredential] = useState<CredentialRow | null>(null);
-  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
+  const [revealingId, setRevealingId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<CredentialForm>(() => emptyForm());
   const [guideType, setGuideType] = useState<CredentialType>("SNMP_COMMUNITY");
@@ -362,6 +367,41 @@ const CredentialsPage = () => {
     }
   };
 
+  const handleToggleReveal = async (credential: CredentialRow) => {
+    if (!isAdmin) return;
+
+    if (revealedSecrets[credential.id]) {
+      setRevealedSecrets((current) => {
+        const next = { ...current };
+        delete next[credential.id];
+        return next;
+      });
+      return;
+    }
+
+    setRevealingId(credential.id);
+
+    try {
+      const response = await api.get<ApiResponse<{ secret: string }>>(
+        `/credentials/${credential.id}/reveal`,
+      );
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      setRevealedSecrets((current) => ({
+        ...current,
+        [credential.id]: response.data.data.secret,
+      }));
+    } catch {
+      toast.error("เปิดดู secret ไม่สำเร็จ");
+    } finally {
+      setRevealingId(null);
+    }
+  };
+
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -443,7 +483,11 @@ const CredentialsPage = () => {
               ) : null}
 
               {credentials.map((credential) => {
-                const isRevealed = revealedId === credential.id;
+                const isRevealed = Boolean(revealedSecrets[credential.id]);
+                const displayedSecret = isRevealed
+                  ? revealedSecrets[credential.id]
+                  : maskSecretValue(credential.secret);
+                const isRevealBusy = revealingId === credential.id;
 
                 return (
                   <tr className="transition hover:bg-slate-50" key={credential.id}>
@@ -468,16 +512,15 @@ const CredentialsPage = () => {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       <div className="flex items-center gap-2">
                         <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                          {isRevealed ? credential.secret : maskSecret(credential.secret)}
+                          {displayedSecret}
                         </code>
                         <button
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
-                          onClick={() =>
-                            setRevealedId((current) => (current === credential.id ? null : credential.id))
-                          }
+                          onClick={() => void handleToggleReveal(credential)}
+                          disabled={!isAdmin || isRevealBusy}
                         >
-                          {isRevealed ? "Hide" : "Show"}
+                          {isRevealBusy ? "..." : isRevealed ? "Hide" : "Show"}
                         </button>
                       </div>
                     </td>

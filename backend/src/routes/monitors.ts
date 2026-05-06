@@ -1,7 +1,9 @@
 import Elysia, { t } from "elysia";
 import type { Prisma } from "../generated/prisma/client";
+import { requireAdminRole } from "../lib/authorization";
 import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
+import { authMiddleware } from "../middleware/auth";
 import { runMonitorCheck } from "../services/monitor.Runner";
 
 const monitorTypes = ["PING", "TCP", "HTTP", "TLS_CERT", "DNS", "SNMP", "SYSTEM", "DOCKER", "DATABASE"] as const;
@@ -153,6 +155,7 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
 };
 
 export const monitorRoutes = new Elysia({ prefix: "/monitors" })
+  .use(authMiddleware)
   .get("/", async ({ query }) => {
     const type = typeof query.type === "string" ? query.type : undefined;
     const groupId = typeof query.groupId === "string" && query.groupId.trim() ? query.groupId : undefined;
@@ -521,7 +524,9 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   )
   .post(
     "/",
-    async ({ body, set }) => {
+    async ({ body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       if (!isMonitorConfig(body.config)) {
         set.status = 400;
         return fail("config ต้องเป็น object");
@@ -563,7 +568,9 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   )
   .patch(
     "/:id",
-    async ({ params, body, set }) => {
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.monitor.findUnique({ where: { id: params.id } });
       const bodyConfig = body.config;
 
@@ -628,7 +635,9 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   )
   .post(
     "/:id/check",
-    async ({ params, set }) => {
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const monitor = await prisma.monitor.findUnique({ where: { id: params.id } });
 
       if (!monitor) {
@@ -645,7 +654,9 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   )
   .delete(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.monitor.findUnique({ where: { id: params.id } });
 
       if (!existing) {

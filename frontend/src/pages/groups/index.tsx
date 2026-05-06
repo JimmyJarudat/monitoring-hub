@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { isAdminUser } from "@/utils/permissions";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -77,6 +79,8 @@ const formatDate = (value: string) =>
 
 const GroupsPage = () => {
   const { api } = useApi();
+  const { user } = useSession();
+  const isAdmin = isAdminUser(user);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [monitors, setMonitors] = useState<MonitorSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -284,13 +288,15 @@ const GroupsPage = () => {
           >
             Refresh
           </button>
-          <button
-            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            type="button"
-            onClick={openCreate}
-          >
-            New Group
-          </button>
+          {isAdmin ? (
+            <button
+              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              type="button"
+              onClick={openCreate}
+            >
+              New Group
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -404,13 +410,15 @@ const GroupsPage = () => {
               <p className="mt-1 text-sm text-slate-400">
                 เริ่มจากสร้างกลุ่มตาม site, customer หรือ production environment ก่อนก็ได้
               </p>
-              <button
-                className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                type="button"
-                onClick={openCreate}
-              >
-                New Group
-              </button>
+              {isAdmin ? (
+                <button
+                  className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  type="button"
+                  onClick={openCreate}
+                >
+                  New Group
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -461,22 +469,24 @@ const GroupsPage = () => {
 
               <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
                 <span>Updated {formatDate(group.updatedAt)}</span>
-                <div className="flex gap-2">
-                  <button
-                    className="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-white"
-                    type="button"
-                    onClick={() => openEdit(group)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="rounded-md border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-50"
-                    type="button"
-                    onClick={() => setDeletingGroup(group)}
-                  >
-                    Delete
-                  </button>
-                </div>
+                {isAdmin ? (
+                  <div className="flex gap-2">
+                    <button
+                      className="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-white"
+                      type="button"
+                      onClick={() => openEdit(group)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="rounded-md border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-50"
+                      type="button"
+                      onClick={() => setDeletingGroup(group)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}
@@ -492,13 +502,15 @@ const GroupsPage = () => {
                 ตัวที่ยังไม่ได้เข้ากลุ่ม เหมาะกับการเก็บงาน inventory ต่อให้เรียบร้อย
               </p>
             </div>
-            <button
-              className="rounded-md border border-cyan-200 px-3 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50"
-              type="button"
-              onClick={openCreate}
-            >
-              Assign via new group
-            </button>
+            {isAdmin ? (
+              <button
+                className="rounded-md border border-cyan-200 px-3 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50"
+                type="button"
+                onClick={openCreate}
+              >
+                Assign via new group
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -516,7 +528,7 @@ const GroupsPage = () => {
         </section>
       ) : null}
 
-      {(isCreateOpen || editingGroup) && (
+      {isAdmin && (isCreateOpen || editingGroup) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
@@ -655,7 +667,7 @@ const GroupsPage = () => {
         </div>
       )}
 
-      {deletingGroup ? (
+      {isAdmin && deletingGroup ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">

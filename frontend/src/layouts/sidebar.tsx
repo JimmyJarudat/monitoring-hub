@@ -1,4 +1,6 @@
 import { NavLink } from "react-router-dom";
+import { useSession } from "@/contexts/session.context";
+import { isAdminUser } from "@/utils/permissions";
 
 type SidebarItem = {
   label: string;
@@ -6,6 +8,7 @@ type SidebarItem = {
   icon: string;
   badge?: string;
   end?: boolean;
+  adminOnly?: boolean;
 };
 
 type SidebarSection = {
@@ -34,16 +37,16 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Devices", path: "/devices", icon: "V" },
       { label: "Interfaces", path: "/interfaces", icon: "If" },
-      { label: "Add Device", path: "/monitors/new", icon: "+" },
+      { label: "Add Device", path: "/monitors/new", icon: "+", adminOnly: true },
       { label: "Groups", path: "/groups", icon: "G" },
-      { label: "Credentials", path: "/credentials", icon: "K" },
+      { label: "Credentials", path: "/credentials", icon: "K", adminOnly: true },
     ],
   },
   {
     title: "Monitoring",
     items: [
       { label: "Monitors", path: "/monitors", icon: "M" },
-      { label: "Add Monitor", path: "/monitors/new", icon: "+" },
+      { label: "Add Monitor", path: "/monitors/new", icon: "+", adminOnly: true },
       { label: "Results", path: "/results", icon: "T" },
       { label: "Incidents", path: "/incidents", icon: "I" },
     ],
@@ -59,14 +62,17 @@ const sidebarSections: SidebarSection[] = [
   {
     title: "System",
     items: [
-      { label: "Users", path: "/users", icon: "U", badge: "Soon" },
-      { label: "Audit Logs", path: "/audit-logs", icon: "L", badge: "Soon" },
-      { label: "Settings", path: "/settings", icon: "S" },
+      { label: "Users", path: "/users", icon: "U", badge: "Soon", adminOnly: true },
+      { label: "Audit Logs", path: "/audit-logs", icon: "L", badge: "Soon", adminOnly: true },
+      { label: "Settings", path: "/settings", icon: "S", adminOnly: true },
     ],
   },
 ];
 
 const Sidebar = () => {
+  const { user } = useSession();
+  const isAdmin = isAdminUser(user);
+
   return (
     <aside className="flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-950 text-white">
       <div className="flex h-20 items-center gap-3 border-b border-slate-800 px-5">
@@ -89,61 +95,66 @@ const Sidebar = () => {
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5 scrollbar-thin">
-        {sidebarSections.map((section) => (
-          <section key={section.title}>
-            <h2 className="px-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {section.title}
-            </h2>
+        {sidebarSections.map((section) => {
+          const visibleItems = section.items.filter((item) => !item.adminOnly || isAdmin);
+          if (visibleItems.length === 0) return null;
 
-            <div className="mt-2 space-y-1">
-              {section.items.map((item) => (
-                <NavLink
-                  className={({ isActive }) =>
-                    [
-                      "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition",
-                      isActive
-                        ? "bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-400/15"
-                        : "text-slate-300 hover:bg-slate-900 hover:text-white",
-                    ].join(" ")
-                  }
-                  end={item.end}
-                  key={item.path}
-                  to={item.path}
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        className={[
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition",
-                          isActive
-                            ? "bg-slate-950 text-cyan-300"
-                            : "bg-slate-900 text-slate-400 group-hover:bg-slate-800 group-hover:text-cyan-300",
-                        ].join(" ")}
-                      >
-                        {item.icon}
-                      </span>
+          return (
+            <section key={section.title}>
+              <h2 className="px-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {section.title}
+              </h2>
 
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-
-                      {item.badge ? (
+              <div className="mt-2 space-y-1">
+                {visibleItems.map((item) => (
+                  <NavLink
+                    className={({ isActive }) =>
+                      [
+                        "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition",
+                        isActive
+                          ? "bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-400/15"
+                          : "text-slate-300 hover:bg-slate-900 hover:text-white",
+                      ].join(" ")
+                    }
+                    end={item.end}
+                    key={item.path}
+                    to={item.path}
+                  >
+                    {({ isActive }) => (
+                      <>
                         <span
                           className={[
-                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition",
                             isActive
-                              ? "bg-slate-950/15 text-slate-900"
-                              : "bg-slate-800 text-slate-400",
+                              ? "bg-slate-950 text-cyan-300"
+                              : "bg-slate-900 text-slate-400 group-hover:bg-slate-800 group-hover:text-cyan-300",
                           ].join(" ")}
                         >
-                          {item.badge}
+                          {item.icon}
                         </span>
-                      ) : null}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          </section>
-        ))}
+
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+
+                        {item.badge ? (
+                          <span
+                            className={[
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              isActive
+                                ? "bg-slate-950/15 text-slate-900"
+                                : "bg-slate-800 text-slate-400",
+                            ].join(" ")}
+                          >
+                            {item.badge}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </nav>
 
       <div className="border-t border-slate-800 p-4">

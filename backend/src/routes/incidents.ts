@@ -1,7 +1,9 @@
 import Elysia, { t } from "elysia";
 import type { Prisma } from "../generated/prisma/client";
+import { requireAdminRole } from "../lib/authorization";
 import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
+import { authMiddleware } from "../middleware/auth";
 
 type IncidentStatusFilter = "OPEN" | "RESOLVED";
 type CheckedAtFilter = {
@@ -10,6 +12,7 @@ type CheckedAtFilter = {
 };
 
 export const incidentRoutes = new Elysia({ prefix: "/incidents" })
+  .use(authMiddleware)
   .get(
     "/",
     async ({ query }) => {
@@ -120,7 +123,9 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
   )
   .patch(
     "/:id",
-    async ({ params, body, set }) => {
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.incident.findUnique({
         where: { id: params.id },
       });
@@ -178,7 +183,9 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
   )
   .delete(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
       const existing = await prisma.incident.findUnique({
         where: { id: params.id },
       });

@@ -1,6 +1,7 @@
 import Elysia, { t } from "elysia";
+import { requireAdminRole } from "../lib/authorization";
 import { ok, fail } from "../lib/response";
-import { authMiddleware, AuthError } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
 import {
   getRetentionConfig,
   saveRetentionConfig,
@@ -8,23 +9,17 @@ import {
   runRetentionCleanup,
 } from "../services/retention.service";
 
-const requireAdmin = (role: string) => {
-  if (role.toLowerCase() !== "admin") {
-    throw new AuthError("เฉพาะ Admin เท่านั้น", 403);
-  }
-};
-
 export const adminRoutes = new Elysia({ prefix: "/admin" })
   .use(authMiddleware)
   .get("/retention", async ({ currentUser }) => {
-    requireAdmin(currentUser.role);
+    requireAdminRole(currentUser.role);
     const [config, lastRun] = await Promise.all([getRetentionConfig(), getRetentionLastRun()]);
     return ok({ config, lastRun });
   })
   .patch(
     "/retention",
     async ({ body, currentUser }) => {
-      requireAdmin(currentUser.role);
+      requireAdminRole(currentUser.role);
       await saveRetentionConfig(body);
       return ok({ message: "บันทึกการตั้งค่าสำเร็จ" });
     },
@@ -37,7 +32,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     },
   )
   .post("/retention/run", async ({ currentUser }) => {
-    requireAdmin(currentUser.role);
+    requireAdminRole(currentUser.role);
     try {
       const summary = await runRetentionCleanup();
       return ok(summary);

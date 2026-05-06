@@ -94,6 +94,11 @@
 - [x] Create / edit / delete group
 - [x] Assign monitors into groups
 - [x] Credentials page `/credentials`
+- [x] Role-based access control
+  - [x] `admin` = full control
+  - [x] `user` = read-only operator
+  - [x] backend route guard
+  - [x] frontend route / nav / action guard
 - [x] Credential inventory types
   - SNMP community
   - username / password
@@ -118,7 +123,7 @@
 ### Credentials
 - [x] หน้า Edit monitor เปลี่ยนหรือ unlink credential ได้โดยตรง
 - [x] Secret เข้ารหัสใน DB แล้ว (encrypt at rest)
-- [ ] ยังไม่มี permission control เรื่องใครดู secret ได้
+- [x] มี permission control เรื่องใครดู secret ได้
 - [x] มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
 
 ### Device / network analytics
