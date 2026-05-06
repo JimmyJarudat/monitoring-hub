@@ -219,9 +219,21 @@ export const toDisplayChannelConfig = (channel: NotificationChannel) => {
   };
 };
 
-const buildIncidentMessage = (monitor: Monitor, status: IncidentStatus, message: string | null) => {
-  const icon = status === "RESOLVED" ? "✅" : "🚨";
-  const title = status === "RESOLVED" ? "Incident Resolved" : "Incident Opened";
+type IncidentNotificationKind = "transition" | "reminder";
+
+const buildIncidentMessage = (
+  monitor: Monitor,
+  status: IncidentStatus,
+  message: string | null,
+  kind: IncidentNotificationKind = "transition",
+) => {
+  const icon = status === "RESOLVED" ? "✅" : kind === "reminder" ? "⏰" : "🚨";
+  const title =
+    status === "RESOLVED"
+      ? "Incident Resolved"
+      : kind === "reminder"
+        ? "Incident Reminder"
+        : "Incident Opened";
   const details = message?.trim() || (status === "RESOLVED" ? "Monitor recovered" : "Monitor reported issue");
   return `${icon} ${title}\nMonitor: ${monitor.name}\nType: ${monitor.type}\nStatus: ${status}\nMessage: ${details}`;
 };
@@ -336,20 +348,61 @@ const deliverChannelMessage = async (
 export const notifyIncidentTransition = async (params: {
   monitor: Monitor;
   incidentId: string;
+  alertRuleId?: string | null;
   status: IncidentStatus;
   message: string | null;
 }) => {
-  const channels = await prisma.notificationChannel.findMany({
-    where: { enabled: true },
-    orderBy: [{ createdAt: "asc" }],
+  await notifyIncident({
+    ...params,
+    kind: "transition",
   });
+};
+
+export const notifyIncidentReminder = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  message: string | null;
+}) => {
+  await notifyIncident({
+    ...params,
+    status: "OPEN",
+    kind: "reminder",
+  });
+};
+
+const notifyIncident = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  status: IncidentStatus;
+  message: string | null;
+  kind: IncidentNotificationKind;
+}) => {
+  const channels = params.alertRuleId
+    ? (
+        await prisma.alertRuleChannel.findMany({
+          where: {
+            alertRuleId: params.alertRuleId,
+            channel: { enabled: true },
+          },
+          include: { channel: true },
+        })
+      ).map((item) => item.channel)
+    : await prisma.notificationChannel.findMany({
+        where: { enabled: true },
+        orderBy: [{ createdAt: "asc" }],
+      });
 
   if (channels.length === 0) return;
 
-  const text = buildIncidentMessage(params.monitor, params.status, params.message);
-  const subject = `[Monitoring Hub] ${params.status} - ${params.monitor.name}`;
+  const text = buildIncidentMessage(params.monitor, params.status, params.message, params.kind);
+  const subjectStatus = params.kind === "reminder" ? "REMINDER" : params.status;
+  const subject = `[Monitoring Hub] ${subjectStatus} - ${params.monitor.name}`;
   const webhookPayload = {
     incidentId: params.incidentId,
+    alertRuleId: params.alertRuleId ?? null,
+    kind: params.kind,
     status: params.status,
     monitor: {
       id: params.monitor.id,

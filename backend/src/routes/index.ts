@@ -7,6 +7,7 @@ import { incidentRoutes } from "./incidents";
 import { groupRoutes } from "./groups";
 import { credentialRoutes } from "./credentials";
 import { adminRoutes } from "./admin";
+import { alertRuleRoutes } from "./alertRules";
 import { channelRoutes } from "./channels";
 import { ok } from "../lib/response";
 
@@ -21,6 +22,7 @@ export const protectedRoutes = new Elysia()
   .use(authProtectedRoutes) // /auth/me
   .use(monitorRoutes) // /monitors
   .use(incidentRoutes) // /incidents
+  .use(alertRuleRoutes) // /alert-rules
   .use(groupRoutes) // /groups
   .use(credentialRoutes) // /credentials
   .use(channelRoutes) // /channels

@@ -64,7 +64,7 @@ const getDeletedTotal = (summary: RetentionLastRun) =>
   summary.deletedResults + summary.deletedMetrics + summary.deletedAuditLogs;
 
 const SettingsPage = () => {
-  const { get, patch, post } = useApi();
+  const { api } = useApi();
   const [config, setConfig] = useState<RetentionConfig>({
     results_days: 30,
     metrics_days: 30,
@@ -83,7 +83,7 @@ const SettingsPage = () => {
 
   const fetchRetention = useCallback(async () => {
     try {
-      const res = await get<ApiResponse<RetentionResponse>>("/admin/retention");
+      const res = await api.get<ApiResponse<RetentionResponse>>("/admin/retention");
       if (res.data.success) {
         setConfig(res.data.data.config);
         setLastRun(res.data.data.lastRun);
@@ -97,7 +97,7 @@ const SettingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [get]);
+  }, [api]);
 
   useEffect(() => {
     void fetchRetention();
@@ -106,7 +106,7 @@ const SettingsPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await patch<ApiResponse<{ message: string }>>("/admin/retention", config);
+      const res = await api.patch<ApiResponse<{ message: string }>>("/admin/retention", config);
       if (!res.data.success) {
         toast.error(res.data.message);
         return;
@@ -120,7 +120,7 @@ const SettingsPage = () => {
   };
 
   const refreshRetentionState = async () => {
-    const res = await get<ApiResponse<RetentionResponse>>("/admin/retention");
+    const res = await api.get<ApiResponse<RetentionResponse>>("/admin/retention");
     if (res.data.success) {
       setConfig(res.data.data.config);
       setLastRun(res.data.data.lastRun);
@@ -134,7 +134,7 @@ const SettingsPage = () => {
     if (!confirm("ต้องการรัน cleanup ตาม retention ปัจจุบันทันทีใช่ไหม?")) return;
     setRunning(true);
     try {
-      const res = await post<ApiResponse<RetentionLastRun>>("/admin/retention/run");
+      const res = await api.post<ApiResponse<RetentionLastRun>>("/admin/retention/run");
       if (res.data.success) {
         const summary = res.data.data;
         setLastRun(summary);
@@ -179,7 +179,7 @@ const SettingsPage = () => {
 
     setClearing(true);
     try {
-      const res = await post<ApiResponse<ClearResponse>>("/admin/retention/clear", {
+      const res = await api.post<ApiResponse<ClearResponse>>("/admin/retention/clear", {
         targets: clearTargets,
         mode: clearMode,
         olderThanDays: clearMode === "expired" ? clearOlderThanDays : undefined,

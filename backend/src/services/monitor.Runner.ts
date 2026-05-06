@@ -1,4 +1,4 @@
-import type { Credential, Monitor } from "../generated/prisma/client";
+import type { AlertRule, Credential, Monitor } from "../generated/prisma/client";
 import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import { decryptCredentialSecret } from "../lib/credentialSecret";
@@ -13,7 +13,7 @@ import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
 import { tcpCheck } from "./checkers/tcp.Checker";
 import { tlsCheck } from "./checkers/tls.Checker";
-import { notifyIncidentTransition } from "./notification.service";
+import { notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -21,6 +21,18 @@ type CheckResult = {
   message?: string;
   metadata?: Record<string, unknown>;
   metrics?: DeviceMetricSample[];
+};
+type ThresholdConfig = {
+  cpuPct?: number;
+  ramPct?: number;
+  diskPct?: number;
+};
+type RuleEvaluationInput = {
+  status: MonitorStatus;
+  responseTimeMs: number | null;
+  message: string | null;
+  metadata?: Record<string, unknown>;
+  checkedAt: Date;
 };
 
 const TICK_MS = 5_000;
@@ -33,6 +45,137 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 const isConfigObject = (value: unknown): value is Prisma.InputJsonObject => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const STATUS_INCIDENT_PREFIX = "[STATUS]";
+const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
+const RULE_INCIDENT_PREFIX = "[RULE]";
+const INCIDENT_REMINDER_ACTION = "INCIDENT_REMINDER_SENT";
+const INCIDENT_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const statusToValue = (status: MonitorStatus) => {
+  if (status === "UP") return 3;
+  if (status === "DEGRADED") return 2;
+  return 1;
+};
+
+const formatMetricLabel = (metric: string) => {
+  const labels: Record<string, string> = {
+    status: "Status",
+    response_time: "Response time",
+    "cpu.used_pct": "CPU",
+    "memory.used_pct": "RAM",
+    "disk.used_pct": "Disk",
+  };
+  return labels[metric] ?? metric;
+};
+
+const formatRuleValue = (metric: string, value: number) => {
+  if (metric === "status") {
+    if (value === 3) return "UP";
+    if (value === 2) return "DEGRADED";
+    if (value === 1) return "DOWN";
+  }
+  if (metric === "response_time") return `${Math.round(value)} ms`;
+  if (metric.endsWith("_pct")) return `${value.toFixed(1)}%`;
+  return String(value);
+};
+
+const getMetricValue = (rule: AlertRule, input: RuleEvaluationInput) => {
+  if (rule.metric === "status") return statusToValue(input.status);
+  if (rule.metric === "response_time") return input.responseTimeMs;
+
+  const metadata = input.metadata;
+  if (!metadata) return null;
+
+  if (rule.metric === "cpu.used_pct") {
+    return typeof metadata.cpuUsedPct === "number" ? metadata.cpuUsedPct : null;
+  }
+
+  if (rule.metric === "memory.used_pct") {
+    return typeof metadata.memUsedPct === "number" ? metadata.memUsedPct : null;
+  }
+
+  if (rule.metric === "disk.used_pct") {
+    const disks = Array.isArray(metadata.disks) ? metadata.disks : [];
+    const highestDisk = disks.reduce((max, disk) => {
+      const usedPct = isConfigObject(disk) && typeof disk.usedPct === "number" ? disk.usedPct : null;
+      return usedPct !== null && usedPct > max ? usedPct : max;
+    }, -1);
+    return highestDisk >= 0 ? highestDisk : null;
+  }
+
+  return null;
+};
+
+const evaluateOperator = (actual: number, operator: AlertRule["operator"], threshold: number) => {
+  if (operator === "GT") return actual > threshold;
+  if (operator === "LT") return actual < threshold;
+  if (operator === "EQ") return actual === threshold;
+  if (operator === "NEQ") return actual !== threshold;
+  return false;
+};
+
+const buildRuleMessage = (rule: AlertRule, actual: number, sourceMessage: string | null) => {
+  const metricLabel = formatMetricLabel(rule.metric);
+  const current = formatRuleValue(rule.metric, actual);
+  const threshold = formatRuleValue(rule.metric, rule.threshold);
+  const details = sourceMessage ? ` (${sourceMessage})` : "";
+  return `${RULE_INCIDENT_PREFIX} ${rule.severity} ${metricLabel}: ${current} ${rule.operator} ${threshold}${details}`;
+};
+
+const shouldSendIncidentReminder = async (
+  incidentId: string,
+  incidentStartedAt: Date,
+  checkedAt: Date,
+) => {
+  const lastReminder = await prisma.auditLog.findFirst({
+    where: {
+      action: INCIDENT_REMINDER_ACTION,
+      entity: "Incident",
+      entityId: incidentId,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  const lastSentAt = lastReminder?.createdAt ?? incidentStartedAt;
+
+  return checkedAt.getTime() - lastSentAt.getTime() >= INCIDENT_REMINDER_INTERVAL_MS;
+};
+
+const notifyIncidentReminderIfDue = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  incidentStartedAt: Date;
+  checkedAt: Date;
+  message: string | null;
+}) => {
+  const shouldNotify = await shouldSendIncidentReminder(
+    params.incidentId,
+    params.incidentStartedAt,
+    params.checkedAt,
+  );
+  if (!shouldNotify) return;
+
+  await notifyIncidentReminder({
+    monitor: params.monitor,
+    incidentId: params.incidentId,
+    alertRuleId: params.alertRuleId,
+    message: params.message,
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: INCIDENT_REMINDER_ACTION,
+      entity: "Incident",
+      entityId: params.incidentId,
+      newValue: {
+        monitorId: params.monitor.id,
+        alertRuleId: params.alertRuleId ?? null,
+        message: params.message,
+      },
+    },
+  });
 };
 
 const resolveConfigWithCredential = (
@@ -127,40 +270,56 @@ const reconcileIncident = async (
     checkedAt: Date;
   },
 ) => {
-  const openIncident = await prisma.incident.findFirst({
+  const openStatusIncident = await prisma.incident.findFirst({
     where: {
       monitorId: monitor.id,
       status: "OPEN",
+      message: {
+        startsWith: STATUS_INCIDENT_PREFIX,
+      },
     },
     orderBy: { startedAt: "desc" },
   });
 
   if (result.status === "UP") {
-    if (!openIncident) return;
+    if (!openStatusIncident) return;
 
     const resolvedIncident = await prisma.incident.update({
-      where: { id: openIncident.id },
+      where: { id: openStatusIncident.id },
       data: {
         status: "RESOLVED",
         resolvedAt: result.checkedAt,
-        message: result.message ?? openIncident.message,
+        message: `${STATUS_INCIDENT_PREFIX} ${result.message ?? "Monitor recovered"}`,
       },
     });
     await notifyIncidentTransition({
       monitor,
       incidentId: resolvedIncident.id,
+      alertRuleId: null,
       status: "RESOLVED",
       message: resolvedIncident.message,
     });
     return;
   }
 
-  if (openIncident) {
-    await prisma.incident.update({
-      where: { id: openIncident.id },
+  if (result.status !== "DOWN") {
+    return;
+  }
+
+  if (openStatusIncident) {
+    const updatedIncident = await prisma.incident.update({
+      where: { id: openStatusIncident.id },
       data: {
-        message: result.message ?? openIncident.message,
+        message: `${STATUS_INCIDENT_PREFIX} ${result.message ?? "Monitor is down"}`,
       },
+    });
+    await notifyIncidentReminderIfDue({
+      monitor,
+      incidentId: updatedIncident.id,
+      alertRuleId: null,
+      incidentStartedAt: updatedIncident.startedAt,
+      checkedAt: result.checkedAt,
+      message: updatedIncident.message,
     });
     return;
   }
@@ -169,13 +328,224 @@ const reconcileIncident = async (
     data: {
       monitorId: monitor.id,
       status: "OPEN",
-      message: result.message ?? `Monitor ${monitor.name} reported ${result.status}`,
+      message: `${STATUS_INCIDENT_PREFIX} ${result.message ?? `Monitor ${monitor.name} reported DOWN`}`,
       startedAt: result.checkedAt,
     },
   });
   await notifyIncidentTransition({
     monitor,
     incidentId: createdIncident.id,
+    alertRuleId: null,
+    status: "OPEN",
+    message: createdIncident.message,
+  });
+};
+
+const reconcileAlertRuleIncidents = async (monitor: Monitor, result: RuleEvaluationInput) => {
+  const rules = await prisma.alertRule.findMany({
+    where: { monitorId: monitor.id, enabled: true },
+    orderBy: [{ createdAt: "asc" }],
+  });
+
+  if (rules.length === 0) {
+    return false;
+  }
+
+  await Promise.all(
+    rules.map(async (rule) => {
+      const actual = getMetricValue(rule, result);
+      const openIncident = await prisma.incident.findFirst({
+        where: {
+          monitorId: monitor.id,
+          alertRuleId: rule.id,
+          status: "OPEN",
+        },
+        orderBy: { startedAt: "desc" },
+      });
+
+      const triggered =
+        typeof actual === "number" &&
+        Number.isFinite(actual) &&
+        evaluateOperator(actual, rule.operator, rule.threshold);
+
+      if (!triggered) {
+        if (!openIncident) return;
+
+        const resolvedIncident = await prisma.incident.update({
+          where: { id: openIncident.id },
+          data: {
+            status: "RESOLVED",
+            resolvedAt: result.checkedAt,
+            message: `${RULE_INCIDENT_PREFIX} ${formatMetricLabel(rule.metric)} back to normal`,
+          },
+        });
+        await notifyIncidentTransition({
+          monitor,
+          incidentId: resolvedIncident.id,
+          alertRuleId: rule.id,
+          status: "RESOLVED",
+          message: resolvedIncident.message,
+        });
+        return;
+      }
+
+      const nextMessage = buildRuleMessage(rule, actual, result.message);
+      if (openIncident) {
+        const updatedIncident = await prisma.incident.update({
+          where: { id: openIncident.id },
+          data: { message: nextMessage },
+        });
+        await notifyIncidentReminderIfDue({
+          monitor,
+          incidentId: updatedIncident.id,
+          alertRuleId: rule.id,
+          incidentStartedAt: updatedIncident.startedAt,
+          checkedAt: result.checkedAt,
+          message: updatedIncident.message,
+        });
+        return;
+      }
+
+      const createdIncident = await prisma.incident.create({
+        data: {
+          monitorId: monitor.id,
+          alertRuleId: rule.id,
+          status: "OPEN",
+          message: nextMessage,
+          startedAt: result.checkedAt,
+        },
+      });
+      await notifyIncidentTransition({
+        monitor,
+        incidentId: createdIncident.id,
+        alertRuleId: rule.id,
+        status: "OPEN",
+        message: createdIncident.message,
+      });
+    }),
+  );
+
+  return true;
+};
+
+const extractThresholdConfig = (config: Prisma.InputJsonObject): ThresholdConfig => {
+  const raw = config.alertThresholds;
+  if (!isConfigObject(raw)) return {};
+  const toNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
+  return {
+    cpuPct: toNumber(raw.cpuPct),
+    ramPct: toNumber(raw.ramPct),
+    diskPct: toNumber(raw.diskPct),
+  };
+};
+
+const evaluateThresholdMessage = (
+  metadata: Record<string, unknown> | undefined,
+  threshold: ThresholdConfig,
+) => {
+  if (!metadata) return null;
+  const messages: string[] = [];
+  const cpu = typeof metadata.cpuUsedPct === "number" ? metadata.cpuUsedPct : null;
+  const ram = typeof metadata.memUsedPct === "number" ? metadata.memUsedPct : null;
+  const disks = Array.isArray(metadata.disks) ? metadata.disks : [];
+  const highestDisk = disks.reduce((max, disk) => {
+    const usedPct = isConfigObject(disk) && typeof disk.usedPct === "number" ? disk.usedPct : null;
+    return usedPct !== null && usedPct > max ? usedPct : max;
+  }, -1);
+
+  if (typeof threshold.cpuPct === "number" && cpu !== null && cpu >= threshold.cpuPct) {
+    messages.push(`CPU ${cpu.toFixed(1)}% >= ${threshold.cpuPct}%`);
+  }
+  if (typeof threshold.ramPct === "number" && ram !== null && ram >= threshold.ramPct) {
+    messages.push(`RAM ${ram.toFixed(1)}% >= ${threshold.ramPct}%`);
+  }
+  if (typeof threshold.diskPct === "number" && highestDisk >= 0 && highestDisk >= threshold.diskPct) {
+    messages.push(`Disk ${highestDisk.toFixed(1)}% >= ${threshold.diskPct}%`);
+  }
+
+  return messages.length > 0 ? messages.join(" | ") : null;
+};
+
+const reconcileThresholdIncident = async (
+  monitor: Monitor,
+  result: {
+    checkedAt: Date;
+    metadata?: Record<string, unknown>;
+  },
+) => {
+  if (monitor.type !== "SNMP" && monitor.type !== "SYSTEM") return;
+  if (!isConfigObject(monitor.config)) return;
+  const threshold = extractThresholdConfig(monitor.config);
+  if (
+    typeof threshold.cpuPct !== "number" &&
+    typeof threshold.ramPct !== "number" &&
+    typeof threshold.diskPct !== "number"
+  ) {
+    return;
+  }
+
+  const thresholdMessage = evaluateThresholdMessage(result.metadata, threshold);
+  const openThresholdIncident = await prisma.incident.findFirst({
+    where: {
+      monitorId: monitor.id,
+      status: "OPEN",
+      message: {
+        startsWith: THRESHOLD_INCIDENT_PREFIX,
+      },
+    },
+    orderBy: { startedAt: "desc" },
+  });
+
+  if (!thresholdMessage) {
+    if (!openThresholdIncident) return;
+    const resolvedIncident = await prisma.incident.update({
+      where: { id: openThresholdIncident.id },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: result.checkedAt,
+        message: `${THRESHOLD_INCIDENT_PREFIX} utilization back to normal`,
+      },
+    });
+    await notifyIncidentTransition({
+      monitor,
+      incidentId: resolvedIncident.id,
+      alertRuleId: null,
+      status: "RESOLVED",
+      message: resolvedIncident.message,
+    });
+    return;
+  }
+
+  if (openThresholdIncident) {
+    const updatedIncident = await prisma.incident.update({
+      where: { id: openThresholdIncident.id },
+      data: {
+        message: `${THRESHOLD_INCIDENT_PREFIX} ${thresholdMessage}`,
+      },
+    });
+    await notifyIncidentReminderIfDue({
+      monitor,
+      incidentId: updatedIncident.id,
+      alertRuleId: null,
+      incidentStartedAt: updatedIncident.startedAt,
+      checkedAt: result.checkedAt,
+      message: updatedIncident.message,
+    });
+    return;
+  }
+
+  const createdIncident = await prisma.incident.create({
+    data: {
+      monitorId: monitor.id,
+      status: "OPEN",
+      message: `${THRESHOLD_INCIDENT_PREFIX} ${thresholdMessage}`,
+      startedAt: result.checkedAt,
+    },
+  });
+  await notifyIncidentTransition({
+    monitor,
+    incidentId: createdIncident.id,
+    alertRuleId: null,
     status: "OPEN",
     message: createdIncident.message,
   });
@@ -283,11 +653,25 @@ export const runMonitorCheck = async (monitor: Monitor) => {
     return monitorResult;
   });
 
-  await reconcileIncident(monitor, {
+  const handledByRules = await reconcileAlertRuleIncidents(monitor, {
     status: createdResult.status,
+    responseTimeMs: createdResult.responseTimeMs,
     message: createdResult.message,
     checkedAt: createdResult.checkedAt,
+    metadata: result.metadata,
   });
+
+  if (!handledByRules) {
+    await reconcileIncident(monitor, {
+      status: createdResult.status,
+      message: createdResult.message,
+      checkedAt: createdResult.checkedAt,
+    });
+    await reconcileThresholdIncident(monitor, {
+      checkedAt: createdResult.checkedAt,
+      metadata: result.metadata,
+    });
+  }
 
   return createdResult;
 };

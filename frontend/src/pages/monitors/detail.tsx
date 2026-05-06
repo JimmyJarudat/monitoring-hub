@@ -31,6 +31,9 @@ type MonitorType =
   | "DATABASE";
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
 type IncidentStatus = "OPEN" | "RESOLVED";
+type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
+type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
+type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM";
 
 type ApiSuccess<T> = {
   success: true;
@@ -56,10 +59,18 @@ type MonitorResult = {
 type AlertRule = {
   id: string;
   metric: string;
-  operator: string;
+  operator: AlertOperator;
   threshold: number;
-  severity: string;
+  severity: AlertSeverity;
   enabled: boolean;
+  channels?: Array<{
+    channel: {
+      id: string;
+      name: string;
+      type: ChannelType;
+      enabled: boolean;
+    };
+  }>;
 };
 
 type Incident = {
@@ -157,6 +168,26 @@ type EditForm = {
   enabled: boolean;
   configText: string;
 };
+type ThresholdForm = {
+  cpuPct: string;
+  ramPct: string;
+  diskPct: string;
+};
+type AlertRuleForm = {
+  metric: string;
+  operator: AlertOperator;
+  threshold: string;
+  severity: AlertSeverity;
+  enabled: boolean;
+  channelIds: string[];
+};
+
+type NotificationChannelOption = {
+  id: string;
+  name: string;
+  type: ChannelType;
+  enabled: boolean;
+};
 
 type TimeRangePreset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
@@ -240,6 +271,37 @@ const credentialTypeLabels: Record<CredentialType, string> = {
   API_TOKEN: "API Token",
   SSH_KEY: "SSH Key",
 };
+
+const channelTypeLabels: Record<ChannelType, string> = {
+  LINE: "LINE",
+  SLACK: "Slack",
+  DISCORD: "Discord",
+  EMAIL: "Email",
+  TELEGRAM: "Telegram",
+};
+
+const alertMetricLabels: Record<string, string> = {
+  status: "Monitor status",
+  response_time: "Response time",
+  "cpu.used_pct": "CPU usage",
+  "memory.used_pct": "RAM usage",
+  "disk.used_pct": "Disk usage",
+};
+
+const statusThresholdLabels: Record<number, string> = {
+  1: "DOWN",
+  2: "DEGRADED",
+  3: "UP",
+};
+
+const emptyAlertRuleForm = (): AlertRuleForm => ({
+  metric: "status",
+  operator: "NEQ",
+  threshold: "3",
+  severity: "CRITICAL",
+  enabled: true,
+  channelIds: [],
+});
 
 const getCompatibleCredentialTypes = (
   type: MonitorType,
@@ -359,6 +421,58 @@ const computeSeriesAnomaly = (values: number[], latest: number | null | undefine
 const formatPercent = (value: number | null | undefined) =>
   isFiniteNumber(value) ? `${value.toFixed(1)}%` : "-";
 
+const formatAlertThreshold = (metric: string, threshold: number) => {
+  if (metric === "status") return statusThresholdLabels[threshold] ?? String(threshold);
+  if (metric === "response_time") return `${threshold.toLocaleString()} ms`;
+  if (metric.endsWith("_pct")) return `${threshold}%`;
+  return String(threshold);
+};
+
+const operatorSymbols: Record<AlertOperator, string> = { GT: ">", LT: "<", EQ: "=", NEQ: "≠" };
+
+const formatCurrentRuleValue = (metric: string, value: number) => {
+  if (metric === "status") return formatStatusValue(value);
+  if (metric === "response_time") return `${value.toLocaleString()} ms`;
+  if (metric.endsWith("_pct")) return `${value.toFixed(1)}%`;
+  return String(value);
+};
+
+const evaluateAlertRule = (
+  rule: AlertRule,
+  latestResult: { status?: string; responseTimeMs?: number | null } | null,
+  latestMetadata: DeviceMetadata | null,
+): { currentValue: number | null; isFiring: boolean } => {
+  let currentValue: number | null = null;
+
+  if (rule.metric === "status") {
+    const s = latestResult?.status;
+    if (s === "UP") currentValue = 3;
+    else if (s === "DEGRADED") currentValue = 2;
+    else if (s === "DOWN") currentValue = 1;
+  } else if (rule.metric === "response_time") {
+    currentValue = latestResult?.responseTimeMs ?? null;
+  } else if (rule.metric === "cpu.used_pct") {
+    currentValue = latestMetadata?.cpuUsedPct ?? null;
+  } else if (rule.metric === "memory.used_pct") {
+    currentValue = latestMetadata?.memUsedPct ?? null;
+  } else if (rule.metric === "disk.used_pct") {
+    const disks = latestMetadata?.disks;
+    if (disks && disks.length > 0) {
+      currentValue = Math.max(...disks.map((d) => d.usedPct));
+    }
+  }
+
+  if (currentValue === null) return { currentValue: null, isFiring: false };
+
+  let isFiring = false;
+  if (rule.operator === "GT") isFiring = currentValue > rule.threshold;
+  else if (rule.operator === "LT") isFiring = currentValue < rule.threshold;
+  else if (rule.operator === "EQ") isFiring = currentValue === rule.threshold;
+  else if (rule.operator === "NEQ") isFiring = currentValue !== rule.threshold;
+
+  return { currentValue, isFiring };
+};
+
 const formatKb = (value: number | null | undefined) => {
   if (!isFiniteNumber(value)) return "-";
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} GB`;
@@ -374,14 +488,6 @@ const formatUptime = (seconds: number | null | undefined) => {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
-};
-
-const formatBytes = (value: number | null | undefined) => {
-  if (!isFiniteNumber(value)) return "-";
-  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
-  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-  if (value >= 1024) return `${(value / 1024).toFixed(0)} KB`;
-  return `${value.toFixed(0)} B`;
 };
 
 const formatBitsPerSecond = (value: number | null | undefined) => {
@@ -434,6 +540,17 @@ const buildRatePoints = (points: Array<{ collectedAt: string; value: number }>) 
   return rates;
 };
 
+const parseThresholdConfig = (config: Record<string, unknown>): ThresholdForm => {
+  const raw = config.alertThresholds;
+  const asObj = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? raw : {};
+  const toText = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
+  return {
+    cpuPct: toText((asObj as { cpuPct?: unknown }).cpuPct),
+    ramPct: toText((asObj as { ramPct?: unknown }).ramPct),
+    diskPct: toText((asObj as { diskPct?: unknown }).diskPct),
+  };
+};
+
 const MonitorDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -465,7 +582,17 @@ const MonitorDetailPage = () => {
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
   const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+  const [notificationChannels, setNotificationChannels] = useState<NotificationChannelOption[]>([]);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
   const [selectedEditCredentialId, setSelectedEditCredentialId] = useState("");
+  const [thresholdForm, setThresholdForm] = useState<ThresholdForm>({
+    cpuPct: "",
+    ramPct: "",
+    diskPct: "",
+  });
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
+  const [alertRuleForm, setAlertRuleForm] = useState<AlertRuleForm>(() => emptyAlertRuleForm());
 
   const fetchMonitor = useCallback(async () => {
     if (!id) return;
@@ -498,6 +625,8 @@ const MonitorDetailPage = () => {
     if (!isAdmin) {
       setCredentials([]);
       setCredentialsLoaded(true);
+      setNotificationChannels([]);
+      setChannelsLoaded(true);
       return;
     }
 
@@ -515,6 +644,25 @@ const MonitorDetailPage = () => {
     };
 
     void loadCredentials();
+  }, [api, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const loadChannels = async () => {
+      try {
+        const response = await api.get<ApiResponse<NotificationChannelOption[]>>("/channels");
+        if (response.data.success) {
+          setNotificationChannels(response.data.data);
+        }
+      } catch {
+        // rule editor still works; user can add channels later
+      } finally {
+        setChannelsLoaded(true);
+      }
+    };
+
+    void loadChannels();
   }, [api, isAdmin]);
 
   const fetchDeviceMetrics = useCallback(async () => {
@@ -659,7 +807,7 @@ const MonitorDetailPage = () => {
 
         return {
           hour,
-          status: bucket?.status ?? "NO_DATA",
+          status: (bucket?.status ?? "NO_DATA") as MonitorStatus | "NO_DATA",
           checks: bucket?.count ?? 0,
         };
       }),
@@ -694,6 +842,13 @@ const MonitorDetailPage = () => {
     () => credentials.filter((credential) => compatibleCredentialTypes.includes(credential.type)),
     [compatibleCredentialTypes, credentials],
   );
+  const availableAlertMetrics = useMemo(() => {
+    const base = ["status", "response_time"];
+    if (monitor?.type === "SYSTEM" || monitor?.type === "SNMP") {
+      return [...base, "cpu.used_pct", "memory.used_pct", "disk.used_pct"];
+    }
+    return base;
+  }, [monitor?.type]);
 
   useEffect(() => {
     if (!credentialsLoaded) return;
@@ -946,6 +1101,7 @@ const MonitorDetailPage = () => {
       configText: toConfigText(monitor.config),
     });
     setSelectedEditCredentialId(monitor.credential?.id ?? "");
+    setThresholdForm(parseThresholdConfig(monitor.config));
     setIsEditing(true);
   };
 
@@ -1026,6 +1182,36 @@ const MonitorDetailPage = () => {
       return;
     }
 
+    if (editForm.type === "SYSTEM" || editForm.type === "SNMP") {
+      const toNumberOrNull = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : Number.NaN;
+      };
+      const cpuPct = toNumberOrNull(thresholdForm.cpuPct);
+      const ramPct = toNumberOrNull(thresholdForm.ramPct);
+      const diskPct = toNumberOrNull(thresholdForm.diskPct);
+      const values = [cpuPct, ramPct, diskPct].filter((value) => value !== null);
+      if (values.some((value) => Number.isNaN(value))) {
+        toast.error("Threshold ต้องเป็นตัวเลข");
+        return;
+      }
+      if (values.some((value) => (value as number) < 1 || (value as number) > 100)) {
+        toast.error("Threshold ต้องอยู่ระหว่าง 1-100%");
+        return;
+      }
+      const thresholdConfig: Record<string, number> = {};
+      if (cpuPct !== null) thresholdConfig.cpuPct = cpuPct as number;
+      if (ramPct !== null) thresholdConfig.ramPct = ramPct as number;
+      if (diskPct !== null) thresholdConfig.diskPct = diskPct as number;
+      if (Object.keys(thresholdConfig).length > 0) {
+        config.alertThresholds = thresholdConfig;
+      } else {
+        delete config.alertThresholds;
+      }
+    }
+
     setIsBusy(true);
 
     try {
@@ -1048,6 +1234,134 @@ const MonitorDetailPage = () => {
       await fetchMonitor();
     } catch {
       toast.error("แก้ไข monitor ไม่สำเร็จ");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const openCreateRule = (metric = "status") => {
+    const next = emptyAlertRuleForm();
+    next.metric = metric;
+    if (metric === "status") {
+      next.operator = "NEQ";
+      next.threshold = "3";
+      next.severity = "CRITICAL";
+    } else if (metric === "response_time") {
+      next.operator = "GT";
+      next.threshold = "2000";
+      next.severity = "WARNING";
+    } else {
+      next.operator = "GT";
+      next.threshold = "90";
+      next.severity = metric === "disk.used_pct" ? "CRITICAL" : "WARNING";
+    }
+    setEditingRule(null);
+    setAlertRuleForm(next);
+    setIsRuleModalOpen(true);
+  };
+
+  const openEditRule = (rule: AlertRule) => {
+    setEditingRule(rule);
+    setAlertRuleForm({
+      metric: rule.metric,
+      operator: rule.operator,
+      threshold: String(rule.threshold),
+      severity: rule.severity,
+      enabled: rule.enabled,
+      channelIds: rule.channels?.map((item) => item.channel.id) ?? [],
+    });
+    setIsRuleModalOpen(true);
+  };
+
+  const handleRuleMetricChange = (metric: string) => {
+    setAlertRuleForm((current) => {
+      if (metric === "status") {
+        return { ...current, metric, operator: "NEQ", threshold: "3" };
+      }
+      if (metric === "response_time") {
+        return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "2000" : current.threshold };
+      }
+      return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "90" : current.threshold };
+    });
+  };
+
+  const toggleRuleChannel = (channelId: string) => {
+    setAlertRuleForm((current) => ({
+      ...current,
+      channelIds: current.channelIds.includes(channelId)
+        ? current.channelIds.filter((id) => id !== channelId)
+        : [...current.channelIds, channelId],
+    }));
+  };
+
+  const handleSaveRule = async () => {
+    if (!monitor) return;
+    if (!availableAlertMetrics.includes(alertRuleForm.metric)) {
+      toast.error("metric นี้ใช้กับ monitor นี้ไม่ได้");
+      return;
+    }
+
+    const threshold = Number(alertRuleForm.threshold);
+    if (!Number.isFinite(threshold)) {
+      toast.error("threshold ต้องเป็นตัวเลข");
+      return;
+    }
+    if (alertRuleForm.metric === "status" && ![1, 2, 3].includes(threshold)) {
+      toast.error("เลือก status threshold ให้ถูกต้อง");
+      return;
+    }
+    if (alertRuleForm.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
+      toast.error("threshold เปอร์เซ็นต์ต้องอยู่ระหว่าง 0-100");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const payload = {
+        metric: alertRuleForm.metric,
+        operator: alertRuleForm.operator,
+        threshold,
+        severity: alertRuleForm.severity,
+        enabled: alertRuleForm.enabled,
+        channelIds: alertRuleForm.channelIds,
+      };
+      const response = editingRule
+        ? await api.patch<ApiResponse<AlertRule>>(`/monitors/${monitor.id}/alert-rules/${editingRule.id}`, payload)
+        : await api.post<ApiResponse<AlertRule>>(`/monitors/${monitor.id}/alert-rules`, payload);
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      toast.success(editingRule ? "อัปเดต alert rule แล้ว" : "สร้าง alert rule แล้ว");
+      setIsRuleModalOpen(false);
+      setEditingRule(null);
+      await fetchMonitor();
+    } catch {
+      toast.error("บันทึก alert rule ไม่สำเร็จ");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDeleteRule = async (rule: AlertRule) => {
+    if (!monitor) return;
+    if (!window.confirm(`ต้องการลบ rule "${alertMetricLabels[rule.metric] ?? rule.metric}" ใช่ไหม`)) return;
+
+    setIsBusy(true);
+    try {
+      const response = await api.delete<ApiResponse<{ message: string }>>(
+        `/monitors/${monitor.id}/alert-rules/${rule.id}`,
+      );
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+      toast.success("ลบ alert rule แล้ว");
+      await fetchMonitor();
+    } catch {
+      toast.error("ลบ alert rule ไม่สำเร็จ");
     } finally {
       setIsBusy(false);
     }
@@ -1809,7 +2123,7 @@ const MonitorDetailPage = () => {
                         {formatResponseTime(result.responseTimeMs)}
                       </td>
                       <td className="max-w-md px-4 py-3 text-slate-600">
-                        <span className="break-words">{result.message ?? "-"}</span>
+                        <span className="wrap-break-word">{result.message ?? "-"}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDateTime(result.checkedAt)}
@@ -1879,24 +2193,106 @@ const MonitorDetailPage = () => {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-950">Alert rules</h2>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">Alert rules</h2>
+                <p className="mt-1 text-xs text-slate-500">ตั้งเงื่อนไขและช่องทางแจ้งเตือนเฉพาะ monitor นี้</p>
+              </div>
+              {isAdmin ? (
+                <button
+                  className="rounded-md bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                  type="button"
+                  onClick={() => openCreateRule()}
+                >
+                  New rule
+                </button>
+              ) : null}
+            </div>
+            {isAdmin && isDeviceMonitor ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                {[
+                  { label: "CPU", metric: "cpu.used_pct", default: "> 90%", severity: "WARNING" },
+                  { label: "RAM", metric: "memory.used_pct", default: "> 90%", severity: "WARNING" },
+                  { label: "Disk", metric: "disk.used_pct", default: "> 90%", severity: "CRITICAL" },
+                ].map((preset) => (
+                  <button
+                    key={preset.metric}
+                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-left transition hover:bg-amber-100"
+                    type="button"
+                    onClick={() => openCreateRule(preset.metric)}
+                  >
+                    <p className="text-xs font-semibold text-amber-900">+ {preset.label} threshold</p>
+                    <p className="mt-0.5 text-[11px] text-amber-700">เตือนเมื่อ {preset.default} · {preset.severity}</p>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-3 divide-y divide-slate-100">
               {monitor.alertRules.length === 0 ? (
                 <div className="py-4 text-sm text-slate-500">ยังไม่มี alert rule</div>
               ) : null}
-              {monitor.alertRules.map((rule) => (
+              {monitor.alertRules.map((rule) => {
+                const { currentValue, isFiring } = evaluateAlertRule(rule, latestResult, latestMetadata);
+                return (
                 <div className="py-3" key={rule.id}>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-900">{rule.metric}</p>
-                    <span className="text-xs font-medium text-slate-500">
-                      {rule.enabled ? "Enabled" : "Disabled"}
-                    </span>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {alertMetricLabels[rule.metric] ?? rule.metric}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {currentValue !== null && rule.enabled ? (
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          isFiring
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}>
+                          {isFiring ? "▲ " : "✓ "}{formatCurrentRuleValue(rule.metric, currentValue)}
+                        </span>
+                      ) : null}
+                      <span className="text-xs text-slate-400">
+                        {rule.enabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {rule.operator} {rule.threshold} · {rule.severity}
+                    เตือนเมื่อ {operatorSymbols[rule.operator]} {formatAlertThreshold(rule.metric, rule.threshold)} · {rule.severity}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(rule.channels ?? []).length === 0 ? (
+                      <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-500">No channels</span>
+                    ) : null}
+                    {(rule.channels ?? []).map(({ channel }) => (
+                      <span
+                        className={`rounded px-2 py-1 text-[11px] ${
+                          channel.enabled ? "bg-cyan-50 text-cyan-700" : "bg-slate-100 text-slate-500"
+                        }`}
+                        key={channel.id}
+                      >
+                        {channel.name} · {channelTypeLabels[channel.type]}
+                      </span>
+                    ))}
+                  </div>
+                  {isAdmin ? (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                        type="button"
+                        onClick={() => openEditRule(rule)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rounded-md border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                        type="button"
+                        onClick={() => void handleDeleteRule(rule)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </aside>
@@ -1907,7 +2303,7 @@ const MonitorDetailPage = () => {
           <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">Edit monitor</h2>
-              <p className="mt-1 text-sm text-slate-500">{monitor.name}</p>
+              <p className="mt-1 text-sm text-slate-500">{monitor?.name}</p>
             </div>
 
             <div className="max-h-[75vh] overflow-y-auto p-5">
@@ -2022,6 +2418,56 @@ const MonitorDetailPage = () => {
                   <span className="text-sm font-medium text-slate-700">Enabled</span>
                 </label>
 
+                {editForm.type === "SYSTEM" || editForm.type === "SNMP" ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
+                    <p className="text-sm font-semibold text-amber-900">Device alert thresholds (%)</p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      เตือนตอนค่าเกิน threshold ครั้งแรก และเตือนอีกครั้งเมื่อกลับมาปกติ
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <label className="block">
+                        <span className="text-xs font-medium text-amber-900">CPU %</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                          min={1}
+                          max={100}
+                          type="number"
+                          value={thresholdForm.cpuPct}
+                          onChange={(event) =>
+                            setThresholdForm((current) => ({ ...current, cpuPct: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-amber-900">RAM %</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                          min={1}
+                          max={100}
+                          type="number"
+                          value={thresholdForm.ramPct}
+                          onChange={(event) =>
+                            setThresholdForm((current) => ({ ...current, ramPct: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-amber-900">Disk %</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                          min={1}
+                          max={100}
+                          type="number"
+                          value={thresholdForm.diskPct}
+                          onChange={(event) =>
+                            setThresholdForm((current) => ({ ...current, diskPct: event.target.value }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
+
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">Config JSON</span>
                   <textarea
@@ -2052,6 +2498,172 @@ const MonitorDetailPage = () => {
                 disabled={isBusy}
               >
                 Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isAdmin && isRuleModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">
+                {editingRule ? "Edit alert rule" : "Create alert rule"}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">{monitor?.name}</p>
+            </div>
+
+            <div className="max-h-[75vh] overflow-y-auto p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                  <span className="text-sm font-medium text-slate-700">Metric</span>
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    value={alertRuleForm.metric}
+                    onChange={(event) => handleRuleMetricChange(event.target.value)}
+                  >
+                    {availableAlertMetrics.map((metric) => (
+                      <option key={metric} value={metric}>
+                        {alertMetricLabels[metric] ?? metric}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Operator</span>
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    value={alertRuleForm.operator}
+                    onChange={(event) =>
+                      setAlertRuleForm((current) => ({
+                        ...current,
+                        operator: event.target.value as AlertOperator,
+                      }))
+                    }
+                  >
+                    <option value="GT">Greater than</option>
+                    <option value="LT">Less than</option>
+                    <option value="EQ">Equals</option>
+                    <option value="NEQ">Not equals</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Threshold</span>
+                  {alertRuleForm.metric === "status" ? (
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={alertRuleForm.threshold}
+                      onChange={(event) =>
+                        setAlertRuleForm((current) => ({ ...current, threshold: event.target.value }))
+                      }
+                    >
+                      <option value="3">UP</option>
+                      <option value="2">DEGRADED</option>
+                      <option value="1">DOWN</option>
+                    </select>
+                  ) : (
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      min={0}
+                      max={alertRuleForm.metric.endsWith("_pct") ? 100 : undefined}
+                      type="number"
+                      value={alertRuleForm.threshold}
+                      onChange={(event) =>
+                        setAlertRuleForm((current) => ({ ...current, threshold: event.target.value }))
+                      }
+                    />
+                  )}
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Severity</span>
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    value={alertRuleForm.severity}
+                    onChange={(event) =>
+                      setAlertRuleForm((current) => ({
+                        ...current,
+                        severity: event.target.value as AlertSeverity,
+                      }))
+                    }
+                  >
+                    <option value="INFO">Info</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </label>
+
+                <label className="flex items-center gap-3 pt-7">
+                  <input
+                    checked={alertRuleForm.enabled}
+                    className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                    type="checkbox"
+                    onChange={(event) =>
+                      setAlertRuleForm((current) => ({ ...current, enabled: event.target.checked }))
+                    }
+                  />
+                  <span className="text-sm font-medium text-slate-700">Enabled</span>
+                </label>
+
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-700">Notification channels</span>
+                    <Link className="text-xs font-semibold text-cyan-700 hover:text-cyan-900" to="/channels">
+                      Manage channels
+                    </Link>
+                  </div>
+                  <div className="mt-2 grid gap-2">
+                    {channelsLoaded && notificationChannels.length === 0 ? (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                        ยังไม่มี notification channel
+                      </div>
+                    ) : null}
+                    {notificationChannels.map((channel) => (
+                      <label
+                        className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2"
+                        key={channel.id}
+                      >
+                        <span className="min-w-0 text-sm text-slate-700">
+                          <span className="font-medium text-slate-900">{channel.name}</span>
+                          <span className="ml-2 text-xs text-slate-500">
+                            {channelTypeLabels[channel.type]} · {channel.enabled ? "Enabled" : "Disabled"}
+                          </span>
+                        </span>
+                        <input
+                          checked={alertRuleForm.channelIds.includes(channel.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                          type="checkbox"
+                          onChange={() => toggleRuleChannel(channel.id)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                type="button"
+                onClick={() => {
+                  setIsRuleModalOpen(false);
+                  setEditingRule(null);
+                }}
+                disabled={isBusy}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                type="button"
+                onClick={() => void handleSaveRule()}
+                disabled={isBusy}
+              >
+                {editingRule ? "Save rule" : "Create rule"}
               </button>
             </div>
           </div>

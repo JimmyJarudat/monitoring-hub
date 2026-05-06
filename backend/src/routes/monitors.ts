@@ -48,9 +48,81 @@ const monitorBody = t.Object({
   enabled: t.Optional(t.Boolean()),
 });
 
+const alertRuleBody = t.Object({
+  metric: t.String({ minLength: 1, maxLength: 80 }),
+  operator: t.Union([t.Literal("GT"), t.Literal("LT"), t.Literal("EQ"), t.Literal("NEQ")]),
+  threshold: t.Number(),
+  severity: t.Union([t.Literal("INFO"), t.Literal("WARNING"), t.Literal("CRITICAL")]),
+  enabled: t.Optional(t.Boolean()),
+  channelIds: t.Optional(t.Array(t.String())),
+});
+
 const isMonitorConfig = (value: unknown): value is MonitorConfig => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
+
+const allowedAlertMetrics = new Set([
+  "status",
+  "response_time",
+  "cpu.used_pct",
+  "memory.used_pct",
+  "disk.used_pct",
+]);
+
+const validateAlertRuleInput = (
+  monitorType: MonitorType,
+  body: { metric: string; threshold: number },
+) => {
+  if (!allowedAlertMetrics.has(body.metric)) return "metric นี้ยังไม่รองรับ";
+  if (!Number.isFinite(body.threshold)) return "threshold ต้องเป็นตัวเลข";
+  if (body.metric === "status" && ![1, 2, 3].includes(body.threshold)) {
+    return "status threshold ต้องเป็น 1=DOWN, 2=DEGRADED, 3=UP";
+  }
+  if (body.metric === "response_time" && body.threshold < 0) {
+    return "response_time threshold ต้องมากกว่าหรือเท่ากับ 0";
+  }
+  if (body.metric.endsWith("_pct")) {
+    if (monitorType !== "SYSTEM" && monitorType !== "SNMP") {
+      return "CPU/RAM/Disk rule ใช้ได้กับ SYSTEM หรือ SNMP monitor เท่านั้น";
+    }
+    if (body.threshold < 0 || body.threshold > 100) return "percent threshold ต้องอยู่ระหว่าง 0-100";
+  }
+  return null;
+};
+
+const syncAlertRuleChannels = async (
+  tx: Prisma.TransactionClient,
+  alertRuleId: string,
+  channelIds: string[] | undefined,
+) => {
+  if (!channelIds) return;
+  const uniqueChannelIds = Array.from(new Set(channelIds.filter((id) => id.trim().length > 0)));
+  const existingChannels = await tx.notificationChannel.findMany({
+    where: { id: { in: uniqueChannelIds } },
+    select: { id: true },
+  });
+
+  if (existingChannels.length !== uniqueChannelIds.length) {
+    throw new Error("มี notification channel ที่ไม่พบในระบบ");
+  }
+
+  await tx.alertRuleChannel.deleteMany({ where: { alertRuleId } });
+  if (uniqueChannelIds.length > 0) {
+    await tx.alertRuleChannel.createMany({
+      data: uniqueChannelIds.map((channelId) => ({ alertRuleId, channelId })),
+    });
+  }
+};
+
+const alertRuleInclude = {
+  channels: {
+    include: {
+      channel: {
+        select: { id: true, name: true, type: true, enabled: true },
+      },
+    },
+  },
+} satisfies Prisma.AlertRuleInclude;
 
 const getCompatibleCredentialTypes = (
   type: MonitorType,
@@ -485,7 +557,10 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
             orderBy: { checkedAt: "desc" },
             take: resultsLimit + 1,
           },
-          alertRules: true,
+          alertRules: {
+            orderBy: [{ createdAt: "asc" }],
+            include: alertRuleInclude,
+          },
           incidents: {
             orderBy: { startedAt: "desc" },
             take: 20,
@@ -631,6 +706,131 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
     {
       params: t.Object({ id: t.String() }),
       body: t.Partial(monitorBody),
+    },
+  )
+  .post(
+    "/:id/alert-rules",
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const monitor = await prisma.monitor.findUnique({
+        where: { id: params.id },
+        select: { id: true, type: true },
+      });
+      if (!monitor) {
+        set.status = 404;
+        return fail("ไม่พบ monitor");
+      }
+
+      const validationError = validateAlertRuleInput(monitor.type as MonitorType, body);
+      if (validationError) {
+        set.status = 400;
+        return fail(validationError);
+      }
+
+      try {
+        const rule = await prisma.$transaction(async (tx) => {
+          const created = await tx.alertRule.create({
+            data: {
+              monitorId: monitor.id,
+              metric: body.metric.trim(),
+              operator: body.operator,
+              threshold: body.threshold,
+              severity: body.severity,
+              enabled: body.enabled ?? true,
+            },
+          });
+          await syncAlertRuleChannels(tx, created.id, body.channelIds);
+          return tx.alertRule.findUniqueOrThrow({
+            where: { id: created.id },
+            include: alertRuleInclude,
+          });
+        });
+
+        set.status = 201;
+        return ok(rule);
+      } catch (error) {
+        set.status = 400;
+        return fail(error instanceof Error ? error.message : "สร้าง alert rule ไม่สำเร็จ");
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: alertRuleBody,
+    },
+  )
+  .patch(
+    "/:id/alert-rules/:ruleId",
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const existing = await prisma.alertRule.findFirst({
+        where: { id: params.ruleId, monitorId: params.id },
+        include: { monitor: { select: { type: true } } },
+      });
+      if (!existing) {
+        set.status = 404;
+        return fail("ไม่พบ alert rule");
+      }
+
+      const nextMetric = body.metric ?? existing.metric;
+      const nextThreshold = body.threshold ?? existing.threshold;
+      const validationError = validateAlertRuleInput(existing.monitor.type as MonitorType, {
+        metric: nextMetric,
+        threshold: nextThreshold,
+      });
+      if (validationError) {
+        set.status = 400;
+        return fail(validationError);
+      }
+
+      try {
+        const rule = await prisma.$transaction(async (tx) => {
+          await tx.alertRule.update({
+            where: { id: existing.id },
+            data: {
+              metric: body.metric?.trim(),
+              operator: body.operator,
+              threshold: body.threshold,
+              severity: body.severity,
+              enabled: body.enabled,
+            },
+          });
+          await syncAlertRuleChannels(tx, existing.id, body.channelIds);
+          return tx.alertRule.findUniqueOrThrow({
+            where: { id: existing.id },
+            include: alertRuleInclude,
+          });
+        });
+
+        return ok(rule);
+      } catch (error) {
+        set.status = 400;
+        return fail(error instanceof Error ? error.message : "อัปเดต alert rule ไม่สำเร็จ");
+      }
+    },
+    {
+      params: t.Object({ id: t.String(), ruleId: t.String() }),
+      body: t.Partial(alertRuleBody),
+    },
+  )
+  .delete(
+    "/:id/alert-rules/:ruleId",
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+      const existing = await prisma.alertRule.findFirst({
+        where: { id: params.ruleId, monitorId: params.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        set.status = 404;
+        return fail("ไม่พบ alert rule");
+      }
+      await prisma.alertRule.delete({ where: { id: existing.id } });
+      return ok({ message: "ลบ alert rule แล้ว" });
+    },
+    {
+      params: t.Object({ id: t.String(), ruleId: t.String() }),
     },
   )
   .post(
