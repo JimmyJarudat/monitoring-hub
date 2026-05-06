@@ -16,6 +16,7 @@ const channelTypeSchema = t.Union([
   t.Literal("DISCORD"),
   t.Literal("EMAIL"),
   t.Literal("TELEGRAM"),
+  t.Literal("WEBHOOK"),
 ]);
 
 const channelBodySchema = t.Object({

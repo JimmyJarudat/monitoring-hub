@@ -259,6 +259,7 @@ enum ChannelType {
   SLACK
   DISCORD
   TELEGRAM
+  WEBHOOK
 }
 
 model AlertRuleChannel {

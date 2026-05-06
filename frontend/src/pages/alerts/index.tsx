@@ -6,7 +6,7 @@ import { useApi } from "@/hooks/useApi";
 type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "SYSTEM" | "DOCKER" | "DATABASE";
 type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
 type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
-type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM";
+type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM" | "WEBHOOK";
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
 
@@ -90,6 +90,7 @@ const channelTypeLabels: Record<ChannelType, string> = {
   DISCORD: "Discord",
   EMAIL: "Email",
   TELEGRAM: "Telegram",
+  WEBHOOK: "Webhook",
 };
 
 const metricLabel = (metric: string) =>

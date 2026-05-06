@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
-type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM";
+type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM" | "WEBHOOK";
 
 type ChannelRow = {
   id: string;
@@ -51,6 +51,7 @@ const channelTypeLabels: Record<ChannelType, string> = {
   DISCORD: "Discord Webhook",
   EMAIL: "Email SMTP",
   TELEGRAM: "Telegram Bot",
+  WEBHOOK: "Custom Webhook",
 };
 
 const emptyForm = (): ChannelForm => ({
