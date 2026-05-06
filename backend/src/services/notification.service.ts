@@ -4,6 +4,17 @@ import type { ChannelType } from "../generated/prisma/enums";
 import nodemailer from "nodemailer";
 import { decryptCredentialSecret, encryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
+import {
+  buildLineIncidentMessage,
+  buildLineTestMessage,
+  buildTelegramIncidentMessage,
+  buildTelegramTestMessage,
+  buildEmailIncidentMessage,
+  buildEmailTestMessage,
+  buildWebhookIncidentPayload,
+  buildWebhookTestPayload,
+  type IncidentTemplateData,
+} from "./templates";
 
 type JsonObject = Prisma.InputJsonObject;
 
@@ -221,36 +232,17 @@ export const toDisplayChannelConfig = (channel: NotificationChannel) => {
 
 type IncidentNotificationKind = "transition" | "reminder";
 
-const buildIncidentMessage = (
-  monitor: Monitor,
-  status: IncidentStatus,
-  message: string | null,
-  kind: IncidentNotificationKind = "transition",
-) => {
-  const icon = status === "RESOLVED" ? "✅" : kind === "reminder" ? "⏰" : "🚨";
-  const title =
-    status === "RESOLVED"
-      ? "Incident Resolved"
-      : kind === "reminder"
-        ? "Incident Reminder"
-        : "Incident Opened";
-  const details = message?.trim() || (status === "RESOLVED" ? "Monitor recovered" : "Monitor reported issue");
-  return `${icon} ${title}\nMonitor: ${monitor.name}\nType: ${monitor.type}\nStatus: ${status}\nMessage: ${details}`;
-};
-
-const sendTelegram = async (config: TelegramConfig, text: string) => {
+const sendTelegram = async (config: TelegramConfig, text: string, parseMode: "HTML" = "HTML") => {
   const response = await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: config.chatId,
       text,
+      parse_mode: parseMode,
       disable_web_page_preview: true,
     }),
   });
-
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Telegram API failed (${response.status}): ${body}`);
@@ -260,19 +252,20 @@ const sendTelegram = async (config: TelegramConfig, text: string) => {
 const sendWebhook = async (webhookUrl: string, payload: Record<string, unknown>) => {
   const response = await fetch(webhookUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Webhook delivery failed (${response.status}): ${body}`);
   }
 };
 
-const sendLineMessage = async (config: LineConfig, text: string) => {
+const sendLineFlexMessage = async (
+  config: LineConfig,
+  altText: string,
+  flexContents: object,
+) => {
   const response = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
@@ -281,7 +274,7 @@ const sendLineMessage = async (config: LineConfig, text: string) => {
     },
     body: JSON.stringify({
       to: config.to,
-      messages: [{ type: "text", text }],
+      messages: [{ type: "flex", altText, contents: flexContents }],
     }),
   });
   if (!response.ok) {
@@ -290,59 +283,66 @@ const sendLineMessage = async (config: LineConfig, text: string) => {
   }
 };
 
-const sendEmailMessage = async (config: EmailConfig, subject: string, text: string) => {
+const sendEmailMessage = async (
+  config: EmailConfig,
+  subject: string,
+  text: string,
+  html: string,
+) => {
   const transporter = nodemailer.createTransport({
     host: config.host,
     port: config.port,
     secure: config.secure,
-    auth: {
-      user: config.username,
-      pass: config.password,
-    },
+    auth: { user: config.username, pass: config.password },
   });
-  await transporter.sendMail({
-    from: config.from,
-    to: config.to,
-    subject,
-    text,
-  });
+  await transporter.sendMail({ from: config.from, to: config.to, subject, text, html });
 };
 
-const deliverChannelMessage = async (
-  channel: NotificationChannel,
-  content: { subject: string; text: string; webhookPayload: Record<string, unknown> },
-) => {
+type AllChannelContent = {
+  telegram: { text: string; parseMode: "HTML" };
+  line: { altText: string; flexContents: object };
+  email: { subject: string; text: string; html: string };
+  webhook: { payload: Record<string, unknown> };
+};
+
+const buildIncidentContent = (data: IncidentTemplateData): AllChannelContent => ({
+  telegram: buildTelegramIncidentMessage(data),
+  line: buildLineIncidentMessage(data),
+  email: buildEmailIncidentMessage(data),
+  webhook: buildWebhookIncidentPayload(data),
+});
+
+const buildTestContent = (data: { channelName: string; channelType: string; sentAt: string }): AllChannelContent => ({
+  telegram: buildTelegramTestMessage(data),
+  line: buildLineTestMessage(data),
+  email: buildEmailTestMessage(data),
+  webhook: buildWebhookTestPayload(data),
+});
+
+const deliverChannelMessage = async (channel: NotificationChannel, content: AllChannelContent) => {
   if (channel.type === "TELEGRAM") {
-    const telegramConfig = resolveTelegramConfig(channel);
-    if (!telegramConfig) {
-      throw new Error("Invalid telegram config");
-    }
-    await sendTelegram(telegramConfig, content.text);
+    const cfg = resolveTelegramConfig(channel);
+    if (!cfg) throw new Error("Invalid telegram config");
+    await sendTelegram(cfg, content.telegram.text, content.telegram.parseMode);
     return;
   }
   if (channel.type === "LINE") {
-    const lineConfig = resolveLineConfig(channel);
-    if (!lineConfig) {
-      throw new Error("Invalid LINE config");
-    }
-    await sendLineMessage(lineConfig, content.text);
+    const cfg = resolveLineConfig(channel);
+    if (!cfg) throw new Error("Invalid LINE config");
+    await sendLineFlexMessage(cfg, content.line.altText, content.line.flexContents);
     return;
   }
   if (channel.type === "EMAIL") {
-    const emailConfig = resolveEmailConfig(channel);
-    if (!emailConfig) {
-      throw new Error("Invalid EMAIL config");
-    }
-    await sendEmailMessage(emailConfig, content.subject, content.text);
+    const cfg = resolveEmailConfig(channel);
+    if (!cfg) throw new Error("Invalid EMAIL config");
+    await sendEmailMessage(cfg, content.email.subject, content.email.text, content.email.html);
     return;
   }
 
   const cfg = isObject(channel.config) ? channel.config : {};
   const webhookUrl = typeof cfg.webhookUrl === "string" ? cfg.webhookUrl : "";
-  if (!webhookUrl) {
-    throw new Error("Missing webhookUrl");
-  }
-  await sendWebhook(webhookUrl, content.webhookPayload);
+  if (!webhookUrl) throw new Error("Missing webhookUrl");
+  await sendWebhook(webhookUrl, content.webhook.payload);
 };
 
 export const notifyIncidentTransition = async (params: {
@@ -396,27 +396,21 @@ const notifyIncident = async (params: {
 
   if (channels.length === 0) return;
 
-  const text = buildIncidentMessage(params.monitor, params.status, params.message, params.kind);
-  const subjectStatus = params.kind === "reminder" ? "REMINDER" : params.status;
-  const subject = `[Monitoring Hub] ${subjectStatus} - ${params.monitor.name}`;
-  const webhookPayload = {
-    incidentId: params.incidentId,
-    alertRuleId: params.alertRuleId ?? null,
-    kind: params.kind,
+  const templateData: IncidentTemplateData = {
+    monitorName: params.monitor.name,
+    monitorType: params.monitor.type,
     status: params.status,
-    monitor: {
-      id: params.monitor.id,
-      name: params.monitor.name,
-      type: params.monitor.type,
-    },
     message: params.message,
+    kind: params.kind,
+    incidentId: params.incidentId,
     sentAt: new Date().toISOString(),
   };
+  const content = buildIncidentContent(templateData);
 
   await Promise.all(
     channels.map(async (channel) => {
       try {
-        await deliverChannelMessage(channel, { subject, text, webhookPayload });
+        await deliverChannelMessage(channel, content);
       } catch (error) {
         console.error(`[notify] failed channel ${channel.id} (${channel.type})`, error);
       }
@@ -430,18 +424,12 @@ export const testNotificationChannel = async (channelId: string) => {
     throw new Error("ไม่พบ notification channel");
   }
 
-  const sentAt = new Date().toISOString();
-  const text = `🧪 Monitoring Hub test message\nChannel: ${channel.name}\nType: ${channel.type}\nSent: ${sentAt}`;
-  const subject = `[Monitoring Hub] Test channel - ${channel.name}`;
-  const webhookPayload = {
-    type: "channel_test",
-    channelId: channel.id,
+  const content = buildTestContent({
     channelName: channel.name,
     channelType: channel.type,
-    sentAt,
-  };
-
-  await deliverChannelMessage(channel, { subject, text, webhookPayload });
+    sentAt: new Date().toISOString(),
+  });
+  await deliverChannelMessage(channel, content);
 };
 
 export const testNotificationChannelDraft = async (params: {
@@ -472,15 +460,10 @@ export const testNotificationChannelDraft = async (params: {
     createdAt: new Date(),
   } as NotificationChannel;
 
-  const sentAt = new Date().toISOString();
-  const text = `🧪 Monitoring Hub draft test message\nChannel: ${draftChannel.name}\nType: ${draftChannel.type}\nSent: ${sentAt}`;
-  const subject = `[Monitoring Hub] Draft test - ${draftChannel.name}`;
-  const webhookPayload = {
-    type: "channel_draft_test",
+  const content = buildTestContent({
     channelName: draftChannel.name,
     channelType: draftChannel.type,
-    sentAt,
-  };
-
-  await deliverChannelMessage(draftChannel, { subject, text, webhookPayload });
+    sentAt: new Date().toISOString(),
+  });
+  await deliverChannelMessage(draftChannel, content);
 };
