@@ -61,7 +61,7 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Users", path: "/users", icon: "U", badge: "Soon" },
       { label: "Audit Logs", path: "/audit-logs", icon: "L", badge: "Soon" },
-      { label: "Settings", path: "/settings", icon: "S", badge: "Soon" },
+      { label: "Settings", path: "/settings", icon: "S" },
     ],
   },
 ];

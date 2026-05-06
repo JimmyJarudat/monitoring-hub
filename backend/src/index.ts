@@ -7,6 +7,7 @@ import { AuthError } from "./middleware/auth";
 import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
+import { startRetentionScheduler } from "./services/retention.service";
 
 const migratePlaintextCredentialSecrets = async () => {
   const credentials = await prisma.credential.findMany({
@@ -54,6 +55,7 @@ const bootstrap = async () => {
     .listen({ port: config.port, hostname: config.host });
 
   monitorRunner.start();
+  startRetentionScheduler();
 
   console.log(`Server running at http://${app.server?.hostname}:${app.server?.port}`);
 };
