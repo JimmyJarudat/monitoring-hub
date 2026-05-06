@@ -379,7 +379,7 @@ const notifyIncident = async (params: {
   message: string | null;
   kind: IncidentNotificationKind;
 }) => {
-  const channels = params.alertRuleId
+  let channels = params.alertRuleId
     ? (
         await prisma.alertRuleChannel.findMany({
           where: {
@@ -393,6 +393,14 @@ const notifyIncident = async (params: {
         where: { enabled: true },
         orderBy: [{ createdAt: "asc" }],
       });
+
+  // Rule has no specific channels assigned → fall back to all enabled channels
+  if (params.alertRuleId && channels.length === 0) {
+    channels = await prisma.notificationChannel.findMany({
+      where: { enabled: true },
+      orderBy: [{ createdAt: "asc" }],
+    });
+  }
 
   if (channels.length === 0) return;
 
@@ -416,6 +424,57 @@ const notifyIncident = async (params: {
       }
     }),
   );
+};
+
+export const notifyIncidentNow = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId: string;
+  message: string | null;
+}) => {
+  const linkedChannels = (
+    await prisma.alertRuleChannel.findMany({
+      where: { alertRuleId: params.alertRuleId, channel: { enabled: true } },
+      include: { channel: true },
+    })
+  ).map((item) => item.channel);
+
+  const channels =
+    linkedChannels.length > 0
+      ? linkedChannels
+      : await prisma.notificationChannel.findMany({
+          where: { enabled: true },
+          orderBy: [{ createdAt: "asc" }],
+        });
+
+  if (channels.length === 0) {
+    throw new Error("ไม่มี enabled notification channel ที่ผูกกับ rule นี้ และไม่มี global channel ที่เปิดใช้งาน");
+  }
+
+  const content = buildIncidentContent({
+    monitorName: params.monitor.name,
+    monitorType: params.monitor.type,
+    status: "OPEN",
+    message: params.message,
+    kind: "transition",
+    incidentId: params.incidentId,
+    sentAt: new Date().toISOString(),
+  });
+
+  const errors: string[] = [];
+  await Promise.all(
+    channels.map(async (channel) => {
+      try {
+        await deliverChannelMessage(channel, content);
+      } catch (error) {
+        errors.push(`${channel.name} (${channel.type}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }),
+  );
+
+  if (errors.length > 0) {
+    throw new Error(`ส่งไม่สำเร็จ: ${errors.join(" | ")}`);
+  }
 };
 
 export const testNotificationChannel = async (channelId: string) => {

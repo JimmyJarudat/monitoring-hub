@@ -133,6 +133,7 @@ const AlertsPage = () => {
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<AlertRuleRow | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<RuleForm>(() => emptyForm([]));
@@ -330,6 +331,37 @@ const AlertsPage = () => {
     }
   };
 
+  const handleNotifyNow = async (rule: AlertRuleRow) => {
+    setNotifyingId(rule.id);
+    try {
+      const res = await api.post<ApiResponse<{ message: string }>>(
+        `/monitors/${rule.monitorId}/alert-rules/${rule.id}/notify`,
+      );
+      if (!res.data.success) {
+        toast.error(res.data.message);
+        return;
+      }
+      toast.success("ส่งแจ้งเตือนแล้ว");
+    } catch (error) {
+      const apiMessage =
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response &&
+        error.response.data &&
+        typeof error.response.data === "object" &&
+        "message" in error.response.data &&
+        typeof (error.response.data as { message?: unknown }).message === "string"
+          ? (error.response.data as { message: string }).message
+          : null;
+      toast.error(apiMessage ?? "ส่งแจ้งเตือนไม่สำเร็จ");
+    } finally {
+      setNotifyingId(null);
+    }
+  };
+
   const handleToggleRule = async (rule: AlertRuleRow) => {
     try {
       const res = await api.patch<ApiResponse<AlertRuleRow>>(
@@ -516,6 +548,16 @@ const AlertsPage = () => {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
+                      {rule.openIncident ? (
+                        <button
+                          type="button"
+                          disabled={notifyingId === rule.id}
+                          onClick={() => void handleNotifyNow(rule)}
+                          className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+                        >
+                          {notifyingId === rule.id ? "Sending..." : "Notify"}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void handleToggleRule(rule)}

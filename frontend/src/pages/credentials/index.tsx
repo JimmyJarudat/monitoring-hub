@@ -276,7 +276,7 @@ const CredentialsPage = () => {
       name: credential.name,
       type: credential.type,
       username: credential.username ?? "",
-      secret: credential.secret,
+      secret: revealedSecrets[credential.id] ?? "",
       notes: credential.notes ?? "",
       metadataText: JSON.stringify(credential.metadata ?? {}, null, 2),
     });
@@ -298,7 +298,7 @@ const CredentialsPage = () => {
       return;
     }
 
-    if (!form.name.trim() || !form.secret.trim()) {
+    if (!form.name.trim() || (!editingCredential && !form.secret.trim())) {
       toast.error(secretFieldLabels[form.type].requiredText);
       return;
     }
@@ -312,7 +312,7 @@ const CredentialsPage = () => {
       name: form.name.trim(),
       type: form.type,
       username: form.username.trim() || undefined,
-      secret: form.secret,
+      secret: form.secret.trim() || undefined,
       notes: form.notes.trim() || undefined,
       metadata,
     };
@@ -766,11 +766,16 @@ const CredentialsPage = () => {
 
               <label className="block sm:col-span-2">
                 <span className="text-sm font-medium text-slate-700">
-                  {secretField.label} <span className="ml-1 text-rose-500">*</span>
+                  {secretField.label}{" "}
+                  {editingCredential ? (
+                    <span className="ml-1 font-normal text-slate-400">(เว้นว่างเพื่อคงค่าเดิม)</span>
+                  ) : (
+                    <span className="ml-1 text-rose-500">*</span>
+                  )}
                 </span>
                 <textarea
                   className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  placeholder={secretField.placeholder}
+                  placeholder={editingCredential ? "เว้นว่างเพื่อคงค่าเดิม" : secretField.placeholder}
                   value={form.secret}
                   onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
                 />

@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
 import { runMonitorCheck } from "../services/monitor.Runner";
+import { notifyIncidentNow } from "../services/notification.service";
 
 const monitorTypes = ["PING", "TCP", "HTTP", "TLS_CERT", "DNS", "SNMP", "SYSTEM", "DOCKER", "DATABASE"] as const;
 const databaseTypes = [
@@ -828,6 +829,47 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       }
       await prisma.alertRule.delete({ where: { id: existing.id } });
       return ok({ message: "ลบ alert rule แล้ว" });
+    },
+    {
+      params: t.Object({ id: t.String(), ruleId: t.String() }),
+    },
+  )
+  .post(
+    "/:id/alert-rules/:ruleId/notify",
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const rule = await prisma.alertRule.findFirst({
+        where: { id: params.ruleId, monitorId: params.id },
+        include: { monitor: true },
+      });
+      if (!rule) {
+        set.status = 404;
+        return fail("ไม่พบ alert rule");
+      }
+
+      const openIncident = await prisma.incident.findFirst({
+        where: { alertRuleId: rule.id, status: "OPEN" },
+        orderBy: { startedAt: "desc" },
+      });
+      if (!openIncident) {
+        set.status = 400;
+        return fail("ไม่มี open incident สำหรับ rule นี้");
+      }
+
+      try {
+        await notifyIncidentNow({
+          monitor: rule.monitor,
+          incidentId: openIncident.id,
+          alertRuleId: rule.id,
+          message: openIncident.message,
+        });
+      } catch (error) {
+        set.status = 400;
+        return fail(error instanceof Error ? error.message : "ส่งแจ้งเตือนไม่สำเร็จ");
+      }
+
+      return ok({ message: "ส่งแจ้งเตือนแล้ว" });
     },
     {
       params: t.Object({ id: t.String(), ruleId: t.String() }),

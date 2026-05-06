@@ -64,10 +64,9 @@ export const buildLineIncidentMessage = (data: IncidentTemplateData): LineTempla
         {
           type: "text",
           text: statusBadge,
-          color: "#FFFFFF",
+          color: "#DDDDDD",
           size: "xs",
           margin: "xs",
-          alpha: 0.8,
         },
       ],
     },
