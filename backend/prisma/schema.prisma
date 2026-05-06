@@ -258,6 +258,7 @@ enum ChannelType {
   EMAIL
   SLACK
   DISCORD
+  TELEGRAM
 }
 
 model AlertRuleChannel {

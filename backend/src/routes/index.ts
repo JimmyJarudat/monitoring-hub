@@ -7,6 +7,7 @@ import { incidentRoutes } from "./incidents";
 import { groupRoutes } from "./groups";
 import { credentialRoutes } from "./credentials";
 import { adminRoutes } from "./admin";
+import { channelRoutes } from "./channels";
 import { ok } from "../lib/response";
 
 // Public routes — ไม่ต้องมี token
@@ -22,4 +23,5 @@ export const protectedRoutes = new Elysia()
   .use(incidentRoutes) // /incidents
   .use(groupRoutes) // /groups
   .use(credentialRoutes) // /credentials
+  .use(channelRoutes) // /channels
   .use(adminRoutes); // /admin

@@ -55,7 +55,7 @@ const sidebarSections: SidebarSection[] = [
     title: "Alerting",
     items: [
       { label: "Alert Rules", path: "/alerts", icon: "A", badge: "Soon" },
-      { label: "Channels", path: "/channels", icon: "C", badge: "Soon" },
+      { label: "Channels", path: "/channels", icon: "C", adminOnly: true },
       { label: "Maintenance", path: "/maintenance", icon: "N", badge: "Soon" },
     ],
   },

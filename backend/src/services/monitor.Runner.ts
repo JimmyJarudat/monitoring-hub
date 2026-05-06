@@ -13,6 +13,7 @@ import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
 import { tcpCheck } from "./checkers/tcp.Checker";
 import { tlsCheck } from "./checkers/tls.Checker";
+import { notifyIncidentTransition } from "./notification.service";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -137,13 +138,19 @@ const reconcileIncident = async (
   if (result.status === "UP") {
     if (!openIncident) return;
 
-    await prisma.incident.update({
+    const resolvedIncident = await prisma.incident.update({
       where: { id: openIncident.id },
       data: {
         status: "RESOLVED",
         resolvedAt: result.checkedAt,
         message: result.message ?? openIncident.message,
       },
+    });
+    await notifyIncidentTransition({
+      monitor,
+      incidentId: resolvedIncident.id,
+      status: "RESOLVED",
+      message: resolvedIncident.message,
     });
     return;
   }
@@ -158,13 +165,19 @@ const reconcileIncident = async (
     return;
   }
 
-  await prisma.incident.create({
+  const createdIncident = await prisma.incident.create({
     data: {
       monitorId: monitor.id,
       status: "OPEN",
       message: result.message ?? `Monitor ${monitor.name} reported ${result.status}`,
       startedAt: result.checkedAt,
     },
+  });
+  await notifyIncidentTransition({
+    monitor,
+    incidentId: createdIncident.id,
+    status: "OPEN",
+    message: createdIncident.message,
   });
 };
 
