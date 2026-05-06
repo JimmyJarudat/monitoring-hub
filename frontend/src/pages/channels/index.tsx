@@ -622,18 +622,52 @@ const ChannelsPage = () => {
                   </label>
                 </>
               ) : (
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Webhook URL</span>
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={form.webhookUrl}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, webhookUrl: event.target.value }))
-                    }
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  />
-                </label>
+                <>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Webhook URL</span>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={form.webhookUrl}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, webhookUrl: event.target.value }))
+                      }
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    />
+                  </label>
+                  {form.type === "WEBHOOK" ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        ตัวอย่าง payload ที่จะส่ง
+                      </p>
+                      <pre className="overflow-x-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
+                        {
+                          event: "incident",
+                          status: "OPEN",
+                          kind: "transition",
+                          monitor: { name: "My Monitor", type: "HTTP" },
+                          message: "Monitor reported issue",
+                          incidentId: "cmxxxxxxxxxxxxxxx",
+                          sentAt: "2024-01-15T10:30:00.000Z",
+                        },
+                        null,
+                        2,
+                      )}</pre>
+                      <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        ตัวอย่าง test payload
+                      </p>
+                      <pre className="mt-1 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
+                        {
+                          event: "test",
+                          channel: { name: form.name || "My Webhook", type: "WEBHOOK" },
+                          sentAt: "2024-01-15T10:30:00.000Z",
+                        },
+                        null,
+                        2,
+                      )}</pre>
+                    </div>
+                  ) : null}
+                </>
               )}
               <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                 <input
