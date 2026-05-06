@@ -31,7 +31,7 @@ const App = () => {
           <header className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-cyan-300">Monitoring Hub</p>
-              <p className="mt-1 text-sm text-slate-400">Lightweight NMS direction</p>
+              <p className="mt-1 text-sm text-slate-400">Lightweight Monitor direction</p>
             </div>
 
             <div className="flex items-center gap-3">

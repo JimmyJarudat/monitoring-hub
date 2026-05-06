@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
+import { useSystemConfig } from "@/contexts/systemConfig.context";
 import { isAdminUser } from "@/utils/permissions";
+import { API_BASE_URL } from "@/utils/apiUrl";
 
 type SidebarItem = {
   label: string;
@@ -16,12 +18,6 @@ type SidebarSection = {
   items: SidebarItem[];
 };
 
-const brand = {
-  name: "Monitoring Hub",
-  tagline: "Lightweight NMS",
-  logoSrc: "",
-  logoText: "MH",
-};
 
 const sidebarSections: SidebarSection[] = [
   {
@@ -62,7 +58,7 @@ const sidebarSections: SidebarSection[] = [
   {
     title: "System",
     items: [
-      { label: "Users", path: "/users", icon: "U", badge: "Soon", adminOnly: true },
+      { label: "Users", path: "/users", icon: "U", adminOnly: true },
       { label: "Audit Logs", path: "/audit-logs", icon: "L", adminOnly: true },
       { label: "Settings", path: "/settings", icon: "S", adminOnly: true },
     ],
@@ -72,25 +68,26 @@ const sidebarSections: SidebarSection[] = [
 const Sidebar = () => {
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
+  const { config } = useSystemConfig();
 
   return (
     <aside className="flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-950 text-white">
       <div className="flex h-20 items-center gap-3 border-b border-slate-800 px-5">
-        {brand.logoSrc ? (
+        {config.general.logoUrl ? (
           <img
+            src={`${API_BASE_URL}${config.general.logoUrl}`}
+            alt="logo"
             className="h-10 w-10 rounded-lg object-cover"
-            src={brand.logoSrc}
-            alt={`${brand.name} logo`}
           />
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-400 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-400/20">
-            {brand.logoText}
+            {config.general.logoText}
           </div>
         )}
 
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{brand.name}</p>
-          <p className="truncate text-xs text-slate-400">{brand.tagline}</p>
+          <p className="truncate text-sm font-semibold text-white">{config.general.systemName}</p>
+          <p className="truncate text-xs text-slate-400">{config.general.tagline}</p>
         </div>
       </div>
 
@@ -157,13 +154,19 @@ const Sidebar = () => {
         })}
       </nav>
 
-      <div className="border-t border-slate-800 p-4">
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-          <p className="text-xs font-medium text-slate-300">API Status</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-xs text-slate-400">Ready for checks</span>
+      <div className="border-t border-slate-800 px-4 py-3">
+        <div className="rounded-xl border border-slate-700/60 bg-linear-to-b from-slate-800/60 to-slate-900/80 px-3.5 py-3 shadow-inner">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-200 truncate">
+              {config.general.systemName}
+            </span>
+            <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-cyan-400 border border-cyan-400/20 shrink-0 ml-2">
+              v{__APP_VERSION__}
+            </span>
           </div>
+          <p className="mt-1.5 text-[10px] text-slate-500">
+            &copy; {new Date().getFullYear()} All rights reserved.
+          </p>
         </div>
       </div>
     </aside>

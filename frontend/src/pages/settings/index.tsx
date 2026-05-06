@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
+import { useSystemConfig } from "@/contexts/systemConfig.context";
+import type { SystemConfig } from "@/contexts/systemConfig.context";
+import { API_BASE_URL } from "@/utils/apiUrl";
 
 type RetentionConfig = {
   results_days: number;
@@ -63,8 +66,81 @@ const formatDateTime = (value: string | null) =>
 const getDeletedTotal = (summary: RetentionLastRun) =>
   summary.deletedResults + summary.deletedMetrics + summary.deletedAuditLogs;
 
+const SYS_DEFAULTS: SystemConfig = {
+  general: { systemName: "Monitoring Hub", tagline: "Lightweight Monitor", logoText: "MH", logoUrl: null },
+  alerting: { incidentReminderIntervalHours: 24 },
+  monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
+  security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+};
+
+const REMINDER_OPTIONS = [1, 2, 4, 6, 12, 24, 48, 72];
+const INTERVAL_OPTIONS = [30, 60, 120, 300, 600];
+const TIMEOUT_OPTIONS = [3000, 5000, 10000, 15000, 30000];
+const PW_MIN_OPTIONS = [6, 8, 10, 12, 16, 20];
+const SESSION_OPTIONS = [1, 7, 14, 30, 60, 90, 180, 365];
+const LOGIN_ATTEMPT_OPTIONS = [3, 5, 10, 20, 0];
+
 const SettingsPage = () => {
   const { api } = useApi();
+  const { reload: reloadSysConfig } = useSystemConfig();
+
+  // ── System config state ───────────────────────────────────────
+  const [sysConfig, setSysConfig] = useState<SystemConfig>(SYS_DEFAULTS);
+  const [sysSaving, setSysSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoRemoving, setLogoRemoving] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api.post<ApiResponse<{ logoUrl: string }>>(
+        "/admin/system-config/logo",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      if (!res.data.success) { toast.error(res.data.message); return; }
+      setSysConfig((c) => ({ ...c, general: { ...c.general, logoUrl: res.data.success ? res.data.data.logoUrl : c.general.logoUrl } }));
+      toast.success("อัปโหลดโลโก้แล้ว");
+      await reloadSysConfig();
+    } catch { toast.error("อัปโหลดไม่สำเร็จ"); }
+    finally { setLogoUploading(false); if (logoInputRef.current) logoInputRef.current.value = ""; }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!window.confirm("ต้องการลบโลโก้ใช่ไหม?")) return;
+    setLogoRemoving(true);
+    try {
+      const res = await api.delete<ApiResponse<{ message: string }>>("/admin/system-config/logo");
+      if (!res.data.success) { toast.error(res.data.message); return; }
+      setSysConfig((c) => ({ ...c, general: { ...c.general, logoUrl: null } }));
+      toast.success("ลบโลโก้แล้ว");
+      await reloadSysConfig();
+    } catch { toast.error("ลบไม่สำเร็จ"); }
+    finally { setLogoRemoving(false); }
+  };
+
+  const fetchSysConfig = useCallback(async () => {
+    try {
+      const res = await api.get<ApiResponse<SystemConfig>>("/admin/system-config");
+      if (res.data.success) setSysConfig(res.data.data);
+    } catch {}
+  }, [api]);
+
+  const saveSysSection = async (patch: Partial<SystemConfig>, label: string) => {
+    setSysSaving(true);
+    try {
+      const res = await api.patch<ApiResponse<{ message: string }>>("/admin/system-config", patch);
+      if (!res.data.success) { toast.error(res.data.message); return; }
+      toast.success(`บันทึก ${label} แล้ว`);
+      await reloadSysConfig();
+    } catch { toast.error("บันทึกไม่สำเร็จ"); }
+    finally { setSysSaving(false); }
+  };
+
+  // ── Retention state ───────────────────────────────────────────
   const [config, setConfig] = useState<RetentionConfig>({
     results_days: 30,
     metrics_days: 30,
@@ -100,8 +176,9 @@ const SettingsPage = () => {
   }, [api]);
 
   useEffect(() => {
+    void fetchSysConfig();
     void fetchRetention();
-  }, [fetchRetention]);
+  }, [fetchSysConfig, fetchRetention]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -218,9 +295,174 @@ const SettingsPage = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">ตั้งค่าระบบ</h1>
         <p className="mt-1 text-sm text-slate-500">
-          ควบคุมระยะเวลาเก็บข้อมูล การ cleanup อัตโนมัติ และการล้าง history แบบตั้งใจ
+          ตั้งค่า Branding, Alerting, Monitor defaults, Security และ Data retention
         </p>
       </div>
+
+      {/* ── General / Branding ──────────────────────────────── */}
+      <SysSection title="General" description="ชื่อระบบ, tagline, logo text และ logo รูปภาพที่แสดงใน sidebar">
+        {/* Logo upload row */}
+        <div className="flex items-center gap-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {sysConfig.general.logoUrl ? (
+              <img
+                src={`${API_BASE_URL}${sysConfig.general.logoUrl}?v=${Date.now()}`}
+                alt="logo"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-lg font-bold text-slate-400">
+                {sysConfig.general.logoText || "MH"}
+              </span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-slate-700">Logo รูปภาพ</p>
+            <p className="mt-0.5 text-xs text-slate-500">PNG, JPG, WEBP, GIF — ไม่เกิน 2 MB · แทนที่ logo text ใน sidebar</p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                disabled={logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+              >
+                {logoUploading ? "กำลังอัปโหลด..." : sysConfig.general.logoUrl ? "เปลี่ยนรูป" : "อัปโหลดรูป"}
+              </button>
+              {sysConfig.general.logoUrl ? (
+                <button
+                  type="button"
+                  disabled={logoRemoving}
+                  onClick={() => void handleLogoRemove()}
+                  className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                >
+                  {logoRemoving ? "กำลังลบ..." : "ลบรูป"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleLogoUpload(f); }}
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <SysField label="ชื่อระบบ">
+            <input
+              type="text"
+              maxLength={60}
+              value={sysConfig.general.systemName}
+              onChange={(e) => setSysConfig((c) => ({ ...c, general: { ...c.general, systemName: e.target.value } }))}
+              className={INPUT_CLS}
+            />
+          </SysField>
+          <SysField label="Tagline">
+            <input
+              type="text"
+              maxLength={80}
+              value={sysConfig.general.tagline}
+              onChange={(e) => setSysConfig((c) => ({ ...c, general: { ...c.general, tagline: e.target.value } }))}
+              className={INPUT_CLS}
+            />
+          </SysField>
+          <SysField label="Logo text (1–4 ตัวอักษร)">
+            <input
+              type="text"
+              maxLength={4}
+              value={sysConfig.general.logoText}
+              onChange={(e) => setSysConfig((c) => ({ ...c, general: { ...c.general, logoText: e.target.value } }))}
+              className={INPUT_CLS}
+            />
+          </SysField>
+        </div>
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ general: sysConfig.general }, "General")} />
+      </SysSection>
+
+      {/* ── Alerting Defaults ───────────────────────────────── */}
+      <SysSection title="Alerting Defaults" description="ความถี่การส่ง reminder เมื่อ incident ยังคงเปิดอยู่">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SysField label="Incident reminder interval">
+            <select
+              value={sysConfig.alerting.incidentReminderIntervalHours}
+              onChange={(e) => setSysConfig((c) => ({ ...c, alerting: { incidentReminderIntervalHours: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {REMINDER_OPTIONS.map((h) => (
+                <option key={h} value={h}>{h === 1 ? "1 ชั่วโมง" : `${h} ชั่วโมง`}</option>
+              ))}
+            </select>
+          </SysField>
+        </div>
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ alerting: sysConfig.alerting }, "Alerting")} />
+      </SysSection>
+
+      {/* ── Monitor Defaults ────────────────────────────────── */}
+      <SysSection title="Monitor Defaults" description="ค่าเริ่มต้นสำหรับ monitor ใหม่">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SysField label="Check interval">
+            <select
+              value={sysConfig.monitorDefaults.intervalSeconds}
+              onChange={(e) => setSysConfig((c) => ({ ...c, monitorDefaults: { ...c.monitorDefaults, intervalSeconds: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {INTERVAL_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s < 60 ? `${s} วินาที` : `${s / 60} นาที`}</option>
+              ))}
+            </select>
+          </SysField>
+          <SysField label="Timeout">
+            <select
+              value={sysConfig.monitorDefaults.timeoutMs}
+              onChange={(e) => setSysConfig((c) => ({ ...c, monitorDefaults: { ...c.monitorDefaults, timeoutMs: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {TIMEOUT_OPTIONS.map((ms) => (
+                <option key={ms} value={ms}>{ms / 1000} วินาที</option>
+              ))}
+            </select>
+          </SysField>
+        </div>
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ monitorDefaults: sysConfig.monitorDefaults }, "Monitor Defaults")} />
+      </SysSection>
+
+      {/* ── Security ────────────────────────────────────────── */}
+      <SysSection title="Security" description="นโยบาย password, session และ login attempt (ใช้เป็น reference — ต้องตรงกับ backend config)">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <SysField label="Password ขั้นต่ำ (ตัวอักษร)">
+            <select
+              value={sysConfig.security.passwordMinLength}
+              onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, passwordMinLength: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {PW_MIN_OPTIONS.map((n) => <option key={n} value={n}>{n} ตัวอักษร</option>)}
+            </select>
+          </SysField>
+          <SysField label="Session duration">
+            <select
+              value={sysConfig.security.sessionDays}
+              onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, sessionDays: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {SESSION_OPTIONS.map((d) => <option key={d} value={d}>{d === 1 ? "1 วัน" : `${d} วัน`}</option>)}
+            </select>
+          </SysField>
+          <SysField label="Max login attempts">
+            <select
+              value={sysConfig.security.maxLoginAttempts}
+              onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, maxLoginAttempts: Number(e.target.value) } }))}
+              className={INPUT_CLS}
+            >
+              {LOGIN_ATTEMPT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n === 0 ? "ไม่จำกัด" : `${n} ครั้ง`}</option>
+              ))}
+            </select>
+          </SysField>
+        </div>
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ security: sysConfig.security }, "Security")} />
+      </SysSection>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatsCard
@@ -471,6 +713,47 @@ const StatsCard = ({ label, count, oldest }: StatsCardProps) => (
     <p className="text-sm font-medium text-slate-800">{label}</p>
     <p className="mt-2 text-2xl font-bold text-slate-900">{count.toLocaleString()}</p>
     <p className="mt-2 text-xs text-slate-500">เก่าสุด: {formatDateTime(oldest)}</p>
+  </div>
+);
+
+export const INPUT_CLS =
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100";
+
+const SysSection = ({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) => (
+  <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="border-b border-slate-100 px-6 py-4">
+      <h2 className="font-semibold text-slate-800">{title}</h2>
+      <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+    </div>
+    <div className="space-y-4 px-6 py-5">{children}</div>
+  </div>
+);
+
+const SysField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <label className="block">
+    <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+    {children}
+  </label>
+);
+
+const SysSaveBtn = ({ loading, onClick }: { loading: boolean; onClick: () => void }) => (
+  <div className="flex justify-end border-t border-slate-100 pt-4">
+    <button
+      type="button"
+      disabled={loading}
+      onClick={onClick}
+      className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
+    >
+      {loading ? "กำลังบันทึก..." : "บันทึก"}
+    </button>
   </div>
 );
 

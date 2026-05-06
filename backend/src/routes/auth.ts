@@ -1,10 +1,14 @@
 import Elysia, { t } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import prisma from "../lib/prisma";
-import { ok } from "../lib/response";
+import { ok, fail } from "../lib/response";
+import { getSystemConfig } from "../services/systemConfig.service";
 
 export const authProtectedRoutes = new Elysia()
   .use(authMiddleware)
+  .get("/system-config", async () => {
+    return ok(await getSystemConfig());
+  })
   .get("/auth/me", async ({ currentUser }) => {
     const user = await prisma.user.findUnique({
       where: { id: currentUser.id },
@@ -58,6 +62,86 @@ export const authProtectedRoutes = new Elysia()
       query: t.Object({
         page: t.Optional(t.Numeric({ minimum: 1 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
+      }),
+    },
+  )
+  .patch(
+    "/auth/profile",
+    async ({ body, currentUser, set }) => {
+      const existing = await prisma.user.findUnique({ where: { id: currentUser.id } });
+      if (!existing) { set.status = 404; return fail("ไม่พบ user"); }
+
+      if (body.username && body.username !== existing.username) {
+        const dup = await prisma.user.findFirst({
+          where: { username: body.username, NOT: { id: currentUser.id } },
+        });
+        if (dup) {
+          set.status = 409;
+          return fail("Username นี้ถูกใช้ไปแล้ว");
+        }
+      }
+
+      if (body.email && body.email !== existing.email) {
+        const dup = await prisma.user.findFirst({
+          where: { email: body.email, NOT: { id: currentUser.id } },
+        });
+        if (dup) {
+          set.status = 409;
+          return fail("Email นี้ถูกใช้ไปแล้ว");
+        }
+      }
+
+      const user = await prisma.user.update({
+        where: { id: currentUser.id },
+        data: {
+          ...(body.username ? { username: body.username.trim() } : {}),
+          ...(body.email ? { email: body.email.trim().toLowerCase() } : {}),
+        },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: { select: { name: true } },
+          createdAt: true,
+        },
+      });
+
+      return ok(user);
+    },
+    {
+      body: t.Partial(
+        t.Object({
+          username: t.String({ minLength: 3, maxLength: 80 }),
+          email: t.String({ format: "email", maxLength: 255 }),
+        }),
+      ),
+    },
+  )
+  .post(
+    "/auth/change-password",
+    async ({ body, currentUser, set }) => {
+      const existing = await prisma.user.findUnique({ where: { id: currentUser.id } });
+      if (!existing) {
+        set.status = 404;
+        return fail("ไม่พบ user");
+      }
+
+      const valid = await Bun.password.verify(body.currentPassword, existing.password);
+      if (!valid) {
+        set.status = 400;
+        return fail("รหัสผ่านปัจจุบันไม่ถูกต้อง");
+      }
+
+      const hashed = await Bun.password.hash(body.newPassword);
+      await prisma.user.update({ where: { id: currentUser.id }, data: { password: hashed } });
+      await prisma.refreshToken.deleteMany({ where: { userId: currentUser.id } });
+
+      return ok({ message: "เปลี่ยนรหัสผ่านสำเร็จ กรุณาล็อกอินใหม่" });
+    },
+    {
+      body: t.Object({
+        currentPassword: t.String({ minLength: 1 }),
+        newPassword: t.String({ minLength: 8, maxLength: 255 }),
       }),
     },
   );

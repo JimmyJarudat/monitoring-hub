@@ -2,17 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
 import { isAdminUser } from "@/utils/permissions";
-
-const ELYSIA_SEEDS = [
-  "elysia-pink",
-  "spring-elysia",
-  "miss-pink-elf",
-  "herrscher-of-love",
-  "pink-princess",
-  "celestial-elysia",
-  "eden-flower",
-  "elysia-dream",
-];
+import { getAvatarUrl } from "@/utils/avatar";
+import { mockNotifications, type MockNotification } from "@/data/mockNotifications";
 
 const breadcrumbLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -38,14 +29,34 @@ const breadcrumbLabels: Record<string, string> = {
 const formatSegment = (segment: string) =>
   breadcrumbLabels[segment] ?? segment.replace(/-/g, " ");
 
-const avatarSeed = ELYSIA_SEEDS[Math.floor(Math.random() * ELYSIA_SEEDS.length)];
-const avatarUrl = `https://api.dicebear.com/9.x/adventurer/svg?seed=${avatarSeed}&backgroundColor=ffd5dc,ffb6c1,e8c4f0&backgroundType=gradientLinear`;
+
+const notificationDateFormatter = new Intl.DateTimeFormat("th-TH", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+const notificationTone: Record<MockNotification["type"], string> = {
+  incident: "bg-rose-50 text-rose-700",
+  alert: "bg-amber-50 text-amber-700",
+  resolved: "bg-emerald-50 text-emerald-700",
+  system: "bg-slate-100 text-slate-700",
+};
+
+const formatNotificationDate = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : notificationDateFormatter.format(date);
+};
 
 const Navbar = () => {
   const { user, logout } = useSession();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(
+    () => mockNotifications.filter((item) => item.read).map((item) => item.id),
+  );
   const ref = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
   const segments = location.pathname.split("/").filter(Boolean);
   const breadcrumbs =
@@ -62,11 +73,24 @@ const Navbar = () => {
   const displayRole =
     typeof user?.role === "string" ? user.role : (user?.role?.name ?? "USER");
   const isAdmin = isAdminUser(user);
+  const visibleNotifications = mockNotifications.slice(0, 4);
+  const unreadCount = mockNotifications.filter(
+    (item) => !readNotificationIds.includes(item.id),
+  ).length;
+  const markNotificationRead = (id: string) => {
+    setReadNotificationIds((current) => (current.includes(id) ? current : [...current, id]));
+  };
+  const markAllNotificationsRead = () => {
+    setReadNotificationIds(mockNotifications.map((item) => item.id));
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) {
+        setNotificationOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -103,14 +127,99 @@ const Navbar = () => {
         ))}
       </nav>
 
+      <div className="flex items-center gap-2">
+      {/* Notification dropdown */}
+      <div className="relative" ref={notificationRef}>
+        <button
+          type="button"
+          onClick={() => {
+            setNotificationOpen((value) => !value);
+            setOpen(false);
+          }}
+          className="relative flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus:outline-none"
+          aria-label="Open notifications"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
+          {unreadCount > 0 ? (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          ) : null}
+        </button>
+
+        {notificationOpen ? (
+          <div className="absolute right-0 top-full z-50 mt-2 w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">การแจ้งเตือน</p>
+                <p className="mt-0.5 text-xs text-slate-500">Mock data สำหรับโครง UI</p>
+              </div>
+              <button
+                type="button"
+                onClick={markAllNotificationsRead}
+                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                อ่านทั้งหมด
+              </button>
+            </div>
+
+            <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+              {visibleNotifications.map((item) => {
+                const isRead = readNotificationIds.includes(item.id);
+                return (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    onClick={() => {
+                      markNotificationRead(item.id);
+                      setNotificationOpen(false);
+                    }}
+                    className="block px-4 py-3 transition hover:bg-slate-50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${isRead ? "bg-slate-300" : "bg-cyan-500"}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${notificationTone[item.type]}`}>
+                            {item.type}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.message}</p>
+                        <p className="mt-2 text-[11px] text-slate-400">{formatNotificationDate(item.createdAt)}</p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-slate-100 p-2">
+              <Link
+                to="/notifications"
+                onClick={() => setNotificationOpen(false)}
+                className="flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50"
+              >
+                ดูการแจ้งเตือนทั้งหมด
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       {/* User dropdown */}
       <div className="relative" ref={ref}>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v);
+            setNotificationOpen(false);
+          }}
           className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition hover:bg-slate-100 focus:outline-none"
         >
-          <img src={avatarUrl} alt="avatar" className="h-9 w-9 rounded-full object-cover ring-2 ring-pink-200" />
+          <img src={getAvatarUrl(displayName)} alt="avatar" className="h-9 w-9 rounded-full object-cover ring-2 ring-pink-200" />
           <div className="hidden text-left sm:block">
             <p className="max-w-32 truncate text-sm font-semibold text-slate-900">{displayName}</p>
             <p className="text-xs text-slate-400">{displayRole}</p>
@@ -130,7 +239,7 @@ const Navbar = () => {
 
             {/* Profile header */}
             <div className="flex items-center gap-3 border-b border-slate-100 bg-linear-to-r from-pink-50 to-purple-50 px-4 py-3">
-              <img src={avatarUrl} alt="avatar" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-pink-200" />
+              <img src={getAvatarUrl(displayName)} alt="avatar" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-pink-200" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
                 {displayEmail && (
@@ -164,12 +273,6 @@ const Navbar = () => {
                   <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 4a1 1 0 10-2 0v4a1 1 0 00.293.707l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" />
                 </svg>
                 ประวัติการล็อกอินของฉัน
-              </Link>
-              <Link to="/notifications" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                </svg>
-                การแจ้งเตือน
               </Link>
             </div>
 
@@ -236,6 +339,7 @@ const Navbar = () => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </header>
   );

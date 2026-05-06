@@ -4,6 +4,7 @@ import Navbar from "./navbar";
 import Sidebar from "./sidebar";
 import { Outlet } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
+import { SystemConfigProvider } from "@/contexts/systemConfig.context";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 const PrivateLayout = () => {
@@ -66,6 +67,7 @@ const PrivateLayout = () => {
 
   // 🌐 Web Mode Layout
   return (
+    <SystemConfigProvider>
     <div className="flex h-screen overflow-hidden">
       <div className="flex-shrink-0">
         <Sidebar />
@@ -82,6 +84,7 @@ const PrivateLayout = () => {
         </main>
       </div>
     </div>
+    </SystemConfigProvider>
   );
 };
 

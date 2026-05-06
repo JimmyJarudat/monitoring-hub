@@ -1,4 +1,5 @@
 import Elysia, { t } from "elysia";
+import { mkdir, unlink } from "node:fs/promises";
 import { requireAdminRole } from "../lib/authorization";
 import { ok, fail } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
@@ -12,6 +13,7 @@ import {
   getRetentionStats,
   runRetentionCleanup,
 } from "../services/retention.service";
+import { getSystemConfig, saveSystemConfig } from "../services/systemConfig.service";
 
 export const adminRoutes = new Elysia({ prefix: "/admin" })
   .use(authMiddleware)
@@ -170,4 +172,84 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         olderThanDays: t.Optional(t.Number({ minimum: 1, maximum: 3650 })),
       }),
     },
-  );
+  )
+  .get("/system-config", async ({ currentUser }) => {
+    requireAdminRole(currentUser.role);
+    return ok(await getSystemConfig());
+  })
+  .patch(
+    "/system-config",
+    async ({ body, currentUser }) => {
+      requireAdminRole(currentUser.role);
+      await saveSystemConfig(body);
+      return ok({ message: "บันทึกการตั้งค่าสำเร็จ" });
+    },
+    {
+      body: t.Partial(
+        t.Object({
+          general: t.Object({
+            systemName: t.String({ minLength: 1, maxLength: 60 }),
+            tagline: t.String({ maxLength: 80 }),
+            logoText: t.String({ minLength: 1, maxLength: 4 }),
+          }),
+          alerting: t.Object({
+            incidentReminderIntervalHours: t.Number({ minimum: 1, maximum: 168 }),
+          }),
+          monitorDefaults: t.Object({
+            intervalSeconds: t.Number({ minimum: 10, maximum: 86400 }),
+            timeoutMs: t.Number({ minimum: 1000, maximum: 60000 }),
+          }),
+          security: t.Object({
+            passwordMinLength: t.Number({ minimum: 6, maximum: 32 }),
+            sessionDays: t.Number({ minimum: 1, maximum: 365 }),
+            maxLoginAttempts: t.Number({ minimum: 0, maximum: 100 }),
+          }),
+        }),
+      ),
+    },
+  )
+  .post(
+    "/system-config/logo",
+    async ({ body, currentUser, set }) => {
+      requireAdminRole(currentUser.role);
+
+      const file = body.file;
+      const ext = (file.name.split(".").pop() ?? "png").toLowerCase();
+      const allowed = ["png", "jpg", "jpeg", "webp", "gif"];
+      if (!allowed.includes(ext)) {
+        set.status = 400;
+        return fail("รองรับเฉพาะ PNG, JPG, WEBP, GIF");
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        set.status = 400;
+        return fail("ไฟล์ต้องไม่เกิน 2 MB");
+      }
+
+      await mkdir("uploads", { recursive: true });
+
+      const current = await getSystemConfig();
+      if (current.general.logoUrl) {
+        const oldFilename = current.general.logoUrl.replace("/uploads/", "");
+        try { await unlink(`uploads/${oldFilename}`); } catch {}
+      }
+
+      const filename = `logo.${ext}`;
+      await Bun.write(`uploads/${filename}`, file);
+
+      const logoUrl = `/uploads/${filename}`;
+      await saveSystemConfig({ general: { ...current.general, logoUrl } });
+
+      return ok({ logoUrl });
+    },
+    { body: t.Object({ file: t.File() }) },
+  )
+  .delete("/system-config/logo", async ({ currentUser }) => {
+    requireAdminRole(currentUser.role);
+    const current = await getSystemConfig();
+    if (current.general.logoUrl) {
+      const filename = current.general.logoUrl.replace("/uploads/", "");
+      try { await unlink(`uploads/${filename}`); } catch {}
+    }
+    await saveSystemConfig({ general: { ...current.general, logoUrl: null } });
+    return ok({ message: "ลบโลโก้แล้ว" });
+  });

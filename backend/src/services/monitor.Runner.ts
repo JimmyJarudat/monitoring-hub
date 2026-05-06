@@ -14,6 +14,7 @@ import { pingCheck } from "./checkers/ping.Checker";
 import { tcpCheck } from "./checkers/tcp.Checker";
 import { tlsCheck } from "./checkers/tls.Checker";
 import { notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
+import { getSystemConfig } from "./systemConfig.service";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -51,7 +52,23 @@ const STATUS_INCIDENT_PREFIX = "[STATUS]";
 const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
 const RULE_INCIDENT_PREFIX = "[RULE]";
 const INCIDENT_REMINDER_ACTION = "INCIDENT_REMINDER_SENT";
-const INCIDENT_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+let _reminderConfigCache: { hours: number; fetchedAt: number } = { hours: 24, fetchedAt: 0 };
+const REMINDER_CONFIG_TTL_MS = 5 * 60 * 1000;
+
+const getReminderIntervalMs = async (): Promise<number> => {
+  const now = Date.now();
+  if (now - _reminderConfigCache.fetchedAt < REMINDER_CONFIG_TTL_MS) {
+    return _reminderConfigCache.hours * 3_600_000;
+  }
+  try {
+    const cfg = await getSystemConfig();
+    _reminderConfigCache = { hours: cfg.alerting.incidentReminderIntervalHours, fetchedAt: now };
+  } catch {
+    _reminderConfigCache.fetchedAt = now;
+  }
+  return _reminderConfigCache.hours * 3_600_000;
+};
 
 const statusToValue = (status: MonitorStatus) => {
   if (status === "UP") return 3;
@@ -139,8 +156,8 @@ const shouldSendIncidentReminder = async (
     select: { createdAt: true },
   });
   const lastSentAt = lastReminder?.createdAt ?? incidentStartedAt;
-
-  return checkedAt.getTime() - lastSentAt.getTime() >= INCIDENT_REMINDER_INTERVAL_MS;
+  const intervalMs = await getReminderIntervalMs();
+  return checkedAt.getTime() - lastSentAt.getTime() >= intervalMs;
 };
 
 const notifyIncidentReminderIfDue = async (params: {
