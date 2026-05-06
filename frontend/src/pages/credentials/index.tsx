@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type MonitorType =
+  | "PING"
+  | "TCP"
+  | "HTTP"
+  | "TLS_CERT"
+  | "DNS"
+  | "SNMP"
+  | "SYSTEM"
+  | "DOCKER"
+  | "DATABASE";
 
 type ApiSuccess<T> = {
   success: true;
@@ -24,6 +35,13 @@ type CredentialRow = {
   secret: string;
   notes: string | null;
   metadata: Record<string, unknown> | null;
+  usageCount: number;
+  monitors: Array<{
+    id: string;
+    name: string;
+    type: MonitorType;
+    enabled: boolean;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,6 +60,18 @@ const credentialTypeLabels: Record<CredentialType, string> = {
   USERNAME_PASSWORD: "Username / Password",
   API_TOKEN: "API Token",
   SSH_KEY: "SSH Key",
+};
+
+const monitorTypeLabels: Record<MonitorType, string> = {
+  PING: "PING",
+  TCP: "TCP",
+  HTTP: "HTTP",
+  TLS_CERT: "TLS Cert",
+  DNS: "DNS",
+  SNMP: "SNMP",
+  SYSTEM: "System",
+  DOCKER: "Docker",
+  DATABASE: "Database",
 };
 
 const typeBadgeStyles: Record<CredentialType, string> = {
@@ -86,6 +116,40 @@ const credentialTypeGuides: Record<
   },
 };
 
+const secretFieldLabels: Record<
+  CredentialType,
+  {
+    label: string;
+    placeholder?: string;
+    tableLabel: string;
+    requiredText: string;
+  }
+> = {
+  SNMP_COMMUNITY: {
+    label: "Community",
+    placeholder: "public",
+    tableLabel: "Community",
+    requiredText: "กรุณากรอกชื่อและ community ให้ครบ",
+  },
+  USERNAME_PASSWORD: {
+    label: "Password",
+    tableLabel: "Password",
+    requiredText: "กรุณากรอกชื่อและ password ให้ครบ",
+  },
+  API_TOKEN: {
+    label: "API Token",
+    placeholder: "Paste token or API key",
+    tableLabel: "API Token",
+    requiredText: "กรุณากรอกชื่อและ API token ให้ครบ",
+  },
+  SSH_KEY: {
+    label: "Private Key",
+    placeholder: "-----BEGIN OPENSSH PRIVATE KEY-----",
+    tableLabel: "Private Key",
+    requiredText: "กรุณากรอกชื่อและ private key ให้ครบ",
+  },
+};
+
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
@@ -105,6 +169,19 @@ const emptyForm = (): CredentialForm => ({
   notes: "",
   metadataText: "{}",
 });
+
+const parseMetadataObject = (value: string) => {
+  try {
+    const parsed = JSON.parse(value || "{}") as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
 
 const CredentialsPage = () => {
   const { api } = useApi();
@@ -148,11 +225,32 @@ const CredentialsPage = () => {
       auth: credentials.filter((item) => item.type === "USERNAME_PASSWORD").length,
       token: credentials.filter((item) => item.type === "API_TOKEN" || item.type === "SSH_KEY")
         .length,
+      linked: credentials.filter((item) => item.usageCount > 0).length,
     };
   }, [credentials]);
 
   const selectedGuide = credentialTypeGuides[guideType];
   const modalGuide = credentialTypeGuides[form.type];
+  const secretField = secretFieldLabels[form.type];
+  const parsedMetadata = useMemo(() => parseMetadataObject(form.metadataText), [form.metadataText]);
+  const showUsernameField = form.type === "USERNAME_PASSWORD" || form.type === "SSH_KEY";
+  const showSnmpSettings = form.type === "SNMP_COMMUNITY";
+
+  const updateMetadataField = (key: string, value: unknown) => {
+    const base = parsedMetadata ?? {};
+    const next = { ...base };
+
+    if (value === "" || value === undefined || value === null) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+
+    setForm((current) => ({
+      ...current,
+      metadataText: JSON.stringify(next, null, 2),
+    }));
+  };
 
   const closeModal = () => {
     setIsCreateOpen(false);
@@ -196,7 +294,7 @@ const CredentialsPage = () => {
     }
 
     if (!form.name.trim() || !form.secret.trim()) {
-      toast.error("กรุณากรอกชื่อและ secret ให้ครบ");
+      toast.error(secretFieldLabels[form.type].requiredText);
       return;
     }
 
@@ -272,7 +370,7 @@ const CredentialsPage = () => {
           <h1 className="mt-1 text-2xl font-semibold text-slate-950">Credentials</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             เก็บ credential inventory แบบรวมศูนย์สำหรับ SNMP, SSH, API และ username/password
-            เพื่อให้หน้า monitor ใช้อ้างอิงต่อได้ในรอบถัดไป
+            เพื่อให้ monitor หลายตัว reuse ชุดเดียวกันได้ และดู usage ได้จากจุดเดียว
           </p>
         </div>
 
@@ -299,7 +397,7 @@ const CredentialsPage = () => {
           { label: "Total", value: summary.total, tone: "text-slate-950" },
           { label: "SNMP", value: summary.snmp, tone: "text-cyan-700" },
           { label: "User / Pass", value: summary.auth, tone: "text-violet-700" },
-          { label: "Token / Key", value: summary.token, tone: "text-emerald-700" },
+          { label: "Linked", value: summary.linked, tone: "text-emerald-700" },
         ].map((item) => (
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={item.label}>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
@@ -316,7 +414,9 @@ const CredentialsPage = () => {
               {isLoading ? "Loading..." : `${credentials.length} credentials loaded`}
             </p>
           </div>
-          <p className="text-xs text-slate-400">ตอนนี้ยังเป็น inventory page ก่อน ยังไม่ bind เข้า monitor form อัตโนมัติ</p>
+          <p className="text-xs text-slate-400">
+            ใช้เป็น shared credential ได้แล้ว และจะแสดงว่าถูกผูกกับ monitor ไหนบ้าง
+          </p>
         </div>
 
         <div className="overflow-x-auto">
@@ -326,7 +426,8 @@ const CredentialsPage = () => {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Username</th>
-                <th className="px-4 py-3">Secret</th>
+                <th className="px-4 py-3">Value</th>
+                <th className="px-4 py-3">Used by</th>
                 <th className="px-4 py-3">Notes</th>
                 <th className="px-4 py-3">Updated</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -335,7 +436,7 @@ const CredentialsPage = () => {
             <tbody className="divide-y divide-slate-200 bg-white">
               {!isLoading && credentials.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={7}>
+                  <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={8}>
                     ยังไม่มี credential
                   </td>
                 </tr>
@@ -379,6 +480,38 @@ const CredentialsPage = () => {
                           {isRevealed ? "Hide" : "Show"}
                         </button>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {credential.usageCount > 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-slate-700">
+                            Used by {credential.usageCount} monitor{credential.usageCount > 1 ? "s" : ""}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {credential.monitors.slice(0, 4).map((monitor) => (
+                              <Link
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                                key={monitor.id}
+                                to={`/monitors/${monitor.id}`}
+                                title={`${monitor.name} · ${monitorTypeLabels[monitor.type]}${monitor.enabled ? "" : " · disabled"}`}
+                              >
+                                <span className={monitor.enabled ? "text-emerald-600" : "text-slate-400"}>
+                                  ●
+                                </span>
+                                <span>{monitor.name}</span>
+                                <span className="text-slate-400">{monitorTypeLabels[monitor.type]}</span>
+                              </Link>
+                            ))}
+                            {credential.usageCount > 4 ? (
+                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
+                                +{credential.usageCount - 4} more
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">ยังไม่ถูกผูกกับ monitor</span>
+                      )}
                     </td>
                     <td className="max-w-sm px-4 py-3 text-slate-500">
                       <div className="truncate" title={credential.notes ?? undefined}>
@@ -426,7 +559,7 @@ const CredentialsPage = () => {
             {(
               Object.keys(credentialTypeLabels) as CredentialType[]
             ).map((type) => {
-              const active = form.type === type;
+              const active = guideType === type;
               return (
                 <button
                   key={type}
@@ -530,31 +663,71 @@ const CredentialsPage = () => {
                 </select>
               </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">
-                  Username
-                  {form.type === "USERNAME_PASSWORD" ? (
-                    <span className="ml-1 text-rose-500">*</span>
-                  ) : (
-                    <span className="ml-1 font-normal text-slate-400">(optional)</span>
-                  )}
-                </span>
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  type="text"
-                  value={form.username}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, username: event.target.value }))
-                  }
-                />
-              </label>
+              {showUsernameField ? (
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">
+                    Username
+                    {form.type === "USERNAME_PASSWORD" ? (
+                      <span className="ml-1 text-rose-500">*</span>
+                    ) : (
+                      <span className="ml-1 font-normal text-slate-400">(optional)</span>
+                    )}
+                  </span>
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    type="text"
+                    value={form.username}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, username: event.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
+
+              {showSnmpSettings ? (
+                <>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">SNMP Version</span>
+                    <select
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      value={
+                        typeof parsedMetadata?.version === "string" &&
+                        (parsedMetadata.version === "1" || parsedMetadata.version === "2c")
+                          ? parsedMetadata.version
+                          : "2c"
+                      }
+                      onChange={(event) => updateMetadataField("version", event.target.value)}
+                    >
+                      <option value="2c">2c</option>
+                      <option value="1">1</option>
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">SNMP Port</span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      min={1}
+                      value={typeof parsedMetadata?.port === "number" ? String(parsedMetadata.port) : "161"}
+                      onChange={(event) =>
+                        updateMetadataField(
+                          "port",
+                          event.target.value.trim() ? Number(event.target.value) : undefined,
+                        )
+                      }
+                    />
+                  </label>
+                </>
+              ) : null}
 
               <label className="block sm:col-span-2">
                 <span className="text-sm font-medium text-slate-700">
-                  Secret <span className="ml-1 text-rose-500">*</span>
+                  {secretField.label} <span className="ml-1 text-rose-500">*</span>
                 </span>
                 <textarea
                   className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder={secretField.placeholder}
                   value={form.secret}
                   onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
                 />
@@ -610,13 +783,37 @@ const CredentialsPage = () => {
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">Delete credential</h2>
               <p className="mt-1 text-sm text-slate-500">
-                ลบรายการออกจาก inventory นี้ ยังไม่มีความสัมพันธ์บังคับกับ monitor ในตอนนี้
+                ถ้ารายการนี้ถูกใช้อยู่ monitor ที่ผูกอยู่จะถูกถอด credential ออกอัตโนมัติ
               </p>
             </div>
 
             <div className="p-5 text-sm text-slate-600">
-              ต้องการลบ <span className="font-semibold text-slate-950">{deletingCredential.name}</span>{" "}
-              ใช่ไหม?
+              <p>
+                ต้องการลบ <span className="font-semibold text-slate-950">{deletingCredential.name}</span>{" "}
+                ใช่ไหม?
+              </p>
+              {deletingCredential.usageCount > 0 ? (
+                <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-amber-900">
+                  <div className="font-semibold">
+                    กำลังถูกใช้โดย {deletingCredential.usageCount} monitor
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {deletingCredential.monitors.map((monitor) => (
+                      <Link
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-xs transition hover:border-amber-300 hover:bg-amber-100"
+                        key={monitor.id}
+                        to={`/monitors/${monitor.id}`}
+                      >
+                        <span>{monitor.name}</span>
+                        <span className="text-amber-700">{monitorTypeLabels[monitor.type]}</span>
+                      </Link>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-amber-800">
+                    หลังลบแล้ว monitor เหล่านี้ยังอยู่ แต่จะไม่อ้าง credential นี้อีก
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">

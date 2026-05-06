@@ -26,10 +26,27 @@ const normalizeOptionalText = (value?: string | null) => {
 export const credentialRoutes = new Elysia({ prefix: "/credentials" })
   .get("/", async () => {
     const credentials = await prisma.credential.findMany({
+      include: {
+        monitors: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            enabled: true,
+          },
+          orderBy: [{ name: "asc" }],
+        },
+      },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
 
-    return ok(credentials);
+    return ok(
+      credentials.map((credential) => ({
+        ...credential,
+        usageCount: credential.monitors.length,
+        monitors: credential.monitors,
+      })),
+    );
   })
   .post(
     "/",
@@ -88,7 +105,17 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
     async ({ params, set }) => {
       const existing = await prisma.credential.findUnique({
         where: { id: params.id },
-        select: { id: true },
+        select: {
+          id: true,
+          name: true,
+          monitors: {
+            select: {
+              id: true,
+              name: true,
+            },
+            orderBy: [{ name: "asc" }],
+          },
+        },
       });
 
       if (!existing) {
@@ -100,7 +127,11 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
         where: { id: params.id },
       });
 
-      return ok({ message: "ลบ credential แล้ว" });
+      return ok({
+        message: "ลบ credential แล้ว",
+        detachedMonitorCount: existing.monitors.length,
+        detachedMonitors: existing.monitors,
+      });
     },
     {
       params: t.Object({ id: t.String() }),

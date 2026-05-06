@@ -26,6 +26,7 @@ type MonitorType =
   | "SYSTEM"
   | "DOCKER"
   | "DATABASE";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
 type IncidentStatus = "OPEN" | "RESOLVED";
 
 type ApiSuccess<T> = {
@@ -129,6 +130,23 @@ type DeviceMetricsResponse = {
   series: DeviceMetricSeries[];
 };
 
+type CredentialRow = {
+  id: string;
+  name: string;
+  type: CredentialType;
+  username: string | null;
+  secret: string;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+  usageCount: number;
+  monitors: Array<{
+    id: string;
+    name: string;
+    type: MonitorType;
+    enabled: boolean;
+  }>;
+};
+
 type EditForm = {
   name: string;
   type: MonitorType;
@@ -211,6 +229,37 @@ const statusPriority: Record<MonitorStatus, number> = {
   DOWN: 3,
   DEGRADED: 2,
   UP: 1,
+};
+
+const credentialTypeLabels: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "SNMP Community",
+  USERNAME_PASSWORD: "Username / Password",
+  API_TOKEN: "API Token",
+  SSH_KEY: "SSH Key",
+};
+
+const getCompatibleCredentialTypes = (
+  type: MonitorType,
+  config: Record<string, unknown>,
+): CredentialType[] => {
+  if (type === "SNMP" || type === "SYSTEM") return ["SNMP_COMMUNITY"];
+  if (type === "HTTP") {
+    const auth = config.auth;
+    if (typeof auth === "object" && auth !== null && !Array.isArray(auth)) {
+      const authType = (auth as { type?: unknown }).type;
+      if (authType === "basic") return ["USERNAME_PASSWORD"];
+      if (authType === "bearer") return ["API_TOKEN"];
+    }
+  }
+  if (type === "DOCKER") return ["API_TOKEN"];
+  if (type === "DATABASE") {
+    const databaseType = config.type;
+    if (typeof databaseType === "string" && databaseType !== "sqlite") {
+      return ["USERNAME_PASSWORD"];
+    }
+  }
+
+  return [];
 };
 
 const formatStatusValue = (value: number) => {
@@ -381,6 +430,9 @@ const MonitorDetailPage = () => {
   });
   const [metricSeries, setMetricSeries] = useState<DeviceMetricSeries[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
+  const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+  const [selectedEditCredentialId, setSelectedEditCredentialId] = useState("");
 
   const fetchMonitor = useCallback(async () => {
     if (!id) return;
@@ -408,6 +460,23 @@ const MonitorDetailPage = () => {
   useEffect(() => {
     void fetchMonitor();
   }, [fetchMonitor]);
+
+  useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        const response = await api.get<ApiResponse<CredentialRow[]>>("/credentials");
+        if (response.data.success) {
+          setCredentials(response.data.data);
+        }
+      } catch {
+        // keep editor usable even if credentials inventory fails to load
+      } finally {
+        setCredentialsLoaded(true);
+      }
+    };
+
+    void loadCredentials();
+  }, [api]);
 
   const fetchDeviceMetrics = useCallback(async () => {
     if (!id || !monitor || (monitor.type !== "SYSTEM" && monitor.type !== "SNMP")) {
@@ -565,6 +634,34 @@ const MonitorDetailPage = () => {
 
   const isDeviceMonitor = monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
   const latestMetadata = (latestResult?.metadata as DeviceMetadata | null) ?? null;
+  const fallbackCredentialConfig = monitor?.config ?? {};
+  const parsedEditConfig = useMemo(() => {
+    try {
+      const parsed = JSON.parse(editForm.configText) as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // ignored until save
+    }
+
+    return null;
+  }, [editForm.configText]);
+  const compatibleCredentialTypes = useMemo(
+    () => getCompatibleCredentialTypes(editForm.type, parsedEditConfig ?? fallbackCredentialConfig),
+    [editForm.type, fallbackCredentialConfig, parsedEditConfig],
+  );
+  const availableCredentials = useMemo(
+    () => credentials.filter((credential) => compatibleCredentialTypes.includes(credential.type)),
+    [compatibleCredentialTypes, credentials],
+  );
+
+  useEffect(() => {
+    if (!credentialsLoaded) return;
+    if (!selectedEditCredentialId) return;
+    if (availableCredentials.some((credential) => credential.id === selectedEditCredentialId)) return;
+    setSelectedEditCredentialId("");
+  }, [availableCredentials, credentialsLoaded, selectedEditCredentialId]);
 
   const utilizationChartData = useMemo(() => {
     const cpuSeries = metricSeries.find(
@@ -799,6 +896,7 @@ const MonitorDetailPage = () => {
       enabled: monitor.enabled,
       configText: toConfigText(monitor.config),
     });
+    setSelectedEditCredentialId(monitor.credential?.id ?? "");
     setIsEditing(true);
   };
 
@@ -888,6 +986,7 @@ const MonitorDetailPage = () => {
         interval,
         enabled: editForm.enabled,
         config,
+        credentialId: selectedEditCredentialId,
       });
 
       if (!response.data.success) {
@@ -1781,6 +1880,56 @@ const MonitorDetailPage = () => {
                     }
                   />
                 </label>
+
+                <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 sm:col-span-2">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-violet-950">Linked credential</p>
+                      <p className="mt-1 text-xs text-violet-800">
+                        เปลี่ยน shared credential ได้จากตรงนี้ หรือเลือก No linked credential เพื่อถอดออก
+                      </p>
+                    </div>
+                    <Link
+                      className="text-xs font-semibold text-violet-700 transition hover:text-violet-900"
+                      to="/credentials"
+                    >
+                      Manage credentials
+                    </Link>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                    <label className="block">
+                      <span className="text-sm font-medium text-violet-950">Credential</span>
+                      <select
+                        className="mt-2 w-full rounded-md border border-violet-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                        value={selectedEditCredentialId}
+                        onChange={(event) => setSelectedEditCredentialId(event.target.value)}
+                      >
+                        <option value="">No linked credential</option>
+                        {availableCredentials.map((credential) => (
+                          <option key={credential.id} value={credential.id}>
+                            {credential.name} · {credentialTypeLabels[credential.type]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="rounded-md border border-violet-200 bg-white px-3 py-3 text-xs text-violet-900">
+                      <div className="font-semibold">Compatible types</div>
+                      <div className="mt-1">
+                        {compatibleCredentialTypes.length > 0
+                          ? compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")
+                          : "This monitor type/config does not use shared credentials"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {compatibleCredentialTypes.length > 0 && availableCredentials.length === 0 ? (
+                    <p className="mt-3 text-xs text-violet-800">
+                      ยังไม่มี credential ที่ตรงกับ monitor แบบนี้ ไปสร้างที่หน้า /credentials ก่อนแล้วค่อยกลับมาเลือกได้
+                    </p>
+                  ) : null}
+                </div>
 
                 <label className="flex items-center gap-3 sm:col-span-2">
                   <input

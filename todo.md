@@ -116,10 +116,10 @@
 ## Known Gaps Right Now
 
 ### Credentials
-- [ ] หน้า Edit monitor ยังไม่มี UI สำหรับเปลี่ยนหรือ unlink credential โดยตรง
+- [x] หน้า Edit monitor เปลี่ยนหรือ unlink credential ได้โดยตรง
 - [ ] Secret ยังไม่ได้เข้ารหัสใน DB
 - [ ] ยังไม่มี permission control เรื่องใครดู secret ได้
-- [ ] ยังไม่มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
+- [x] มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
 
 ### Device / network analytics
 - [x] Network UI แสดง **traffic rate** แทน raw counters ในหน้า detail
@@ -154,9 +154,10 @@
 - [x] Store `credentialId` on monitor config/model
 - [x] Resolve credential in checker/runner at runtime
 - [x] Update monitor automatically when shared credential changes
+- [x] Show credential usage map
+- [x] Add “used by X monitors” in credentials page
+- [x] Edit / unlink linked credential from monitor detail
 - [ ] Encrypt credential secret at rest
-- [ ] Show credential usage map
-- [ ] Add “used by X monitors” in credentials page
 
 ### Priority 3 — Retention and storage hygiene
 - [ ] History retention settings
