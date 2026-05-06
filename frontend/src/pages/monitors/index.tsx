@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
@@ -125,9 +125,13 @@ const MonitorsPage = () => {
   const { api } = useApi();
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
-  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>(() => {
+    const groupId = searchParams.get("groupId")?.trim();
+    return groupId ? groupId : "ALL";
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenuState | null>(null);
@@ -185,6 +189,19 @@ const MonitorsPage = () => {
 
     void loadGroups();
   }, [api]);
+
+  useEffect(() => {
+    const currentValue = searchParams.get("groupId")?.trim() || "ALL";
+    if (currentValue === groupFilter) return;
+
+    const next = new URLSearchParams(searchParams);
+    if (groupFilter === "ALL") {
+      next.delete("groupId");
+    } else {
+      next.set("groupId", groupFilter);
+    }
+    setSearchParams(next, { replace: true });
+  }, [groupFilter, searchParams, setSearchParams]);
 
   const summary = useMemo(() => {
     const latestStatuses = monitors.map((monitor) => monitor.latestResult?.status ?? "PENDING");

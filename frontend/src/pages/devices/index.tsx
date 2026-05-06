@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useApi } from "@/hooks/useApi";
 
 type DiskInfo = {
@@ -368,9 +368,13 @@ const DeviceCard = ({ device }: { device: Device }) => {
 
 const DevicesPage = () => {
   const { api } = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<Device[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
-  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>(() => {
+    const groupId = searchParams.get("groupId")?.trim();
+    return groupId ? groupId : "ALL";
+  });
   const [loading, setLoading] = useState(true);
 
   const loadDevices = useCallback(async () => {
@@ -392,6 +396,19 @@ const DevicesPage = () => {
       setLoading(false);
     }
   }, [api, groupFilter]);
+
+  useEffect(() => {
+    const currentValue = searchParams.get("groupId")?.trim() || "ALL";
+    if (currentValue === groupFilter) return;
+
+    const next = new URLSearchParams(searchParams);
+    if (groupFilter === "ALL") {
+      next.delete("groupId");
+    } else {
+      next.set("groupId", groupFilter);
+    }
+    setSearchParams(next, { replace: true });
+  }, [groupFilter, searchParams, setSearchParams]);
 
   useEffect(() => {
     void loadDevices();

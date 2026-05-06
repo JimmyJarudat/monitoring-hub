@@ -17,6 +17,7 @@ import MonitorDetailPage from "@/pages/monitors/detail";
 import DevicesPage from "@/pages/devices";
 import ResultsPage from "@/pages/results";
 import GroupsPage from "@/pages/groups";
+import GroupDetailPage from "@/pages/groups/detail";
 import CredentialsPage from "@/pages/credentials";
 import InterfaceInventoryPage from "@/pages/interfaces";
 import SettingsPage from "@/pages/settings";
@@ -46,6 +47,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
       createProtectedRoute({ path: "devices", element: <DevicesPage /> }),
       createProtectedRoute({ path: "groups", element: <GroupsPage /> }),
+      createProtectedRoute({ path: "groups/:id", element: <GroupDetailPage /> }),
       createProtectedRoute({ path: "credentials", element: <CredentialsPage />, adminOnly: true }),
       createProtectedRoute({ path: "interfaces", element: <InterfaceInventoryPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),

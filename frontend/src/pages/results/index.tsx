@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
@@ -142,6 +142,7 @@ const getTarget = (monitor: ResultMonitor) => {
 
 const ResultsPage = () => {
   const { api } = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [results, setResults] = useState<MonitorResultRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -149,7 +150,10 @@ const ResultsPage = () => {
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("day");
   const [statusFilter, setStatusFilter] = useState<"ALL" | MonitorStatus>("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | MonitorType>("ALL");
-  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>(() => {
+    const groupId = searchParams.get("groupId")?.trim();
+    return groupId ? groupId : "ALL";
+  });
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [customFrom, setCustomFrom] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() - presetDurationsMs.day)),
@@ -231,6 +235,19 @@ const ResultsPage = () => {
 
     void loadGroups();
   }, [api]);
+
+  useEffect(() => {
+    const currentValue = searchParams.get("groupId")?.trim() || "ALL";
+    if (currentValue === groupFilter) return;
+
+    const next = new URLSearchParams(searchParams);
+    if (groupFilter === "ALL") {
+      next.delete("groupId");
+    } else {
+      next.set("groupId", groupFilter);
+    }
+    setSearchParams(next, { replace: true });
+  }, [groupFilter, searchParams, setSearchParams]);
 
   const handleTimeRangeChange = (value: TimeRangePreset) => {
     setTimeRange(value);

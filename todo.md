@@ -136,7 +136,7 @@
 
 ### Inventory flow
 - [x] Filter monitors/devices/results/incidents by group
-- [ ] Group summary page แบบ uptime/health ต่อกลุ่ม
+- [x] Group summary page แบบ uptime/health ต่อกลุ่ม
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 
 ## Next Recommended Work

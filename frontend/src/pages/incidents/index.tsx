@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
@@ -172,6 +172,7 @@ const IncidentsPage = () => {
   const { api, del, patch } = useApi();
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -180,7 +181,10 @@ const IncidentsPage = () => {
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("week");
   const [statusFilter, setStatusFilter] = useState<"ALL" | IncidentStatus>("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | MonitorType>("ALL");
-  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>(() => {
+    const groupId = searchParams.get("groupId")?.trim();
+    return groupId ? groupId : "ALL";
+  });
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [customFrom, setCustomFrom] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() - presetDurationsMs.week)),
@@ -261,6 +265,19 @@ const IncidentsPage = () => {
 
     void loadGroups();
   }, [api]);
+
+  useEffect(() => {
+    const currentValue = searchParams.get("groupId")?.trim() || "ALL";
+    if (currentValue === groupFilter) return;
+
+    const next = new URLSearchParams(searchParams);
+    if (groupFilter === "ALL") {
+      next.delete("groupId");
+    } else {
+      next.set("groupId", groupFilter);
+    }
+    setSearchParams(next, { replace: true });
+  }, [groupFilter, searchParams, setSearchParams]);
 
   const handleTimeRangeChange = (value: TimeRangePreset) => {
     setTimeRange(value);

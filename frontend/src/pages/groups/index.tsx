@@ -469,8 +469,14 @@ const GroupsPage = () => {
 
               <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
                 <span>Updated {formatDate(group.updatedAt)}</span>
-                {isAdmin ? (
-                  <div className="flex gap-2">
+                <div className="flex gap-2">
+                  <Link
+                    className="rounded-md border border-cyan-200 px-3 py-1.5 font-semibold text-cyan-700 transition hover:bg-cyan-50"
+                    to={`/groups/${group.id}`}
+                  >
+                    Summary
+                  </Link>
+                  {isAdmin ? (
                     <button
                       className="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-white"
                       type="button"
@@ -485,8 +491,8 @@ const GroupsPage = () => {
                     >
                       Delete
                     </button>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
             </article>
           ))}
