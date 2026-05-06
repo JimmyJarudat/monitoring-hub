@@ -22,7 +22,8 @@
       "Bash(bun add *)",
       "Bash(bunx prisma *)",
       "Bash(git commit *)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(git -C \"c:\\\\Users\\\\Saranrat\\\\Desktop\\\\my-project\\\\monitoring-hub\" status)"
     ]
   }
 }

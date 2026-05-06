@@ -44,7 +44,7 @@ const baseHtml = (accentColor: string, headerIcon: string, headerTitle: string, 
           <tr>
             <td style="background:#F8FAFC;border-top:1px solid #E2E8F0;padding:14px 28px;text-align:center;">
               <span style="font-size:12px;color:#94A3B8;">
-                Monitoring Hub &middot; Lightweight NMS &middot; Automated notification
+                Monitoring Hub &middot; Lightweight Monitor &middot; Automated notification
               </span>
             </td>
           </tr>
