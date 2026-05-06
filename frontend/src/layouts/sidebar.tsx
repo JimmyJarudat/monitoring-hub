@@ -63,7 +63,7 @@ const sidebarSections: SidebarSection[] = [
     title: "System",
     items: [
       { label: "Users", path: "/users", icon: "U", badge: "Soon", adminOnly: true },
-      { label: "Audit Logs", path: "/audit-logs", icon: "L", badge: "Soon", adminOnly: true },
+      { label: "Audit Logs", path: "/audit-logs", icon: "L", adminOnly: true },
       { label: "Settings", path: "/settings", icon: "S", adminOnly: true },
     ],
   },

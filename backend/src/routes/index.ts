@@ -2,6 +2,7 @@ import Elysia from "elysia";
 import { authController } from "../controllers/auth.Controller";
 import { authProtectedRoutes } from "./auth";
 import { authMiddleware } from "../middleware/auth";
+import { auditMiddleware } from "../middleware/audit";
 import { monitorRoutes } from "./monitors";
 import { incidentRoutes } from "./incidents";
 import { groupRoutes } from "./groups";
@@ -19,6 +20,7 @@ export const publicRoutes = new Elysia()
 // Protected routes — ต้องมี token ทุก route
 export const protectedRoutes = new Elysia()
   .use(authMiddleware)
+  .use(auditMiddleware)
   .use(authProtectedRoutes) // /auth/me
   .use(monitorRoutes) // /monitors
   .use(incidentRoutes) // /incidents

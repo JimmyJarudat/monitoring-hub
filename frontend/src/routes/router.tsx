@@ -23,6 +23,8 @@ import InterfaceInventoryPage from "@/pages/interfaces";
 import SettingsPage from "@/pages/settings";
 import ChannelsPage from "@/pages/channels";
 import AlertsPage from "@/pages/alerts";
+import AuditLogsPage from "@/pages/audit-logs";
+import LoginHistoryPage from "@/pages/login-history";
 
 const LegacyMonitorDetailRedirect = () => {
   const { id } = useParams();
@@ -54,8 +56,10 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "interfaces", element: <InterfaceInventoryPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),
       createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
+      createProtectedRoute({ path: "login-history", element: <LoginHistoryPage /> }),
       createProtectedRoute({ path: "alerts", element: <AlertsPage />, adminOnly: true }),
       createProtectedRoute({ path: "channels", element: <ChannelsPage />, adminOnly: true }),
+      createProtectedRoute({ path: "audit-logs", element: <AuditLogsPage />, adminOnly: true }),
       createProtectedRoute({ path: "settings", element: <SettingsPage />, adminOnly: true }),
       createProtectedRoute({
         path: "dashboard/monitors",
