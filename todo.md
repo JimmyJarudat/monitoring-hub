@@ -3,7 +3,6 @@
 ## Current Direction
 
 - ตอนนี้โฟกัสหลักคือ **ทำ capability ของ monitor ให้แน่นก่อน**
-- **Dashboard** และ **Notification / Channels** จะเก็บไว้ช่วงท้าย
 - แนวทางผลิตภัณฑ์คือ:
   - เอาความง่ายแบบ uptime tools
   - เอาความลึกด้านอุปกรณ์แบบ NMS
@@ -79,8 +78,13 @@
 - [x] Device detail graph section
 - [x] Day / Week / Month / Custom filter สำหรับ metrics analysis
 - [x] SNMP network counters fallback 32-bit / 64-bit
+- [x] Network UI แสดง traffic rate แทน raw counters
+- [x] Interface traffic graph เป็น bps/Kbps/Mbps/Gbps
+- [x] Top interfaces / busiest links
+- [x] Port/interface inventory page แยก
+- [x] Error / discard counters
 
-### Results / incidents
+### Results / Incidents
 - [x] Global results page `/results`
 - [x] Filter day / week / month / custom
 - [x] Incident page `/incidents`
@@ -88,129 +92,114 @@
 - [x] Runner auto-create incident เมื่อ DOWN / DEGRADED
 - [x] Runner auto-resolve incident เมื่อกลับมา UP
 
-### Inventory / organization
+### Inventory / Organization
 - [x] Devices page route
 - [x] Groups page `/groups`
 - [x] Create / edit / delete group
 - [x] Assign monitors into groups
+- [x] Filter monitors/devices/results/incidents by group
+- [x] Group summary page แบบ uptime/health ต่อกลุ่ม
 - [x] Credentials page `/credentials`
-- [x] Role-based access control
-  - [x] `admin` = full control
-  - [x] `user` = read-only operator
-  - [x] backend route guard
-  - [x] frontend route / nav / action guard
-- [x] Credential inventory types
-  - SNMP community
-  - username / password
-  - API token
-  - SSH key
+- [x] Credential inventory types (SNMP, username/password, API token, SSH key)
 - [x] Credential type guide
 - [x] Credential preset selection in New Monitor
 - [x] Auto-fill monitor fields from selected credential preset
 - [x] Linked credential binding on monitor
+- [x] Edit / unlink linked credential from monitor detail
+- [x] Encrypt credential secret at rest
+- [x] Credential usage map ("used by X monitors")
 
-### Backend / API
-- [x] Manual check endpoint
-- [x] Monitor summary endpoint
-- [x] Global results endpoint
-- [x] Incidents CRUD endpoint
-- [x] Groups CRUD endpoint
-- [x] Credentials CRUD endpoint
-- [x] Metrics timeseries endpoint
+### Alerting & Notifications
+- [x] Notification channels page `/channels`
+  - LINE Notify
+  - Email (SMTP)
+  - Telegram
+  - Slack (Block Kit)
+  - Discord (Embeds)
+  - Custom Webhook
+- [x] Alert rules management page `/alerts`
+- [x] Rich notification templates per channel type
+- [x] Payload preview in channel form
 
-## Known Gaps Right Now
+### Access control & Audit
+- [x] Role-based access control
+  - `admin` = full control
+  - `user` = read-only operator
+  - backend route guard
+  - frontend route / nav / action guard
+- [x] Audit logs page `/audit-logs`
+- [x] Login history page
 
-### Credentials
-- [x] หน้า Edit monitor เปลี่ยนหรือ unlink credential ได้โดยตรง
-- [x] Secret เข้ารหัสใน DB แล้ว (encrypt at rest)
-- [x] มี permission control เรื่องใครดู secret ได้
-- [x] มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
+### User & Account management
+- [x] Users management page `/users` (admin)
+  - Create user
+  - Edit user
+  - Reset password (admin force-reset)
+  - Delete user
+- [x] Profile page `/profile`
+  - Edit display name / username / email
+  - DiceBear avatar (deterministic seed)
+- [x] Change password page `/change-password`
+  - Password strength meter
+  - Session revocation warning
 
-### Device / network analytics
-- [x] Network UI แสดง **traffic rate** แทน raw counters ในหน้า detail
-- [x] Interface traffic graph เป็น bps/Kbps/Mbps/Gbps แบบอ่านง่าย
-- [x] Top interfaces / busiest links ในหน้า detail
-- [x] มี port/interface inventory page แยก
-- [x] Error / discard counters ในหน้า detail
+### System Settings
+- [x] General / Branding
+  - System name, tagline, logo text
+  - Logo upload (stored in `backend/uploads/`)
+  - Live sidebar update after save
+- [x] Alerting Defaults
+  - Incident reminder interval (hours)
+  - Hot-reload in monitor runner (5-min cache TTL)
+- [x] Monitor Defaults
+  - Default interval / timeout
+- [x] Security
+  - Password min length
+  - Session duration
+  - Max login attempts
+- [x] Data Retention
+  - Results / metrics / audit retention days
+  - Auto cleanup schedule
+  - Manual clear history
+- [x] Sidebar footer — version badge from `package.json` (build-time injection)
+
+## Remaining Known Gaps
+
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
-
-### Inventory flow
-- [x] Filter monitors/devices/results/incidents by group
-- [x] Group summary page แบบ uptime/health ต่อกลุ่ม
 - [ ] Bind credential usage ให้เห็นจาก group / device context
+- [ ] Rollup summaries สำหรับ long-term charts
+- [ ] Alert cooldown / dedupe / escalation logic
+- [ ] Notification delivery retry / failure tracking
 
 ## Next Recommended Work
 
-### Priority 1 — Make device monitoring feel like a real NMS
-- [x] Convert network counters to traffic rate
-  - [x] RX/TX bps
-  - [x] Kbps / Mbps / Gbps formatting
-  - [x] per-interface history
-- [x] Add interface-focused device detail
-  - [x] top active interfaces
-  - [x] interface operational status
-  - [x] error / discard counters ให้ครบขึ้น
-- [x] Add group-aware views
-  - [x] filter devices by group
-  - [x] filter monitors by group
-  - [x] results/incidents by group
-
-### Priority 2 — Make credentials first-class
-- [x] Store `credentialId` on monitor config/model
-- [x] Resolve credential in checker/runner at runtime
-- [x] Update monitor automatically when shared credential changes
-- [x] Show credential usage map
-- [x] Add “used by X monitors” in credentials page
-- [x] Edit / unlink linked credential from monitor detail
-- [x] Encrypt credential secret at rest
-
-### Priority 3 — Retention and storage hygiene
-- [x] History retention settings
-  - 7 / 14 / 30 / 90 days
-- [x] Auto cleanup ตาม schedule
-- [x] Manual clear history
-- [ ] Rollup summaries สำหรับ long-term charts
-
-## Deliberately Later
-
-### Notifications / alerting
-- [ ] Notification channels page
-- [ ] LINE / Email / Slack / Discord delivery
-- [ ] Alert rules management page
-- [ ] Cooldown / dedupe / escalation
-
 ### Dashboard
-- [ ] Dashboard overview
-- [ ] Stat cards
-- [ ] attention list
-- [ ] open incidents summary
-- [ ] group/device summary widgets
+- [ ] Dashboard overview page `/dashboard`
+- [ ] Stat cards (monitors up/down, open incidents, recent events)
+- [ ] Attention list (degraded / down items)
+- [ ] Open incidents summary
+- [ ] Group / device summary widgets
+
+### Status Map
+- [ ] Visual topology / status map
+
+### Reports
+- [ ] Scheduled or on-demand availability reports
 
 ## Product Strategy — Take the Best, Cut the Worst
 
 ### What to keep
-- [ ] **From uptime tools**
-  - setup ง่าย
-  - monitor create flow ตรงไปตรงมา
-  - อ่านสถานะเร็ว
-- [ ] **From NMS tools**
-  - device identity
-  - interface metrics
-  - CPU/RAM/Disk history
-  - grouped inventory
-- [ ] **From modern infra tools**
-  - graph ดูง่าย
-  - filter ช่วงเวลาเร็ว
-  - reusable credentials
-  - clean API-first structure
+- **From uptime tools** — setup ง่าย, monitor create flow ตรงไปตรงมา, อ่านสถานะเร็ว
+- **From NMS tools** — device identity, interface metrics, CPU/RAM/Disk history, grouped inventory
+- **From modern infra tools** — graph ดูง่าย, filter ช่วงเวลาเร็ว, reusable credentials, clean API-first structure
 
 ### What to avoid
-- [ ] ฟอร์มที่บังคับกรอกเยอะทั้งที่ไม่จำเป็น
-- [ ] แยกหน้าเยอะเกินจนหาไม่เจอว่าอะไรอยู่ตรงไหน
-- [ ] raw counters ที่คนอ่านไม่รู้เรื่อง
-- [ ] credential กระจายอยู่หลายหน้าแบบไม่รู้ว่าตัวไหนใช้อยู่
-- [ ] dashboard สวยแต่ไม่ช่วย action
-- [ ] monitor type เยอะ แต่ใช้งานจริงแล้วไม่ลึกพอ
+- ฟอร์มที่บังคับกรอกเยอะทั้งที่ไม่จำเป็น
+- แยกหน้าเยอะเกินจนหาไม่เจอว่าอะไรอยู่ตรงไหน
+- raw counters ที่คนอ่านไม่รู้เรื่อง
+- credential กระจายอยู่หลายหน้าแบบไม่รู้ว่าตัวไหนใช้อยู่
+- dashboard สวยแต่ไม่ช่วย action
+- monitor type เยอะ แต่ใช้งานจริงแล้วไม่ลึกพอ
 
 ## Target Shape
 
@@ -219,4 +208,5 @@
 - สร้าง monitor ง่ายแบบ lightweight monitoring
 - ดูอุปกรณ์ลึกพอสำหรับงาน network/server จริง
 - reuse credential และ group ได้เป็นระบบ
-- ขยายไป alerting/dashboard ทีหลังโดยไม่ต้องรื้อแกนข้อมูลใหม่
+- alerting ครบ ทั้ง channels, rules, และ templates
+- dashboard และ reports เป็น layer สุดท้ายที่ขยายต่อได้โดยไม่ต้องรื้อแกนข้อมูลใหม่
