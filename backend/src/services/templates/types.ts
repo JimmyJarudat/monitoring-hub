@@ -35,3 +35,12 @@ export type EmailTemplateOutput = {
 export type WebhookTemplateOutput = {
   payload: Record<string, unknown>;
 };
+
+export type SlackTemplateOutput = {
+  text: string;
+  blocks: Record<string, unknown>[];
+};
+
+export type DiscordTemplateOutput = {
+  embeds: Record<string, unknown>[];
+};

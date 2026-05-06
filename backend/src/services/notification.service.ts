@@ -13,6 +13,10 @@ import {
   buildEmailTestMessage,
   buildWebhookIncidentPayload,
   buildWebhookTestPayload,
+  buildSlackIncidentMessage,
+  buildSlackTestMessage,
+  buildDiscordIncidentMessage,
+  buildDiscordTestMessage,
   type IncidentTemplateData,
 } from "./templates";
 
@@ -302,6 +306,8 @@ type AllChannelContent = {
   telegram: { text: string; parseMode: "HTML" };
   line: { altText: string; flexContents: object };
   email: { subject: string; text: string; html: string };
+  slack: { text: string; blocks: Record<string, unknown>[] };
+  discord: { embeds: Record<string, unknown>[] };
   webhook: { payload: Record<string, unknown> };
 };
 
@@ -309,6 +315,8 @@ const buildIncidentContent = (data: IncidentTemplateData): AllChannelContent => 
   telegram: buildTelegramIncidentMessage(data),
   line: buildLineIncidentMessage(data),
   email: buildEmailIncidentMessage(data),
+  slack: buildSlackIncidentMessage(data),
+  discord: buildDiscordIncidentMessage(data),
   webhook: buildWebhookIncidentPayload(data),
 });
 
@@ -316,6 +324,8 @@ const buildTestContent = (data: { channelName: string; channelType: string; sent
   telegram: buildTelegramTestMessage(data),
   line: buildLineTestMessage(data),
   email: buildEmailTestMessage(data),
+  slack: buildSlackTestMessage(data),
+  discord: buildDiscordTestMessage(data),
   webhook: buildWebhookTestPayload(data),
 });
 
@@ -342,6 +352,16 @@ const deliverChannelMessage = async (channel: NotificationChannel, content: AllC
   const cfg = isObject(channel.config) ? channel.config : {};
   const webhookUrl = typeof cfg.webhookUrl === "string" ? cfg.webhookUrl : "";
   if (!webhookUrl) throw new Error("Missing webhookUrl");
+
+  if (channel.type === "SLACK") {
+    await sendWebhook(webhookUrl, content.slack);
+    return;
+  }
+  if (channel.type === "DISCORD") {
+    await sendWebhook(webhookUrl, content.discord);
+    return;
+  }
+
   await sendWebhook(webhookUrl, content.webhook.payload);
 };
 
