@@ -22,6 +22,7 @@ const breadcrumbLabels: Record<string, string> = {
   channels: "Notification Channels",
   reports: "Reports",
   devices: "Devices",
+  interfaces: "Interfaces",
   credentials: "Credentials",
   groups: "Groups",
   users: "Users",

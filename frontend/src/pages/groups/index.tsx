@@ -153,6 +153,25 @@ const GroupsPage = () => {
     };
   }, [groupedMonitorIds.size, groups, monitorsWithoutGroup.length]);
 
+  const groupHealth = useMemo(() => {
+    return groups.map((group) => {
+      const enabled = group.monitors.filter((m) => m.enabled);
+      const total = enabled.length;
+      const up = enabled.filter((m) => m.latestResult?.status === "UP").length;
+      const down = enabled.filter((m) => m.latestResult?.status === "DOWN").length;
+      const degraded = enabled.filter((m) => m.latestResult?.status === "DEGRADED").length;
+      const pending = enabled.filter((m) => !m.latestResult).length;
+      const overallStatus =
+        total === 0 ? ("EMPTY" as const)
+        : down > 0 ? ("DOWN" as const)
+        : degraded > 0 ? ("DEGRADED" as const)
+        : pending === total ? ("PENDING" as const)
+        : ("UP" as const);
+      const uptimePct = total > 0 ? Math.round((up / total) * 100) : null;
+      return { group, total, up, down, degraded, pending, overallStatus, uptimePct };
+    });
+  }, [groups]);
+
   const openCreate = () => {
     resetForm();
     setEditingGroup(null);
@@ -289,6 +308,80 @@ const GroupsPage = () => {
         ))}
       </section>
 
+      {/* ── Health Overview ── */}
+      {!isLoading && groupHealth.length > 0 && (
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-950">Health Overview</h2>
+            <p className="text-xs text-slate-400">Snapshot จาก latest result ของแต่ละกลุ่ม</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {groupHealth.map(({ group, total, up, down, degraded, pending, overallStatus, uptimePct }) => {
+              const statusConfig = {
+                UP:       { bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: "Healthy" },
+                DEGRADED: { bar: "bg-amber-400",   badge: "bg-amber-100 text-amber-700",    label: "Degraded" },
+                DOWN:     { bar: "bg-red-500",      badge: "bg-red-100 text-red-700",        label: "Down" },
+                PENDING:  { bar: "bg-slate-300",    badge: "bg-slate-100 text-slate-500",    label: "Pending" },
+                EMPTY:    { bar: "bg-slate-200",    badge: "bg-slate-100 text-slate-400",    label: "Empty" },
+              }[overallStatus];
+
+              const upPct   = total > 0 ? (up / total) * 100 : 0;
+              const degPct  = total > 0 ? (degraded / total) * 100 : 0;
+              const downPct = total > 0 ? (down / total) * 100 : 0;
+
+              return (
+                <div key={group.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  {/* Group name + status badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: group.color ?? "#22c55e" }}
+                      />
+                      <h3 className="truncate text-sm font-semibold text-slate-950">{group.name}</h3>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusConfig.badge}`}>
+                      {statusConfig.label}
+                    </span>
+                  </div>
+
+                  {/* Uptime % */}
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-slate-950">
+                      {uptimePct !== null ? `${uptimePct}%` : "—"}
+                    </span>
+                    <span className="text-xs text-slate-400">uptime</span>
+                  </div>
+
+                  {/* Stacked progress bar */}
+                  <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    {upPct > 0   && <div className="bg-emerald-500 transition-all" style={{ width: `${upPct}%` }} />}
+                    {degPct > 0  && <div className="bg-amber-400 transition-all"   style={{ width: `${degPct}%` }} />}
+                    {downPct > 0 && <div className="bg-red-500 transition-all"     style={{ width: `${downPct}%` }} />}
+                  </div>
+
+                  {/* Count pills */}
+                  <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-medium">
+                    {total === 0 ? (
+                      <span className="text-slate-400">ยังไม่มี monitor</span>
+                    ) : (
+                      <>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{up} UP</span>
+                        {degraded > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">{degraded} DEGRADED</span>}
+                        {down > 0     && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">{down} DOWN</span>}
+                        {pending > 0  && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{pending} pending</span>}
+                        <span className="ml-auto text-slate-400">{total} total</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Group inventory (management) ── */}
       <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>

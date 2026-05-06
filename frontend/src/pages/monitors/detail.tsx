@@ -11,6 +11,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  ReferenceLine,
 } from "recharts";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
@@ -324,6 +325,34 @@ const toConfigText = (config: Record<string, unknown>) => {
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+const WARN_PCT = 75;
+const CRITICAL_PCT = 90;
+
+const thresholdCardClass = (pct: number | null | undefined) => {
+  if (!isFiniteNumber(pct)) return "border-slate-200 bg-slate-50";
+  if (pct >= CRITICAL_PCT) return "border-red-200 bg-red-50";
+  if (pct >= WARN_PCT) return "border-amber-200 bg-amber-50";
+  return "border-slate-200 bg-slate-50";
+};
+
+const thresholdValueClass = (pct: number | null | undefined) => {
+  if (!isFiniteNumber(pct)) return "text-slate-950";
+  if (pct >= CRITICAL_PCT) return "text-red-700";
+  if (pct >= WARN_PCT) return "text-amber-700";
+  return "text-slate-950";
+};
+
+const computeSeriesAnomaly = (values: number[], latest: number | null | undefined): string | null => {
+  if (!isFiniteNumber(latest) || values.length < 8) return null;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev < 3) return null;
+  if (latest > mean + 2 * stdDev)
+    return `ค่าปัจจุบัน ${latest.toFixed(1)}% สูงผิดปกติ (avg ${mean.toFixed(1)}% ± ${stdDev.toFixed(1)}%)`;
+  return null;
+};
 
 const formatPercent = (value: number | null | undefined) =>
   isFiniteNumber(value) ? `${value.toFixed(1)}%` : "-";
@@ -703,6 +732,16 @@ const MonitorDetailPage = () => {
       (a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
     );
   }, [metricSeries]);
+
+  const cpuAnomalyHint = useMemo(
+    () => computeSeriesAnomaly(utilizationChartData.map((p) => p.cpu).filter(isFiniteNumber), latestMetadata?.cpuUsedPct),
+    [utilizationChartData, latestMetadata],
+  );
+
+  const memAnomalyHint = useMemo(
+    () => computeSeriesAnomaly(utilizationChartData.map((p) => p.memory).filter(isFiniteNumber), latestMetadata?.memUsedPct),
+    [utilizationChartData, latestMetadata],
+  );
 
   const diskSeries = useMemo(
     () =>
@@ -1209,9 +1248,16 @@ const MonitorDetailPage = () => {
                 ) : null}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">CPU</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.cpuUsedPct)}`}>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs text-slate-500">CPU</p>
+                      {cpuAnomalyHint ? (
+                        <span className="text-[10px] font-semibold text-amber-600" title={cpuAnomalyHint}>
+                          ↑ anomaly
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.cpuUsedPct)}`}>
                       {formatPercent(latestMetadata?.cpuUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -1220,9 +1266,16 @@ const MonitorDetailPage = () => {
                       {isFiniteNumber(latestMetadata?.load15) ? latestMetadata?.load15?.toFixed(2) : "-"}
                     </p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Memory</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.memUsedPct)}`}>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs text-slate-500">Memory</p>
+                      {memAnomalyHint ? (
+                        <span className="text-[10px] font-semibold text-amber-600" title={memAnomalyHint}>
+                          ↑ anomaly
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.memUsedPct)}`}>
                       {formatPercent(latestMetadata?.memUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -1266,6 +1319,8 @@ const MonitorDetailPage = () => {
                           <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
                           <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                           <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
+                          <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
+                          <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
                           <Tooltip
                             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                             labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
@@ -1406,6 +1461,8 @@ const MonitorDetailPage = () => {
                         <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
                         <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                         <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
+                        <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
+                        <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
                         <Tooltip
                           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                           labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt)) : "")}
