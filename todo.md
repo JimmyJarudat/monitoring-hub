@@ -131,7 +131,7 @@
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 
 ### Inventory flow
-- [ ] Filter monitors/devices/results/incidents by group
+- [x] Filter monitors/devices/results/incidents by group
 - [ ] Group summary page แบบ uptime/health ต่อกลุ่ม
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 
@@ -147,9 +147,9 @@
   - [x] interface operational status
   - [x] error / discard counters ให้ครบขึ้น
 - [ ] Add group-aware views
-  - filter devices by group
-  - filter monitors by group
-  - results/incidents by group
+  - [x] filter devices by group
+  - [x] filter monitors by group
+  - [x] results/incidents by group
 
 ### Priority 2 — Make credentials first-class
 - [ ] Store `credentialId` on monitor config/model

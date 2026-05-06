@@ -26,6 +26,7 @@ type ApiFailure = {
 };
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+type GroupOption = { id: string; name: string; color?: string | null; monitorCount?: number };
 
 type MonitorResult = {
   id: string;
@@ -121,6 +122,8 @@ const toConfigText = (config: Record<string, unknown>) => {
 const MonitorsPage = () => {
   const { api } = useApi();
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenuState | null>(null);
@@ -139,7 +142,11 @@ const MonitorsPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await api.get<ApiResponse<MonitorRow[]>>("/monitors");
+      const response = await api.get<ApiResponse<MonitorRow[]>>("/monitors", {
+        params: {
+          groupId: groupFilter === "ALL" ? undefined : groupFilter,
+        },
+      });
 
       if (!response.data.success) {
         toast.error(response.data.message);
@@ -152,11 +159,28 @@ const MonitorsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [api]);
+  }, [api, groupFilter]);
 
   useEffect(() => {
     void fetchMonitors();
   }, [fetchMonitors]);
+
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const response = await api.get<ApiResponse<GroupOption[]>>("/groups");
+        if (!response.data.success) {
+          toast.error(response.data.message);
+          return;
+        }
+        setGroups(response.data.data);
+      } catch {
+        toast.error("โหลด groups ไม่สำเร็จ");
+      }
+    };
+
+    void loadGroups();
+  }, [api]);
 
   const summary = useMemo(() => {
     const latestStatuses = monitors.map((monitor) => monitor.latestResult?.status ?? "PENDING");
@@ -403,6 +427,29 @@ const MonitorsPage = () => {
             <p className={`mt-2 text-2xl font-semibold ${item.className}`}>{item.value}</p>
           </div>
         ))}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_1fr] lg:items-end">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Group</span>
+            <select
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              value={groupFilter}
+              onChange={(event) => setGroupFilter(event.target.value)}
+            >
+              <option value="ALL">All groups</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-sm text-slate-500">
+            โฟกัสดู monitor ตามกลุ่มที่จัดไว้ เพื่อแยก environment, site, หรือ service zone ได้เร็วขึ้น
+          </p>
+        </div>
       </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white">

@@ -117,6 +117,7 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
 export const monitorRoutes = new Elysia({ prefix: "/monitors" })
   .get("/", async ({ query }) => {
     const type = typeof query.type === "string" ? query.type : undefined;
+    const groupId = typeof query.groupId === "string" && query.groupId.trim() ? query.groupId : undefined;
     const enabled =
       query.enabled === "true" ? true : query.enabled === "false" ? false : undefined;
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -126,6 +127,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         ...(type && monitorTypes.includes(type as MonitorType)
           ? { type: type as any }
           : {}),
+        ...(groupId ? { groups: { some: { groupId } } } : {}),
         ...(enabled !== undefined ? { enabled } : {}),
       },
       orderBy: { createdAt: "desc" },
@@ -247,11 +249,16 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         checkedAt.lte = to;
       }
 
+      const monitorWhere: Prisma.MonitorWhereInput = {
+        ...(query.type ? { type: query.type as any } : {}),
+        ...(query.groupId ? { groups: { some: { groupId: query.groupId } } } : {}),
+      };
+
       const where: Prisma.MonitorResultWhereInput = {
         ...(Object.keys(checkedAt).length > 0 ? { checkedAt } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.monitorId ? { monitorId: query.monitorId } : {}),
-        ...(query.type ? { monitor: { type: query.type as any } } : {}),
+        ...(Object.keys(monitorWhere).length > 0 ? { monitor: monitorWhere } : {}),
       };
 
       const results = await prisma.monitorResult.findMany({
@@ -301,6 +308,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           t.Union([t.Literal("UP"), t.Literal("DOWN"), t.Literal("DEGRADED")]),
         ),
         monitorId: t.Optional(t.String()),
+        groupId: t.Optional(t.String()),
         type: t.Optional(
           t.Union([
             t.Literal("PING"),

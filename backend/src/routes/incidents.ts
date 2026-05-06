@@ -34,11 +34,16 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
         startedAt.lte = to;
       }
 
+      const monitorWhere: Prisma.MonitorWhereInput = {
+        ...(query.type ? { type: query.type as any } : {}),
+        ...(query.groupId ? { groups: { some: { groupId: query.groupId } } } : {}),
+      };
+
       const where: Prisma.IncidentWhereInput = {
         ...(Object.keys(startedAt).length > 0 ? { startedAt } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.monitorId ? { monitorId: query.monitorId } : {}),
-        ...(query.type ? { monitor: { type: query.type as any } } : {}),
+        ...(Object.keys(monitorWhere).length > 0 ? { monitor: monitorWhere } : {}),
       };
 
       const incidents = await prisma.incident.findMany({
@@ -96,6 +101,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
         to: t.Optional(t.String()),
         status: t.Optional(t.Union([t.Literal("OPEN"), t.Literal("RESOLVED")])),
         monitorId: t.Optional(t.String()),
+        groupId: t.Optional(t.String()),
         type: t.Optional(
           t.Union([
             t.Literal("PING"),

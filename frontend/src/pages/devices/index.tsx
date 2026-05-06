@@ -51,6 +51,7 @@ type Device = {
 };
 
 type ApiResponse<T> = { data: T };
+type GroupOption = { id: string; name: string; color?: string | null; monitorCount?: number };
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -368,22 +369,31 @@ const DeviceCard = ({ device }: { device: Device }) => {
 const DevicesPage = () => {
   const { get } = useApi();
   const [devices, setDevices] = useState<Device[]>([]);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       try {
-        const res = await get<ApiResponse<Device[]>>("/monitors");
-        const items = (res.data.data ?? []).filter(
+        const [monitorsResponse, groupsResponse] = await Promise.all([
+          get<ApiResponse<Device[]>>("/monitors", {
+            params: { groupId: groupFilter === "ALL" ? undefined : groupFilter },
+          }),
+          get<ApiResponse<GroupOption[]>>("/groups"),
+        ]);
+        const items = (monitorsResponse.data.data ?? []).filter(
           (device) => device.type === "SYSTEM" || device.type === "SNMP",
         );
+        setGroups(groupsResponse.data.data ?? []);
         setDevices(items as Device[]);
       } finally {
         setLoading(false);
       }
     };
     void load();
-  }, [get]);
+  }, [get, groupFilter]);
 
   const up = devices.filter((d) => d.latestResult?.status === "UP").length;
   const degraded = devices.filter((d) => d.latestResult?.status === "DEGRADED").length;
@@ -422,6 +432,29 @@ const DevicesPage = () => {
           ))}
         </div>
       ) : null}
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_1fr] lg:items-end">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Group</span>
+            <select
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              value={groupFilter}
+              onChange={(event) => setGroupFilter(event.target.value)}
+            >
+              <option value="ALL">All groups</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-sm text-slate-500">
+            ใช้ group ช่วยแยกดูอุปกรณ์ตาม site, tenant, หรือบทบาทของระบบได้โดยไม่ต้องปนกันทั้ง inventory
+          </p>
+        </div>
+      </section>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {loading ? (

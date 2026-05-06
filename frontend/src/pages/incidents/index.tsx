@@ -26,6 +26,7 @@ type ApiFailure = {
 };
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+type GroupOption = { id: string; name: string; color?: string | null; monitorCount?: number };
 
 type IncidentMonitor = {
   id: string;
@@ -175,6 +176,8 @@ const IncidentsPage = () => {
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("week");
   const [statusFilter, setStatusFilter] = useState<"ALL" | IncidentStatus>("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | MonitorType>("ALL");
+  const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
+  const [groups, setGroups] = useState<GroupOption[]>([]);
   const [customFrom, setCustomFrom] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() - presetDurationsMs.week)),
   );
@@ -206,6 +209,7 @@ const IncidentsPage = () => {
             to: appliedTo,
             status: statusFilter === "ALL" ? undefined : statusFilter,
             type: typeFilter === "ALL" ? undefined : typeFilter,
+            groupId: groupFilter === "ALL" ? undefined : groupFilter,
           },
         });
 
@@ -230,12 +234,29 @@ const IncidentsPage = () => {
         setIsLoadingMore(false);
       }
     },
-    [api, appliedFrom, appliedTo, statusFilter, typeFilter],
+    [api, appliedFrom, appliedTo, groupFilter, statusFilter, typeFilter],
   );
 
   useEffect(() => {
     void fetchIncidents(1, "replace");
   }, [fetchIncidents]);
+
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const response = await api.get<ApiResponse<GroupOption[]>>("/groups");
+        if (!response.data.success) {
+          toast.error(response.data.message);
+          return;
+        }
+        setGroups(response.data.data);
+      } catch {
+        toast.error("โหลด groups ไม่สำเร็จ");
+      }
+    };
+
+    void loadGroups();
+  }, [api]);
 
   const handleTimeRangeChange = (value: TimeRangePreset) => {
     setTimeRange(value);
@@ -435,6 +456,22 @@ const IncidentsPage = () => {
                 {typeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Group</span>
+              <select
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                value={groupFilter}
+                onChange={(event) => setGroupFilter(event.target.value)}
+              >
+                <option value="ALL">All groups</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
                   </option>
                 ))}
               </select>
