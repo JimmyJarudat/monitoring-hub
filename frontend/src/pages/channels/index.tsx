@@ -454,14 +454,14 @@ const ChannelsPage = () => {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-xl rounded-lg bg-white shadow-xl">
-            <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="shrink-0 border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
                 {editing ? "Edit channel" : "Create channel"}
               </h2>
               <p className="mt-1 text-sm text-slate-500">เมื่อมี incident จะส่งแจ้งเตือนผ่าน channel นี้</p>
             </div>
-            <div className="grid gap-4 p-5">
+            <div className="grid gap-4 overflow-y-auto p-5">
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Name</span>
                 <input
@@ -640,7 +640,7 @@ const ChannelsPage = () => {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         ตัวอย่าง payload ที่จะส่ง
                       </p>
-                      <pre className="overflow-x-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
+                      <pre className="max-h-40 overflow-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
                         {
                           event: "incident",
                           status: "OPEN",
@@ -679,7 +679,7 @@ const ChannelsPage = () => {
                 Enable channel
               </label>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+            <div className="shrink-0 flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
               <button
                 type="button"
                 disabled={testingDraft || saving}
