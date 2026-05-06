@@ -165,10 +165,10 @@
 - [x] Encrypt credential secret at rest
 
 ### Priority 3 — Retention and storage hygiene
-- [ ] History retention settings
+- [x] History retention settings
   - 7 / 14 / 30 / 90 days
-- [ ] Auto cleanup ตาม schedule
-- [ ] Manual clear history
+- [x] Auto cleanup ตาม schedule
+- [x] Manual clear history
 - [ ] Rollup summaries สำหรับ long-term charts
 
 ## Deliberately Later
