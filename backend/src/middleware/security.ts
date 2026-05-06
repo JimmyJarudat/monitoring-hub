@@ -4,6 +4,18 @@ import { rateLimit } from "elysia-rate-limit";
 import { config } from "../config";
 import { fail } from "../lib/response";
 
+const shouldSkipGlobalRateLimit = (req: Request) => {
+  const pathname = new URL(req.url).pathname;
+
+  return (
+    req.method === "OPTIONS" ||
+    pathname === "/health" ||
+    pathname === "/auth/refresh" ||
+    pathname === "/auth/logout" ||
+    req.headers.get("authorization")?.toLowerCase().startsWith("bearer ") === true
+  );
+};
+
 export const securityMiddleware = new Elysia({ name: "securityMiddleware" })
   // CORS
   .use(
@@ -20,10 +32,12 @@ export const securityMiddleware = new Elysia({ name: "securityMiddleware" })
       max: config.rateLimit.global.max,
       duration: config.rateLimit.global.windowMs,
       errorResponse: JSON.stringify(fail("คำขอมากเกินไป กรุณารอสักครู่")),
-      generator: (req) =>
+      generator: (req, server) =>
         req.headers.get("x-forwarded-for") ??
         req.headers.get("cf-connecting-ip") ??
+        server?.requestIP(req)?.address ??
         "unknown",
+      skip: shouldSkipGlobalRateLimit,
     })
   )
   // Security headers — global เพื่อให้ครอบทุก route

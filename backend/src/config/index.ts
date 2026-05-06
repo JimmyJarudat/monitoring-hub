@@ -27,7 +27,7 @@ export const config = {
   rateLimit: {
     login: { max: 10, windowMs: 60_000 },     // 10 ครั้ง / นาที / IP
     register: { max: 5, windowMs: 60_000 },   // 5 ครั้ง / นาที / IP
-    global: { max: 100, windowMs: 60_000 },   // 100 ครั้ง / นาที / IP
+    global: { max: 300, windowMs: 60_000 },   // 300 ครั้ง / นาที / IP
   },
   lockout: {
     maxFailures: 5,      // ล็อกหลังล้มเหลว 5 ครั้ง

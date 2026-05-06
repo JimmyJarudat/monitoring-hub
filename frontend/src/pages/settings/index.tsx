@@ -60,6 +60,9 @@ const CLEAR_TARGET_OPTIONS: Array<{ key: RetentionTarget; label: string; descrip
 const formatDateTime = (value: string | null) =>
   value ? new Date(value).toLocaleString("th-TH") : "ยังไม่มีข้อมูล";
 
+const getDeletedTotal = (summary: RetentionLastRun) =>
+  summary.deletedResults + summary.deletedMetrics + summary.deletedAuditLogs;
+
 const SettingsPage = () => {
   const { get, patch, post } = useApi();
   const [config, setConfig] = useState<RetentionConfig>({
@@ -86,9 +89,11 @@ const SettingsPage = () => {
         setLastRun(res.data.data.lastRun);
         setStats(res.data.data.stats);
         setClearOlderThanDays(res.data.data.config.results_days);
+      } else {
+        toast.error(res.data.message);
       }
-    } catch {
-      // handled by interceptor
+    } catch (error) {
+      console.error("Failed to load retention settings", error);
     } finally {
       setLoading(false);
     }
@@ -101,10 +106,14 @@ const SettingsPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await patch("/admin/retention", config);
-      toast.success("บันทึกการตั้งค่าการเก็บข้อมูลสำเร็จ");
-    } catch {
-      // handled by interceptor
+      const res = await patch<ApiResponse<{ message: string }>>("/admin/retention", config);
+      if (!res.data.success) {
+        toast.error(res.data.message);
+        return;
+      }
+      toast.success(res.data.data.message);
+    } catch (error) {
+      console.error("Failed to save retention settings", error);
     } finally {
       setSaving(false);
     }
@@ -116,6 +125,8 @@ const SettingsPage = () => {
       setConfig(res.data.data.config);
       setLastRun(res.data.data.lastRun);
       setStats(res.data.data.stats);
+    } else {
+      toast.error(res.data.message);
     }
   };
 
@@ -128,12 +139,17 @@ const SettingsPage = () => {
         const summary = res.data.data;
         setLastRun(summary);
         await refreshRetentionState();
-        toast.success(
-          `Cleanup เสร็จแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`,
-        );
+        const message = `Cleanup เสร็จแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`;
+        if (getDeletedTotal(summary) === 0) {
+          toast.info(`${message} (ไม่มีข้อมูลที่เก่ากว่า retention ให้ลบ)`);
+        } else {
+          toast.success(message);
+        }
+      } else {
+        toast.error(res.data.message);
       }
-    } catch {
-      // handled by interceptor
+    } catch (error) {
+      console.error("Failed to run retention cleanup", error);
     } finally {
       setRunning(false);
     }
@@ -173,12 +189,17 @@ const SettingsPage = () => {
         const { summary, stats: nextStats } = res.data.data;
         setLastRun(summary);
         setStats(nextStats);
-        toast.success(
-          `ล้างข้อมูลแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`,
-        );
+        const message = `ล้างข้อมูลแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`;
+        if (getDeletedTotal(summary) === 0) {
+          toast.info(`${message} (ไม่พบข้อมูลที่ตรงเงื่อนไข)`);
+        } else {
+          toast.success(message);
+        }
+      } else {
+        toast.error(res.data.message);
       }
-    } catch {
-      // handled by interceptor
+    } catch (error) {
+      console.error("Failed to clear retention history", error);
     } finally {
       setClearing(false);
     }
@@ -384,6 +405,11 @@ const SettingsPage = () => {
                   <StatPill label="Metrics ที่ลบ" value={lastRun.deletedMetrics} />
                   <StatPill label="Audit logs ที่ลบ" value={lastRun.deletedAuditLogs} />
                 </div>
+                {getDeletedTotal(lastRun) === 0 ? (
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                    รันสำเร็จ แต่ไม่มีข้อมูลที่ตรงเงื่อนไขให้ลบ
+                  </p>
+                ) : null}
               </>
             ) : (
               <p className="text-sm text-slate-400">ยังไม่เคยรัน cleanup</p>

@@ -164,6 +164,15 @@ api.interceptors.response.use(
 
     if (status === 403) {
       toast.error("คุณไม่มีสิทธิ์เข้าถึงข้อมูลนี้");
+    } else if (status === 429) {
+      const message =
+        typeof error.response?.data === "object" &&
+        error.response.data &&
+        "message" in error.response.data &&
+        typeof error.response.data.message === "string"
+          ? error.response.data.message
+          : "คำขอมากเกินไป กรุณารอสักครู่";
+      toast.error(message);
     } else if (status && status >= 500) {
       toast.error("เกิดข้อผิดพลาดจากฝั่งเซิร์ฟเวอร์");
     } else if (!error.response) {

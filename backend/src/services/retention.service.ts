@@ -108,6 +108,14 @@ export const getRetentionLastRun = async (): Promise<RetentionLastRun | null> =>
   }
 };
 
+const saveRetentionLastRun = async (summary: RetentionLastRun): Promise<void> => {
+  await prisma.systemSetting.upsert({
+    where: { key: KEY_LAST_RUN },
+    update: { value: JSON.stringify(summary) },
+    create: { key: KEY_LAST_RUN, value: JSON.stringify(summary) },
+  });
+};
+
 export const runRetentionCleanup = async (config?: RetentionConfig): Promise<RetentionLastRun> => {
   const cfg = config ?? (await getRetentionConfig());
 
@@ -130,11 +138,7 @@ export const runRetentionCleanup = async (config?: RetentionConfig): Promise<Ret
     ranAt: new Date().toISOString(),
   };
 
-  await prisma.systemSetting.upsert({
-    where: { key: KEY_LAST_RUN },
-    update: { value: JSON.stringify(summary) },
-    create: { key: KEY_LAST_RUN, value: JSON.stringify(summary) },
-  });
+  await saveRetentionLastRun(summary);
 
   return summary;
 };
@@ -183,12 +187,16 @@ export const clearRetentionHistory = async (
       : Promise.resolve({ count: 0 }),
   ]);
 
-  return {
+  const summary: RetentionLastRun = {
     deletedResults: results.count,
     deletedMetrics: metrics.count,
     deletedAuditLogs: audit.count,
     ranAt: new Date().toISOString(),
   };
+
+  await saveRetentionLastRun(summary);
+
+  return summary;
 };
 
 export const startRetentionScheduler = (): void => {
