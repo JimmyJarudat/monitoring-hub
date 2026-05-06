@@ -70,6 +70,11 @@ type MonitorDetail = {
   id: string;
   name: string;
   type: MonitorType;
+  credential?: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
   config: Record<string, unknown>;
   interval: number;
   enabled: boolean;
@@ -1679,6 +1684,17 @@ const MonitorDetailPage = () => {
         <aside className="space-y-6">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-slate-950">Configuration</h2>
+            {monitor.credential ? (
+              <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 px-3 py-3 text-sm">
+                <div className="font-semibold text-violet-950">Linked credential</div>
+                <div className="mt-1 text-violet-800">
+                  {monitor.credential.name} · {monitor.credential.type}
+                </div>
+                <p className="mt-2 text-xs text-violet-700">
+                  ตอนรันจริงระบบจะใช้ค่าล่าสุดจาก credential นี้ แม้ config ด้านล่างจะยังมีค่าที่ถูก fill ไว้
+                </p>
+              </div>
+            ) : null}
             <pre className="mt-4 max-h-96 overflow-auto rounded-md bg-slate-950 p-4 text-xs text-slate-100">
               {toConfigText(monitor.config)}
             </pre>

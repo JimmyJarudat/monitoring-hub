@@ -25,6 +25,7 @@ type CheckedAtFilter = {
 };
 type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
 type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -40,12 +41,49 @@ const monitorBody = t.Object({
     t.Literal("DATABASE"),
   ]),
   config: t.Record(t.String(), t.Any()),
+  credentialId: t.Optional(t.String()),
   interval: t.Optional(t.Number({ minimum: 10 })),
   enabled: t.Optional(t.Boolean()),
 });
 
 const isMonitorConfig = (value: unknown): value is MonitorConfig => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const getCompatibleCredentialTypes = (
+  type: MonitorType,
+  config: MonitorConfig,
+): CredentialType[] => {
+  if (type === "SNMP" || type === "SYSTEM") return ["SNMP_COMMUNITY"];
+  if (type === "HTTP" && config.authType === "basic") return ["USERNAME_PASSWORD"];
+  if (type === "HTTP" && config.authType === "bearer") return ["API_TOKEN"];
+  if (type === "DOCKER") return ["API_TOKEN"];
+  if (type === "DATABASE" && config.type !== "sqlite") return ["USERNAME_PASSWORD"];
+  return [];
+};
+
+const validateCredentialBinding = async (
+  credentialId: string | undefined,
+  type: MonitorType,
+  config: MonitorConfig,
+) => {
+  if (!credentialId) return null;
+
+  const credential = await prisma.credential.findUnique({
+    where: { id: credentialId },
+    select: { id: true, type: true, name: true },
+  });
+
+  if (!credential) {
+    return "ไม่พบ credential ที่เลือก";
+  }
+
+  const compatibleTypes = getCompatibleCredentialTypes(type, config);
+  if (!compatibleTypes.includes(credential.type as CredentialType)) {
+    return `credential "${credential.name}" ใช้กับ monitor ประเภทนี้ไม่ได้`;
+  }
+
+  return null;
 };
 
 const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
@@ -140,6 +178,13 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           where: { status: "OPEN" },
           orderBy: { startedAt: "desc" },
           take: 1,
+        },
+        credential: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+          },
         },
       },
     });
@@ -442,6 +487,13 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
             orderBy: { startedAt: "desc" },
             take: 20,
           },
+          credential: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
         },
       });
 
@@ -481,10 +533,21 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail(configError);
       }
 
+      const credentialError = await validateCredentialBinding(
+        body.credentialId,
+        body.type,
+        body.config,
+      );
+      if (credentialError) {
+        set.status = 400;
+        return fail(credentialError);
+      }
+
       const data: Prisma.MonitorCreateInput = {
         name: body.name.trim(),
         type: body.type as any,
         config: body.config,
+        ...(body.credentialId ? { credential: { connect: { id: body.credentialId } } } : {}),
         interval: body.interval ?? 60,
         enabled: body.enabled ?? true,
       };
@@ -529,11 +592,25 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail(configError);
       }
 
+      const nextCredentialId = body.credentialId !== undefined
+        ? body.credentialId || undefined
+        : existing.credentialId || undefined;
+      const credentialError = await validateCredentialBinding(nextCredentialId, type, config);
+      if (credentialError) {
+        set.status = 400;
+        return fail(credentialError);
+      }
+
       const data: Prisma.MonitorUpdateInput = {};
 
       if (body.name !== undefined) data.name = body.name.trim();
       if (body.type !== undefined) data.type = body.type as any;
       if (bodyConfig !== undefined) data.config = bodyConfig;
+      if (body.credentialId !== undefined) {
+        data.credential = body.credentialId
+          ? { connect: { id: body.credentialId } }
+          : { disconnect: true };
+      }
       if (body.interval !== undefined) data.interval = body.interval;
       if (body.enabled !== undefined) data.enabled = body.enabled;
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "@/hooks/useApi";
 
@@ -367,33 +367,35 @@ const DeviceCard = ({ device }: { device: Device }) => {
 };
 
 const DevicesPage = () => {
-  const { get } = useApi();
+  const { api } = useApi();
   const [devices, setDevices] = useState<Device[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [groupFilter, setGroupFilter] = useState<"ALL" | string>("ALL");
   const [loading, setLoading] = useState(true);
 
+  const loadDevices = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const [monitorsResponse, groupsResponse] = await Promise.all([
+        api.get<ApiResponse<Device[]>>("/monitors", {
+          params: { groupId: groupFilter === "ALL" ? undefined : groupFilter },
+        }),
+        api.get<ApiResponse<GroupOption[]>>("/groups"),
+      ]);
+      const items = (monitorsResponse.data.data ?? []).filter(
+        (device) => device.type === "SYSTEM" || device.type === "SNMP",
+      );
+      setGroups(groupsResponse.data.data ?? []);
+      setDevices(items as Device[]);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, groupFilter]);
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [monitorsResponse, groupsResponse] = await Promise.all([
-          get<ApiResponse<Device[]>>("/monitors", {
-            params: { groupId: groupFilter === "ALL" ? undefined : groupFilter },
-          }),
-          get<ApiResponse<GroupOption[]>>("/groups"),
-        ]);
-        const items = (monitorsResponse.data.data ?? []).filter(
-          (device) => device.type === "SYSTEM" || device.type === "SNMP",
-        );
-        setGroups(groupsResponse.data.data ?? []);
-        setDevices(items as Device[]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, [get, groupFilter]);
+    void loadDevices();
+  }, [loadDevices]);
 
   const up = devices.filter((d) => d.latestResult?.status === "UP").length;
   const degraded = devices.filter((d) => d.latestResult?.status === "DEGRADED").length;

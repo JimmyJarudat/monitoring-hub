@@ -1,4 +1,4 @@
-import type { Monitor } from "../generated/prisma/client";
+import type { Credential, Monitor } from "../generated/prisma/client";
 import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
@@ -31,6 +31,61 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 const isConfigObject = (value: unknown): value is Prisma.InputJsonObject => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const resolveConfigWithCredential = (
+  type: MonitorType,
+  config: Prisma.InputJsonObject,
+  credential: Credential | null,
+) => {
+  if (!credential) return config;
+
+  const metadata =
+    credential.metadata && typeof credential.metadata === "object" && !Array.isArray(credential.metadata)
+      ? (credential.metadata as Prisma.InputJsonObject)
+      : {};
+
+  if ((type === "SNMP" || type === "SYSTEM") && credential.type === "SNMP_COMMUNITY") {
+    return {
+      ...config,
+      community: credential.secret,
+      ...(metadata.version ? { version: metadata.version } : {}),
+      ...(metadata.port ? { port: metadata.port } : {}),
+    } satisfies Prisma.InputJsonObject;
+  }
+
+  if (type === "HTTP" && config.authType === "basic" && credential.type === "USERNAME_PASSWORD") {
+    return {
+      ...config,
+      authUsername: credential.username ?? config.authUsername,
+      authPassword: credential.secret,
+    } satisfies Prisma.InputJsonObject;
+  }
+
+  if (type === "HTTP" && config.authType === "bearer" && credential.type === "API_TOKEN") {
+    return {
+      ...config,
+      authToken: credential.secret,
+    } satisfies Prisma.InputJsonObject;
+  }
+
+  if (type === "DOCKER" && credential.type === "API_TOKEN") {
+    return {
+      ...config,
+      apiKey: credential.secret,
+    } satisfies Prisma.InputJsonObject;
+  }
+
+  if (type === "DATABASE" && config.type !== "sqlite" && credential.type === "USERNAME_PASSWORD") {
+    return {
+      ...config,
+      user: credential.username ?? config.user,
+      password: credential.secret,
+      ...(config.type === "mongodb" && metadata.authSource ? { authSource: metadata.authSource } : {}),
+    } satisfies Prisma.InputJsonObject;
+  }
+
+  return config;
 };
 
 const runChecker = async (
@@ -130,7 +185,32 @@ export const runMonitorCheck = async (monitor: Monitor) => {
     return createdResult;
   }
 
-  const result = await runChecker(monitor.type, monitor.config);
+  const credential = monitor.credentialId
+    ? await prisma.credential.findUnique({
+        where: { id: monitor.credentialId },
+      })
+    : null;
+
+  if (monitor.credentialId && !credential) {
+    const createdResult = await prisma.monitorResult.create({
+      data: {
+        monitorId: monitor.id,
+        status: "DOWN",
+        message: "credential ที่ผูกไว้ถูกลบหรือไม่พบแล้ว",
+      },
+    });
+
+    await reconcileIncident(monitor, {
+      status: createdResult.status,
+      message: createdResult.message,
+      checkedAt: createdResult.checkedAt,
+    });
+
+    return createdResult;
+  }
+
+  const resolvedConfig = resolveConfigWithCredential(monitor.type, monitor.config, credential);
+  const result = await runChecker(monitor.type, resolvedConfig);
 
   const createdResult = await prisma.$transaction(async (tx) => {
     const monitorResult = await tx.monitorResult.create({

@@ -56,6 +56,7 @@ type MonitorPayload = {
   interval: number;
   enabled: boolean;
   config: Record<string, unknown>;
+  credentialId?: string;
 };
 
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
@@ -546,6 +547,7 @@ const AddMonitorPage = () => {
       interval: Number(form.interval),
       enabled: form.enabled,
       config: buildConfig(form),
+      credentialId: selectedCredentialId || undefined,
     };
 
     try {
@@ -679,7 +681,7 @@ const AddMonitorPage = () => {
               <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-violet-950">Credential preset</h3>
+                    <h3 className="text-sm font-semibold text-violet-950">Credential link</h3>
                     <p className="mt-1 text-sm text-violet-800">
                       ประเภทนี้เลือกใช้ได้เฉพาะ{" "}
                       {compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")}
@@ -724,7 +726,7 @@ const AddMonitorPage = () => {
                   </p>
                 ) : (
                   <p className="mt-3 text-xs text-violet-700">
-                    เมื่อเลือกแล้ว ระบบจะเติม field ที่เกี่ยวข้องให้อัตโนมัติ แต่คุณยังแก้ไขต่อเองได้
+                    เมื่อเลือกแล้ว ระบบจะเติม field ที่เกี่ยวข้องให้อัตโนมัติ และ monitor จะผูกกับ credential นี้ไว้ด้วย
                   </p>
                 )}
               </div>
@@ -1264,6 +1266,7 @@ const AddMonitorPage = () => {
                   type: form.type,
                   interval: Number(form.interval),
                   enabled: form.enabled,
+                  credentialId: selectedCredentialId || undefined,
                   config: buildConfig(form),
                 },
                 null,

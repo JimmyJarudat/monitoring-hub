@@ -92,6 +92,8 @@ model Monitor {
   name        String
   type        MonitorType
   config      Json          // host/url/port/credentials ฯลฯ
+  credentialId String?
+  credential  Credential?   @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   interval    Int           @default(60) // วินาที
   enabled     Boolean       @default(true)
   createdAt   DateTime      @default(now())
@@ -102,6 +104,7 @@ model Monitor {
   alertRules  AlertRule[]
   incidents   Incident[]
 
+  @@index([credentialId])
   @@index([type, enabled])
   @@map("monitors")
 }
@@ -194,6 +197,7 @@ model Credential {
   secret      String
   notes       String?
   metadata    Json?
+  monitors    Monitor[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 

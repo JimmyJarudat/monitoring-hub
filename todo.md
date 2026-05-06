@@ -102,6 +102,7 @@
 - [x] Credential type guide
 - [x] Credential preset selection in New Monitor
 - [x] Auto-fill monitor fields from selected credential preset
+- [x] Linked credential binding on monitor
 
 ### Backend / API
 - [x] Manual check endpoint
@@ -115,9 +116,7 @@
 ## Known Gaps Right Now
 
 ### Credentials
-- [ ] Monitor ยังใช้ credential แบบ **copy ลง config**
-- [ ] ยังไม่ได้เก็บ `credentialId` บน monitor
-- [ ] ถ้าแก้ credential ภายหลัง monitor เดิมจะไม่เปลี่ยนตาม
+- [ ] หน้า Edit monitor ยังไม่มี UI สำหรับเปลี่ยนหรือ unlink credential โดยตรง
 - [ ] Secret ยังไม่ได้เข้ารหัสใน DB
 - [ ] ยังไม่มี permission control เรื่องใครดู secret ได้
 - [ ] ยังไม่มี usage map ว่า credential ไหนถูกใช้กับ monitor ไหนบ้าง
@@ -146,15 +145,15 @@
   - [x] top active interfaces
   - [x] interface operational status
   - [x] error / discard counters ให้ครบขึ้น
-- [ ] Add group-aware views
+- [x] Add group-aware views
   - [x] filter devices by group
   - [x] filter monitors by group
   - [x] results/incidents by group
 
 ### Priority 2 — Make credentials first-class
-- [ ] Store `credentialId` on monitor config/model
-- [ ] Resolve credential in checker/runner at runtime
-- [ ] Update monitor automatically when shared credential changes
+- [x] Store `credentialId` on monitor config/model
+- [x] Resolve credential in checker/runner at runtime
+- [x] Update monitor automatically when shared credential changes
 - [ ] Encrypt credential secret at rest
 - [ ] Show credential usage map
 - [ ] Add “used by X monitors” in credentials page
