@@ -121,6 +121,7 @@
 - [x] Rich notification templates per channel type
 - [x] Payload preview in channel form
 - [x] Alert cooldown / dedupe / escalation logic
+- [x] Notification delivery retry / failure tracking
 
 ### Access control & Audit
 - [x] Role-based access control
@@ -169,7 +170,6 @@
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
-- [ ] Notification delivery retry / failure tracking
 
 ## Next Recommended Work
 

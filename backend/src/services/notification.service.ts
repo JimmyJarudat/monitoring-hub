@@ -239,9 +239,18 @@ type IncidentNotificationKind = "transition" | "reminder" | "escalation";
 
 const INCIDENT_NOTIFICATION_SENT_ACTION = "INCIDENT_NOTIFICATION_SENT";
 const INCIDENT_NOTIFICATION_SUPPRESSED_ACTION = "INCIDENT_NOTIFICATION_SUPPRESSED";
+const INCIDENT_NOTIFICATION_RETRY_ACTION = "INCIDENT_NOTIFICATION_RETRY";
+const INCIDENT_NOTIFICATION_RETRY_SENT_ACTION = "INCIDENT_NOTIFICATION_RETRY_SENT";
+const INCIDENT_NOTIFICATION_RETRY_FAILED_ACTION = "INCIDENT_NOTIFICATION_RETRY_FAILED";
 const INCIDENT_TRANSITION_COOLDOWN_MS = 5 * 60 * 1000;
 const INCIDENT_REMINDER_COOLDOWN_MS = 60 * 1000;
 const INCIDENT_ESCALATION_COOLDOWN_MS = 60 * 1000;
+const RETRY_TICK_MS = 30_000;
+const RETRY_BATCH_SIZE = 20;
+const RETRY_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000] as const;
+const MAX_RETRY_ATTEMPTS = RETRY_BACKOFF_MS.length;
+
+let retryTimer: ReturnType<typeof setInterval> | null = null;
 
 const getIncidentCooldownMs = (kind: IncidentNotificationKind) => {
   if (kind === "transition") return INCIDENT_TRANSITION_COOLDOWN_MS;
@@ -267,6 +276,12 @@ const buildIncidentNotificationFingerprint = (params: {
 
 const getAuditString = (value: unknown, key: string) =>
   isObject(value) && typeof value[key] === "string" ? value[key] : null;
+
+const getAuditNumber = (value: unknown, key: string) => {
+  if (!isObject(value)) return null;
+  const raw = value[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+};
 
 const shouldSendIncidentNotification = async (params: {
   incidentId: string;
@@ -322,6 +337,45 @@ const recordIncidentNotificationAudit = async (params: {
         reason: params.reason ?? null,
       },
     },
+  });
+};
+
+const enqueueIncidentNotificationRetries = async (params: {
+  monitorId: string;
+  incidentId: string;
+  alertRuleId?: string | null;
+  status: IncidentStatus;
+  message: string | null;
+  kind: IncidentNotificationKind;
+  fingerprint: string;
+  failedChannels: { id: string; name: string; type: ChannelType; error: string }[];
+  now: Date;
+}) => {
+  if (params.failedChannels.length === 0) return;
+
+  await prisma.auditLog.createMany({
+    data: params.failedChannels.map((channel) => ({
+      action: INCIDENT_NOTIFICATION_RETRY_ACTION,
+      entity: "Incident",
+      entityId: params.incidentId,
+      newValue: {
+        status: "PENDING",
+        attempts: 0,
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        nextRetryAt: new Date(params.now.getTime() + RETRY_BACKOFF_MS[0]).toISOString(),
+        monitorId: params.monitorId,
+        incidentId: params.incidentId,
+        alertRuleId: params.alertRuleId ?? null,
+        incidentStatus: params.status,
+        message: params.message,
+        kind: params.kind,
+        fingerprint: params.fingerprint,
+        channelId: channel.id,
+        channelName: channel.name,
+        channelType: channel.type,
+        lastError: channel.error,
+      },
+    })),
   });
 };
 
@@ -592,6 +646,178 @@ const notifyIncident = async (params: {
     deliveredChannelIds,
     failedChannels,
   });
+  await enqueueIncidentNotificationRetries({
+    monitorId: params.monitor.id,
+    incidentId: params.incidentId,
+    alertRuleId: params.alertRuleId,
+    status: params.status,
+    message: params.message,
+    kind: params.kind,
+    fingerprint,
+    failedChannels,
+    now,
+  });
+};
+
+const parseRetryPayload = (value: unknown) => {
+  const status = getAuditString(value, "status");
+  const nextRetryAt = getAuditString(value, "nextRetryAt");
+  const monitorId = getAuditString(value, "monitorId");
+  const incidentId = getAuditString(value, "incidentId");
+  const incidentStatus = getAuditString(value, "incidentStatus");
+  const kind = getAuditString(value, "kind");
+  const channelId = getAuditString(value, "channelId");
+  const attempts = getAuditNumber(value, "attempts") ?? 0;
+
+  if (
+    status !== "PENDING" ||
+    !nextRetryAt ||
+    !monitorId ||
+    !incidentId ||
+    (incidentStatus !== "OPEN" && incidentStatus !== "RESOLVED") ||
+    (kind !== "transition" && kind !== "reminder" && kind !== "escalation") ||
+    !channelId
+  ) {
+    return null;
+  }
+
+  return {
+    status,
+    attempts,
+    maxAttempts: getAuditNumber(value, "maxAttempts") ?? MAX_RETRY_ATTEMPTS,
+    nextRetryAt,
+    monitorId,
+    incidentId,
+    alertRuleId: getAuditString(value, "alertRuleId"),
+    incidentStatus,
+    message: getAuditString(value, "message"),
+    kind,
+    fingerprint: getAuditString(value, "fingerprint"),
+    channelId,
+    channelName: getAuditString(value, "channelName"),
+    channelType: getAuditString(value, "channelType"),
+    lastError: getAuditString(value, "lastError"),
+  };
+};
+
+const retryIncidentNotification = async (retryLog: {
+  id: string;
+  newValue: unknown;
+}) => {
+  const payload = parseRetryPayload(retryLog.newValue);
+  if (!payload) return;
+  if (new Date(payload.nextRetryAt).getTime() > Date.now()) return;
+
+  const [monitor, channel] = await Promise.all([
+    prisma.monitor.findUnique({ where: { id: payload.monitorId } }),
+    prisma.notificationChannel.findUnique({ where: { id: payload.channelId } }),
+  ]);
+
+  if (!monitor || !channel || !channel.enabled) {
+    await prisma.auditLog.update({
+      where: { id: retryLog.id },
+      data: {
+        action: INCIDENT_NOTIFICATION_RETRY_FAILED_ACTION,
+        newValue: {
+          ...payload,
+          status: "FAILED",
+          finishedAt: new Date().toISOString(),
+          lastError: !monitor ? "Monitor not found" : !channel ? "Channel not found" : "Channel disabled",
+        },
+      },
+    });
+    return;
+  }
+
+  const content = buildIncidentContent({
+    monitorName: monitor.name,
+    monitorType: monitor.type,
+    status: payload.incidentStatus,
+    message: payload.message,
+    kind: payload.kind,
+    incidentId: payload.incidentId,
+    sentAt: new Date().toISOString(),
+  });
+
+  try {
+    await deliverChannelMessage(channel, content);
+    await prisma.auditLog.update({
+      where: { id: retryLog.id },
+      data: {
+        action: INCIDENT_NOTIFICATION_RETRY_SENT_ACTION,
+        newValue: {
+          ...payload,
+          status: "SENT",
+          attempts: payload.attempts + 1,
+          deliveredAt: new Date().toISOString(),
+          lastError: null,
+        },
+      },
+    });
+  } catch (error) {
+    const attempts = payload.attempts + 1;
+    const isFinal = attempts >= payload.maxAttempts;
+    await prisma.auditLog.update({
+      where: { id: retryLog.id },
+      data: {
+        action: isFinal ? INCIDENT_NOTIFICATION_RETRY_FAILED_ACTION : INCIDENT_NOTIFICATION_RETRY_ACTION,
+        newValue: {
+          ...payload,
+          status: isFinal ? "FAILED" : "PENDING",
+          attempts,
+          nextRetryAt: isFinal
+            ? null
+            : new Date(Date.now() + RETRY_BACKOFF_MS[Math.min(attempts, RETRY_BACKOFF_MS.length - 1)]).toISOString(),
+          finishedAt: isFinal ? new Date().toISOString() : null,
+          lastError: error instanceof Error ? error.message : String(error),
+        },
+      },
+    });
+  }
+};
+
+export const processNotificationRetryQueue = async () => {
+  const now = new Date();
+  const retryLogs = await prisma.auditLog.findMany({
+    where: {
+      action: INCIDENT_NOTIFICATION_RETRY_ACTION,
+      entity: "Incident",
+      createdAt: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, newValue: true },
+    take: RETRY_BATCH_SIZE,
+  });
+
+  const dueRetryLogs = retryLogs.filter((log) => {
+    const payload = parseRetryPayload(log.newValue);
+    return payload && new Date(payload.nextRetryAt).getTime() <= now.getTime();
+  });
+
+  await Promise.all(dueRetryLogs.map((log) => retryIncidentNotification(log)));
+};
+
+export const startNotificationRetryScheduler = () => {
+  if (retryTimer) return;
+
+  retryTimer = setInterval(() => {
+    void processNotificationRetryQueue().catch((error) => {
+      logger.error("notify", "retry queue tick failed", { error: String(error) });
+    });
+  }, RETRY_TICK_MS);
+
+  void processNotificationRetryQueue().catch((error) => {
+    logger.error("notify", "initial retry queue failed", { error: String(error) });
+  });
+
+  logger.info("notify", "retry scheduler started");
+};
+
+export const stopNotificationRetryScheduler = () => {
+  if (!retryTimer) return;
+  clearInterval(retryTimer);
+  retryTimer = null;
+  logger.info("notify", "retry scheduler stopped");
 };
 
 export const notifyIncidentNow = async (params: {

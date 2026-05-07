@@ -7,6 +7,7 @@ import { AuthError } from "./middleware/auth";
 import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
+import { startNotificationRetryScheduler } from "./services/notification.service";
 import { startRetentionScheduler } from "./services/retention.service";
 import { logger } from "./lib/logger";
 
@@ -56,6 +57,7 @@ const bootstrap = async () => {
     .listen({ port: config.port, hostname: config.host });
 
   monitorRunner.start();
+  startNotificationRetryScheduler();
   startRetentionScheduler();
 
   logger.info("server", `running at http://${app.server?.hostname}:${app.server?.port}`);
