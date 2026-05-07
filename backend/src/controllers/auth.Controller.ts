@@ -5,12 +5,37 @@ import { authService } from "../services/auth.Service";
 import { tokenService } from "../services/token.Service";
 import { config } from "../config";
 import { ok, fail } from "../lib/response";
+import prisma from "../lib/prisma";
+
+const writeAudit = (data: {
+  userId: string | null;
+  action: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  meta?: Record<string, unknown>;
+}) => {
+  prisma.auditLog
+    .create({
+      data: {
+        userId: data.userId,
+        action: data.action,
+        entity: "Auth",
+        ipAddress: data.ipAddress ?? null,
+        userAgent: data.userAgent ?? null,
+        newValue: data.meta ?? null,
+      },
+    })
+    .catch(() => {});
+};
 
 export const authController = new Elysia({ prefix: "/auth" })
   .use(jwt({ name: "jwt", secret: config.jwtSecret, exp: "15m" }))
   .post(
     "/register",
-    async ({ body, jwt, set }) => {
+    async ({ body, jwt, set, request }) => {
+      const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("cf-connecting-ip");
+      const ua = request.headers.get("user-agent");
+
       if (await authService.findByUsernameOrEmail(body.username)) {
         set.status = 409;
         return fail("Username นี้ถูกใช้ไปแล้ว");
@@ -23,6 +48,8 @@ export const authController = new Elysia({ prefix: "/auth" })
       const user = await authService.createUser(body.username, body.email, body.password);
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
       const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
+
+      writeAudit({ userId: user.id, action: "REGISTER", ipAddress: ip, userAgent: ua, meta: { username: body.username, email: body.email } });
 
       set.status = 201;
       return ok({ accessToken, refreshToken, user });
@@ -45,12 +72,14 @@ export const authController = new Elysia({ prefix: "/auth" })
       const user = await authService.findByUsernameOrEmail(body.identifier);
 
       if (!user) {
+        writeAudit({ userId: null, action: "LOGIN_FAILED", ipAddress, userAgent, meta: { reason: "user_not_found", identifier: body.identifier } });
         set.status = 401;
         return fail("username/email หรือรหัสผ่านไม่ถูกต้อง");
       }
 
       // ตรวจ account lockout
       if (await authService.isLockedOut(user.id)) {
+        writeAudit({ userId: user.id, action: "LOGIN_LOCKED", ipAddress, userAgent });
         set.status = 423;
         return fail(`บัญชีถูกล็อกชั่วคราว เนื่องจากพยายามเข้าสู่ระบบผิดพลาดหลายครั้ง กรุณารอ ${config.lockout.durationMinutes} นาที`);
       }
@@ -61,6 +90,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       await authService.recordLogin(user.id, valid ? "SUCCESS" : "FAILED", ipAddress, userAgent);
 
       if (!valid) {
+        writeAudit({ userId: user.id, action: "LOGIN_FAILED", ipAddress, userAgent, meta: { reason: "wrong_password" } });
         set.status = 401;
         return fail("username/email หรือรหัสผ่านไม่ถูกต้อง");
       }
@@ -71,6 +101,8 @@ export const authController = new Elysia({ prefix: "/auth" })
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
       const { token: refreshToken } = await tokenService.createRefreshToken(user.id);
       const { password: _, ...safeUser } = user;
+
+      writeAudit({ userId: user.id, action: "LOGIN_SUCCESS", ipAddress, userAgent });
 
       return ok({ accessToken, refreshToken, user: safeUser });
     },
@@ -103,8 +135,19 @@ export const authController = new Elysia({ prefix: "/auth" })
   )
   .post(
     "/logout",
-    async ({ body }) => {
+    async ({ body, request }) => {
+      const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("cf-connecting-ip");
+      const ua = request.headers.get("user-agent");
+
+      const record = await prisma.refreshToken.findFirst({
+        where: { token: body.refreshToken },
+        select: { userId: true },
+      });
+
       await tokenService.revoke(body.refreshToken);
+
+      writeAudit({ userId: record?.userId ?? null, action: "LOGOUT", ipAddress: ip, userAgent: ua });
+
       return ok({ message: "ออกจากระบบแล้ว" });
     },
     {
