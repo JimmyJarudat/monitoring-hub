@@ -20,6 +20,7 @@ model User {
   loginHistory   LoginHistory[]
   refreshTokens  RefreshToken[]
   domainScans    DomainScanHistory[]
+  notifications  AppNotificationRecipient[]
 
   @@map("users")
 }
@@ -65,6 +66,60 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model AppNotification {
+  id         String                       @id @default(cuid())
+  type       AppNotificationType
+  severity   AppNotificationSeverity
+  title      String
+  message    String?
+  href       String?
+  entity     String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime                     @default(now())
+  recipients AppNotificationRecipient[]
+
+  @@index([type, createdAt])
+  @@index([severity, createdAt])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("app_notifications")
+}
+
+model AppNotificationRecipient {
+  id             String          @id @default(cuid())
+  notificationId String
+  notification   AppNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, dismissedAt, createdAt])
+  @@map("app_notification_recipients")
+}
+
+enum AppNotificationType {
+  INCIDENT
+  RESOLVED
+  ALERT
+  SYSTEM
+  DELIVERY
+  SECURITY
+  REPORT
+  MONITOR
+}
+
+enum AppNotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+  SUCCESS
 }
 
 model LoginHistory {

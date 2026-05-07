@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import { decryptCredentialSecret, encryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
 import { logger } from "../lib/logger";
+import { notifyAdmins, notifyAllUsers } from "./appNotification.service";
 import {
   buildLineIncidentMessage,
   buildLineTestMessage,
@@ -340,6 +341,50 @@ const recordIncidentNotificationAudit = async (params: {
   });
 };
 
+const createIncidentAppNotification = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  status: IncidentStatus;
+  message: string | null;
+  kind: IncidentNotificationKind;
+}) => {
+  const isResolved = params.status === "RESOLVED";
+  const title = isResolved
+    ? `${params.monitor.name} recovered`
+    : params.kind === "escalation"
+      ? `${params.monitor.name} escalation`
+      : params.kind === "reminder"
+        ? `${params.monitor.name} incident still open`
+        : `${params.monitor.name} incident opened`;
+  const severity: "SUCCESS" | "WARNING" | "CRITICAL" = isResolved
+    ? "SUCCESS"
+    : params.kind === "reminder"
+      ? "WARNING"
+      : "CRITICAL";
+  const type: "RESOLVED" | "ALERT" | "INCIDENT" =
+    isResolved ? "RESOLVED" : params.kind === "reminder" ? "ALERT" : "INCIDENT";
+  const notify = params.kind === "reminder" ? notifyAdmins : notifyAllUsers;
+
+  await notify({
+    type,
+    severity,
+    title,
+    message: params.message,
+    href: "/incidents",
+    entity: "Incident",
+    entityId: params.incidentId,
+    metadata: {
+      monitorId: params.monitor.id,
+      monitorName: params.monitor.name,
+      monitorType: params.monitor.type,
+      alertRuleId: params.alertRuleId ?? null,
+      kind: params.kind,
+      status: params.status,
+    },
+  });
+};
+
 const enqueueIncidentNotificationRetries = async (params: {
   monitorId: string;
   incidentId: string;
@@ -578,6 +623,8 @@ const notifyIncident = async (params: {
     return;
   }
 
+  await createIncidentAppNotification(params);
+
   let channels = params.alertRuleId
     ? (
         await prisma.alertRuleChannel.findMany({
@@ -700,6 +747,50 @@ const parseRetryPayload = (value: unknown) => {
   };
 };
 
+const notifyDeliveryFailure = async (params: {
+  incidentId: string;
+  channelName: string | null;
+  channelType: string | null;
+  error: string;
+}) => {
+  await notifyAdmins({
+    type: "DELIVERY",
+    severity: "CRITICAL",
+    title: "Notification delivery failed",
+    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) ส่งไม่สำเร็จ: ${params.error}`,
+    href: "/audit-logs?action=INCIDENT_NOTIFICATION_RETRY_FAILED",
+    entity: "Incident",
+    entityId: params.incidentId,
+    metadata: {
+      incidentId: params.incidentId,
+      channelName: params.channelName,
+      channelType: params.channelType,
+      error: params.error,
+    },
+  });
+};
+
+const notifyDeliveryRecovered = async (params: {
+  incidentId: string;
+  channelName: string | null;
+  channelType: string | null;
+}) => {
+  await notifyAdmins({
+    type: "DELIVERY",
+    severity: "SUCCESS",
+    title: "Notification retry sent",
+    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) ส่ง retry สำเร็จแล้ว`,
+    href: "/audit-logs?action=INCIDENT_NOTIFICATION_RETRY_SENT",
+    entity: "Incident",
+    entityId: params.incidentId,
+    metadata: {
+      incidentId: params.incidentId,
+      channelName: params.channelName,
+      channelType: params.channelType,
+    },
+  });
+};
+
 const retryIncidentNotification = async (retryLog: {
   id: string;
   newValue: unknown;
@@ -714,6 +805,7 @@ const retryIncidentNotification = async (retryLog: {
   ]);
 
   if (!monitor || !channel || !channel.enabled) {
+    const lastError = !monitor ? "Monitor not found" : !channel ? "Channel not found" : "Channel disabled";
     await prisma.auditLog.update({
       where: { id: retryLog.id },
       data: {
@@ -722,9 +814,15 @@ const retryIncidentNotification = async (retryLog: {
           ...payload,
           status: "FAILED",
           finishedAt: new Date().toISOString(),
-          lastError: !monitor ? "Monitor not found" : !channel ? "Channel not found" : "Channel disabled",
+          lastError,
         },
       },
+    });
+    await notifyDeliveryFailure({
+      incidentId: payload.incidentId,
+      channelName: payload.channelName,
+      channelType: payload.channelType,
+      error: lastError,
     });
     return;
   }
@@ -754,9 +852,15 @@ const retryIncidentNotification = async (retryLog: {
         },
       },
     });
+    await notifyDeliveryRecovered({
+      incidentId: payload.incidentId,
+      channelName: payload.channelName,
+      channelType: payload.channelType,
+    });
   } catch (error) {
     const attempts = payload.attempts + 1;
     const isFinal = attempts >= payload.maxAttempts;
+    const lastError = error instanceof Error ? error.message : String(error);
     await prisma.auditLog.update({
       where: { id: retryLog.id },
       data: {
@@ -769,10 +873,18 @@ const retryIncidentNotification = async (retryLog: {
             ? null
             : new Date(Date.now() + RETRY_BACKOFF_MS[Math.min(attempts, RETRY_BACKOFF_MS.length - 1)]).toISOString(),
           finishedAt: isFinal ? new Date().toISOString() : null,
-          lastError: error instanceof Error ? error.message : String(error),
+          lastError,
         },
       },
     });
+    if (isFinal) {
+      await notifyDeliveryFailure({
+        incidentId: payload.incidentId,
+        channelName: payload.channelName,
+        channelType: payload.channelType,
+        error: lastError,
+      });
+    }
   }
 };
 

@@ -12,6 +12,7 @@ import { alertRuleRoutes } from "./alertRules";
 import { channelRoutes } from "./channels";
 import { userRoutes } from "./users";
 import { domainRoutes } from "./domain.route";
+import { notificationRoutes } from "./notifications";
 import { ok } from "../lib/response";
 
 // Public routes — ไม่ต้องมี token
@@ -43,6 +44,7 @@ export const protectedRoutes = new Elysia()
   .use(groupRoutes) // /groups
   .use(credentialRoutes) // /credentials
   .use(channelRoutes) // /channels
+  .use(notificationRoutes) // /notifications
   .use(userRoutes) // /admin/users
   .use(adminRoutes) // /admin
   .use(domainRoutes); // /domain

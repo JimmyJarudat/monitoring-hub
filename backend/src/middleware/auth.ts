@@ -13,7 +13,7 @@ export class AuthError extends Error {
 
 export const authMiddleware = new Elysia({ name: "authMiddleware" })
   .use(jwt({ name: "jwt", secret: config.jwtSecret }))
-  .derive({ as: "scoped" }, async ({ jwt, headers }) => {
+  .derive({ as: "scoped" }, async ({ jwt, headers, request }) => {
     const authorization = headers["authorization"];
     if (!authorization?.startsWith("Bearer ")) {
       throw new AuthError("กรุณาระบุ Bearer token");
@@ -33,10 +33,18 @@ export const authMiddleware = new Elysia({ name: "authMiddleware" })
     }
 
     // ตรวจ signature ด้วย secret — กันปลอม
-    const payload = await jwt.verify(token);
+    let payload: Awaited<ReturnType<typeof jwt.verify>>;
+    try {
+      payload = await jwt.verify(token);
+    } catch {
+      throw new AuthError("Token ไม่ถูกต้อง (signature ผิดพลาด)");
+    }
+
     if (!payload) {
       throw new AuthError("Token ไม่ถูกต้อง (signature ผิดพลาด)");
     }
+
+    console.log(`📥 ${request.method} ${new URL(request.url).pathname} — user: ${payload.sub} role: ${payload.role}`);
 
     return {
       currentUser: {

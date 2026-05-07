@@ -3,7 +3,6 @@ import type { Prisma } from "../generated/prisma/client";
 import { ok } from "../lib/response";
 import prisma from "../lib/prisma";
 import { logger } from "../lib/logger";
-import { authMiddleware } from "../middleware/auth";
 
 const toNotificationDto = (
   row: Prisma.AppNotificationRecipientGetPayload<{
@@ -56,7 +55,6 @@ const getRecipientWhere = (userId: string, query?: {
 };
 
 export const notificationRoutes = new Elysia({ prefix: "/notifications" })
-  .use(authMiddleware)
   .get("/summary", async ({ currentUser }) => {
     try {
       const where = getRecipientWhere(currentUser.id);
@@ -78,7 +76,6 @@ export const notificationRoutes = new Elysia({ prefix: "/notifications" })
       });
     } catch (error) {
       logger.error("notifications", "summary failed", { error: String(error) });
-      console.error("[notifications] summary failed", error);
       return ok({ unreadCount: 0, latest: [] });
     }
   })

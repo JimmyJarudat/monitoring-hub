@@ -11,6 +11,36 @@ import { startNotificationRetryScheduler } from "./services/notification.service
 import { startRetentionScheduler } from "./services/retention.service";
 import { logger } from "./lib/logger";
 
+const getErrorCause = (error: unknown) => {
+  if (typeof error !== "object" || error === null || !("cause" in error)) return null;
+  return (error as { cause?: unknown }).cause ?? null;
+};
+
+const getErrorStatus = (error: unknown): number | null => {
+  if (error instanceof AuthError) return error.status;
+  if (typeof error !== "object" || error === null) return null;
+
+  const status = "status" in error ? Number((error as { status?: unknown }).status) : NaN;
+  if (Number.isInteger(status) && status >= 400 && status < 600) return status;
+
+  const code = "code" in error ? Number((error as { code?: unknown }).code) : NaN;
+  if (Number.isInteger(code) && code >= 400 && code < 600) return code;
+
+  const cause = getErrorCause(error);
+  return cause ? getErrorStatus(cause) : null;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  const cause = getErrorCause(error);
+  if (cause) return getErrorMessage(cause);
+  return "เกิดข้อผิดพลาดภายในระบบ";
+};
+
 const migratePlaintextCredentialSecrets = async () => {
   const credentials = await prisma.credential.findMany({
     select: {
@@ -44,11 +74,24 @@ const bootstrap = async () => {
 
   const app = new Elysia()
     .use(securityMiddleware)
-    .onError(({ error, set }) => {
-      if (error instanceof AuthError) {
-        set.status = error.status;
-        return fail(error.message);
+    .onError(({ error, set, request }) => {
+      const status = getErrorStatus(error);
+      const message = getErrorMessage(error);
+
+      // log ทุก error เสมอ
+      logger.error("server", "request failed", {
+        status: status ?? 500,
+        method: request.method,
+        url: request.url,
+        message,
+        error: error instanceof Error ? error.stack ?? error.message : String(error),
+      });
+
+      if (status) {
+        set.status = status;
+        return fail(message);
       }
+
       set.status = 500;
       return fail("เกิดข้อผิดพลาดภายในระบบ");
     })
