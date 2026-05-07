@@ -61,6 +61,7 @@ const sidebarSections: SidebarSection[] = [
       { label: "Users", path: "/users", icon: "U", adminOnly: true },
       { label: "Audit Logs", path: "/audit-logs", icon: "L", adminOnly: true },
       { label: "Settings", path: "/settings", icon: "S", adminOnly: true },
+      { label: "Domain Intel", path: "/domain", icon: "Di", adminOnly: true },
     ],
   },
 ];
