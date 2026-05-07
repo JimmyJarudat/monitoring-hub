@@ -40,13 +40,14 @@ type ScanPhase = "idle" | "scanning" | "done" | "error";
 export default function DomainIntelligencePage() {
   const { get } = useApi();
   const [input, setInput] = useState("");
+  const [consented, setConsented] = useState(false);
   const [phase, setPhase] = useState<ScanPhase>("idle");
   const [result, setResult] = useState<DomainResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleScan = async () => {
     const domain = input.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0] ?? "";
-    if (!domain) return;
+    if (!domain || !consented) return;
 
     setPhase("scanning");
     setResult(null);
@@ -85,6 +86,36 @@ export default function DomainIntelligencePage() {
         </p>
       </div>
 
+      {/* Legal notice */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-amber-800">ข้อควรระวังทางกฎหมาย</p>
+            <p className="mt-1 text-xs leading-5 text-amber-700">
+              เครื่องมือนี้ทำการ query DNS สาธารณะ, เปิด TCP connection, และส่ง HTTP/TLS request
+              ไปยัง server เป้าหมายโดยตรง การใช้กับ domain ที่ไม่ได้รับอนุญาตอาจผิด{" "}
+              <strong>พ.ร.บ. คอมพิวเตอร์ฯ มาตรา 5–7</strong> และกฎหมายอาชญากรรมคอมพิวเตอร์ในประเทศอื่น
+            </p>
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={consented}
+                onChange={(e) => setConsented(e.target.checked)}
+                disabled={phase === "scanning"}
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-amber-300 accent-amber-500"
+              />
+              <span className="text-xs font-medium leading-5 text-amber-800">
+                ฉันยืนยันว่า domain ที่จะสแกนเป็นของฉัน หรือได้รับอนุญาตเป็นลายลักษณ์อักษรจากเจ้าของแล้ว
+                และรับผิดชอบต่อการใช้งานนี้ทั้งหมด
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       {/* Search bar */}
       <div className="flex gap-3">
         <input
@@ -99,7 +130,7 @@ export default function DomainIntelligencePage() {
         <button
           type="button"
           onClick={() => void handleScan()}
-          disabled={phase === "scanning" || !input.trim()}
+          disabled={phase === "scanning" || !input.trim() || !consented}
           className="flex items-center gap-2 rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {phase === "scanning" ? (
