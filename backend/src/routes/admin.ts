@@ -116,6 +116,73 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       }),
     },
   )
+  .get(
+    "/system-logs",
+    async ({ query, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const page = Math.max(1, Number(query.page ?? 1));
+      const limit = Math.min(200, Math.max(1, Number(query.limit ?? 50)));
+      const skip = (page - 1) * limit;
+
+      const where: Prisma.SystemLogWhereInput = {
+        ...(query.level ? { level: query.level as "INFO" | "WARN" | "ERROR" } : {}),
+        ...(query.category ? { category: { contains: query.category, mode: "insensitive" } } : {}),
+        ...(query.search
+          ? {
+              OR: [
+                { message: { contains: query.search, mode: "insensitive" } },
+                { category: { contains: query.search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+        ...((query.from || query.to)
+          ? {
+              createdAt: {
+                ...(query.from ? { gte: new Date(query.from) } : {}),
+                ...(query.to ? { lte: new Date(query.to) } : {}),
+              },
+            }
+          : {}),
+      };
+
+      const [items, total, categoryRows] = await Promise.all([
+        prisma.systemLog.findMany({
+          where,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip,
+          take: limit,
+        }),
+        prisma.systemLog.count({ where }),
+        prisma.systemLog.findMany({
+          distinct: ["category"],
+          orderBy: { category: "asc" },
+          select: { category: true },
+          take: 100,
+        }),
+      ]);
+
+      return ok({
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        categories: categoryRows.map((r) => r.category),
+      });
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.String()),
+        limit: t.Optional(t.String()),
+        level: t.Optional(t.String()),
+        category: t.Optional(t.String()),
+        search: t.Optional(t.String()),
+        from: t.Optional(t.String()),
+        to: t.Optional(t.String()),
+      }),
+    },
+  )
   .get("/retention", async ({ currentUser }) => {
     requireAdminRole(currentUser.role);
     const [config, lastRun, stats] = await Promise.all([
@@ -137,6 +204,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         results_days: t.Number({ minimum: 1, maximum: 365 }),
         metrics_days: t.Number({ minimum: 1, maximum: 365 }),
         audit_days: t.Number({ minimum: 1, maximum: 365 }),
+        system_log_days: t.Number({ minimum: 1, maximum: 365 }),
         auto_cleanup_enabled: t.Boolean(),
       }),
     },
@@ -165,7 +233,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     },
     {
       body: t.Object({
-        targets: t.Array(t.Union([t.Literal("results"), t.Literal("metrics"), t.Literal("audit")]), {
+        targets: t.Array(t.Union([t.Literal("results"), t.Literal("metrics"), t.Literal("audit"), t.Literal("system_logs")]), {
           minItems: 1,
         }),
         mode: t.Union([t.Literal("expired"), t.Literal("all")]),

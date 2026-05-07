@@ -15,6 +15,7 @@ import { tcpCheck } from "./checkers/tcp.Checker";
 import { tlsCheck } from "./checkers/tls.Checker";
 import { notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
 import { getSystemConfig } from "./systemConfig.service";
+import { logger } from "../lib/logger";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -711,7 +712,7 @@ const checkDueMonitor = async (monitor: Monitor, now: number) => {
     await runMonitorCheck(monitor);
     lastCheckedAt.set(monitor.id, Date.now());
   } catch (error) {
-    console.error(`[monitor] check failed: ${monitor.id}`, error);
+    logger.error("monitor", `check failed: ${monitor.id}`, { error: String(error) });
   } finally {
     inFlight.delete(monitor.id);
   }
@@ -733,21 +734,21 @@ export const monitorRunner = {
 
     timer = setInterval(() => {
       void tick().catch((error) => {
-        console.error("[monitor] scheduler tick failed", error);
+        logger.error("monitor", "scheduler tick failed", { error: String(error) });
       });
     }, TICK_MS);
 
     void tick().catch((error) => {
-      console.error("[monitor] initial tick failed", error);
+      logger.error("monitor", "initial tick failed", { error: String(error) });
     });
 
-    console.log("[monitor] runner started");
+    logger.info("monitor", "runner started");
   },
 
   stop() {
     if (!timer) return;
     clearInterval(timer);
     timer = null;
-    console.log("[monitor] runner stopped");
+    logger.info("monitor", "runner stopped");
   },
 };

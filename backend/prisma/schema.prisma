@@ -302,6 +302,26 @@ model SystemSetting {
   @@map("system_settings")
 }
 
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     LogLevel
+  category  String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([level, createdAt])
+  @@index([category, createdAt])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
 model DomainScanHistory {
   id              String   @id @default(cuid())
   userId          String

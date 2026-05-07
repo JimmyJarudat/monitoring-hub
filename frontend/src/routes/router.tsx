@@ -30,6 +30,7 @@ import UsersPage from "@/pages/users";
 import ProfilePage from "@/pages/profile";
 import ChangePasswordPage from "@/pages/change-password";
 import DomainIntelligencePage from "@/pages/domain";
+import SystemLogsPage from "@/pages/system-logs";
 
 const LegacyMonitorDetailRedirect = () => {
   const { id } = useParams();
@@ -71,6 +72,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "audit-logs", element: <AuditLogsPage />, adminOnly: true }),
       createProtectedRoute({ path: "settings", element: <SettingsPage />, adminOnly: true }),
       createProtectedRoute({ path: "domain", element: <DomainIntelligencePage />, adminOnly: true }),
+      createProtectedRoute({ path: "system-logs", element: <SystemLogsPage />, adminOnly: true }),
       createProtectedRoute({
         path: "dashboard/monitors",
         element: <Navigate replace to="/monitors" />,

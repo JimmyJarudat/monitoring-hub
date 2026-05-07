@@ -1,9 +1,11 @@
 import prisma from "../lib/prisma";
+import { logger } from "../lib/logger";
 
 export type RetentionConfig = {
   results_days: number;
   metrics_days: number;
   audit_days: number;
+  system_log_days: number;
   auto_cleanup_enabled: boolean;
 };
 
@@ -11,6 +13,7 @@ export type RetentionLastRun = {
   deletedResults: number;
   deletedMetrics: number;
   deletedAuditLogs: number;
+  deletedSystemLogs: number;
   ranAt: string;
 };
 
@@ -18,10 +21,11 @@ export type RetentionStats = {
   results: { count: number; oldest: string | null };
   metrics: { count: number; oldest: string | null };
   audit: { count: number; oldest: string | null };
+  system_logs: { count: number; oldest: string | null };
 };
 
 export type RetentionClearInput = {
-  targets: Array<"results" | "metrics" | "audit">;
+  targets: Array<"results" | "metrics" | "audit" | "system_logs">;
   mode: "expired" | "all";
   olderThanDays?: number;
 };
@@ -30,6 +34,7 @@ const DEFAULTS: RetentionConfig = {
   results_days: 30,
   metrics_days: 30,
   audit_days: 90,
+  system_log_days: 90,
   auto_cleanup_enabled: true,
 };
 
@@ -45,6 +50,7 @@ export const getRetentionConfig = async (): Promise<RetentionConfig> => {
       results_days: parsed.results_days ?? DEFAULTS.results_days,
       metrics_days: parsed.metrics_days ?? DEFAULTS.metrics_days,
       audit_days: parsed.audit_days ?? DEFAULTS.audit_days,
+      system_log_days: parsed.system_log_days ?? DEFAULTS.system_log_days,
       auto_cleanup_enabled: parsed.auto_cleanup_enabled ?? DEFAULTS.auto_cleanup_enabled,
     };
   } catch {
@@ -61,38 +67,25 @@ export const saveRetentionConfig = async (config: RetentionConfig): Promise<void
 };
 
 export const getRetentionStats = async (): Promise<RetentionStats> => {
-  const [resultsCount, metricsCount, auditCount, oldestResult, oldestMetric, oldestAudit] =
-    await Promise.all([
-      prisma.monitorResult.count(),
-      prisma.deviceMetricSample.count(),
-      prisma.auditLog.count(),
-      prisma.monitorResult.findFirst({
-        orderBy: { checkedAt: "asc" },
-        select: { checkedAt: true },
-      }),
-      prisma.deviceMetricSample.findFirst({
-        orderBy: { collectedAt: "asc" },
-        select: { collectedAt: true },
-      }),
-      prisma.auditLog.findFirst({
-        orderBy: { createdAt: "asc" },
-        select: { createdAt: true },
-      }),
-    ]);
+  const [
+    resultsCount, metricsCount, auditCount, systemLogCount,
+    oldestResult, oldestMetric, oldestAudit, oldestSystemLog,
+  ] = await Promise.all([
+    prisma.monitorResult.count(),
+    prisma.deviceMetricSample.count(),
+    prisma.auditLog.count(),
+    prisma.systemLog.count(),
+    prisma.monitorResult.findFirst({ orderBy: { checkedAt: "asc" }, select: { checkedAt: true } }),
+    prisma.deviceMetricSample.findFirst({ orderBy: { collectedAt: "asc" }, select: { collectedAt: true } }),
+    prisma.auditLog.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    prisma.systemLog.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+  ]);
 
   return {
-    results: {
-      count: resultsCount,
-      oldest: oldestResult?.checkedAt.toISOString() ?? null,
-    },
-    metrics: {
-      count: metricsCount,
-      oldest: oldestMetric?.collectedAt.toISOString() ?? null,
-    },
-    audit: {
-      count: auditCount,
-      oldest: oldestAudit?.createdAt.toISOString() ?? null,
-    },
+    results: { count: resultsCount, oldest: oldestResult?.checkedAt.toISOString() ?? null },
+    metrics: { count: metricsCount, oldest: oldestMetric?.collectedAt.toISOString() ?? null },
+    audit: { count: auditCount, oldest: oldestAudit?.createdAt.toISOString() ?? null },
+    system_logs: { count: systemLogCount, oldest: oldestSystemLog?.createdAt.toISOString() ?? null },
   };
 };
 
@@ -119,7 +112,7 @@ const saveRetentionLastRun = async (summary: RetentionLastRun): Promise<void> =>
 export const runRetentionCleanup = async (config?: RetentionConfig): Promise<RetentionLastRun> => {
   const cfg = config ?? (await getRetentionConfig());
 
-  const [results, metrics, audit] = await Promise.all([
+  const [results, metrics, audit, systemLogs] = await Promise.all([
     prisma.monitorResult.deleteMany({
       where: { checkedAt: { lt: getCutoffDate(cfg.results_days) } },
     }),
@@ -129,12 +122,16 @@ export const runRetentionCleanup = async (config?: RetentionConfig): Promise<Ret
     prisma.auditLog.deleteMany({
       where: { createdAt: { lt: getCutoffDate(cfg.audit_days) } },
     }),
+    prisma.systemLog.deleteMany({
+      where: { createdAt: { lt: getCutoffDate(cfg.system_log_days) } },
+    }),
   ]);
 
   const summary: RetentionLastRun = {
     deletedResults: results.count,
     deletedMetrics: metrics.count,
     deletedAuditLogs: audit.count,
+    deletedSystemLogs: systemLogs.count,
     ranAt: new Date().toISOString(),
   };
 
@@ -175,7 +172,12 @@ export const clearRetentionHistory = async (
           },
         };
 
-  const [results, metrics, audit] = await Promise.all([
+  const systemLogWhere =
+    input.mode === "all"
+      ? {}
+      : { createdAt: { lt: getCutoffDate(input.olderThanDays ?? cfg.system_log_days) } };
+
+  const [results, metrics, audit, systemLogs] = await Promise.all([
     targets.has("results")
       ? prisma.monitorResult.deleteMany({ where: resultWhere })
       : Promise.resolve({ count: 0 }),
@@ -185,12 +187,16 @@ export const clearRetentionHistory = async (
     targets.has("audit")
       ? prisma.auditLog.deleteMany({ where: auditWhere })
       : Promise.resolve({ count: 0 }),
+    targets.has("system_logs")
+      ? prisma.systemLog.deleteMany({ where: systemLogWhere })
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const summary: RetentionLastRun = {
     deletedResults: results.count,
     deletedMetrics: metrics.count,
     deletedAuditLogs: audit.count,
+    deletedSystemLogs: systemLogs.count,
     ranAt: new Date().toISOString(),
   };
 
@@ -205,18 +211,21 @@ export const startRetentionScheduler = (): void => {
   const run = async () => {
     const cfg = await getRetentionConfig();
     if (!cfg.auto_cleanup_enabled) {
-      console.log("[retention] auto cleanup disabled, skipping scheduled cleanup");
+      logger.info("retention", "auto cleanup disabled, skipping");
       return;
     }
 
-    console.log("[retention] running scheduled cleanup...");
+    logger.info("retention", "running scheduled cleanup");
     try {
       const result = await runRetentionCleanup(cfg);
-      console.log(
-        `[retention] deleted ${result.deletedResults} results, ${result.deletedMetrics} metrics, ${result.deletedAuditLogs} audit logs`,
-      );
+      logger.info("retention", "cleanup complete", {
+        deletedResults: result.deletedResults,
+        deletedMetrics: result.deletedMetrics,
+        deletedAuditLogs: result.deletedAuditLogs,
+        deletedSystemLogs: result.deletedSystemLogs,
+      });
     } catch (error) {
-      console.error("[retention] cleanup failed", error);
+      logger.error("retention", "cleanup failed", { error: String(error) });
     }
   };
 

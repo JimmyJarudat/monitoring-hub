@@ -4,6 +4,7 @@ import type { ChannelType } from "../generated/prisma/enums";
 import nodemailer from "nodemailer";
 import { decryptCredentialSecret, encryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
+import { logger } from "../lib/logger";
 import {
   buildLineIncidentMessage,
   buildLineTestMessage,
@@ -440,7 +441,7 @@ const notifyIncident = async (params: {
       try {
         await deliverChannelMessage(channel, content);
       } catch (error) {
-        console.error(`[notify] failed channel ${channel.id} (${channel.type})`, error);
+        logger.error("notify", `failed channel ${channel.id} (${channel.type})`, { error: String(error) });
       }
     }),
   );

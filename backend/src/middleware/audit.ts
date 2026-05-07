@@ -1,6 +1,7 @@
 import Elysia from "elysia";
 import type { Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
+import { logger } from "../lib/logger";
 
 const AUDITED_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const REDACTED = "[REDACTED]";
@@ -136,7 +137,7 @@ export const auditMiddleware = new Elysia({ name: "auditMiddleware" }).onAfterHa
         },
       });
     } catch (error) {
-      console.error("[audit] failed to record audit log", error);
+      logger.error("audit", "failed to record audit log", { error: String(error) });
     }
   },
 );

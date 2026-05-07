@@ -8,6 +8,7 @@ import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
 import { startRetentionScheduler } from "./services/retention.service";
+import { logger } from "./lib/logger";
 
 const migratePlaintextCredentialSecrets = async () => {
   const credentials = await prisma.credential.findMany({
@@ -34,7 +35,7 @@ const migratePlaintextCredentialSecrets = async () => {
     ),
   );
 
-  console.log(`[credential] encrypted ${plaintextCredentials.length} existing secrets`);
+  logger.info("credential", `encrypted ${plaintextCredentials.length} existing secrets`);
 };
 
 const bootstrap = async () => {
@@ -57,10 +58,10 @@ const bootstrap = async () => {
   monitorRunner.start();
   startRetentionScheduler();
 
-  console.log(`Server running at http://${app.server?.hostname}:${app.server?.port}`);
+  logger.info("server", `running at http://${app.server?.hostname}:${app.server?.port}`);
 };
 
 void bootstrap().catch((error) => {
   console.error("[bootstrap] failed to start server", error);
-  process.exit(1);
+  void logger.flush().finally(() => process.exit(1));
 });
