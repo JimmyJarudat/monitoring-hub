@@ -70,6 +70,17 @@ const buildParams = (
   return params;
 };
 
+const DATE_SLUG = () => new Date().toISOString().slice(0, 10);
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 const exportToCsv = (rows: SystemLogRow[]) => {
   const header = ["timestamp", "level", "category", "message", "metadata"];
   const lines = rows.map((r) => [
@@ -80,13 +91,12 @@ const exportToCsv = (rows: SystemLogRow[]) => {
     r.metadata != null ? `"${stringifyJson(r.metadata).replace(/"/g, '""')}"` : "",
   ]);
   const csv = [header, ...lines].map((row) => row.join(",")).join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `system-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }), `system-logs-${DATE_SLUG()}.csv`);
+};
+
+const exportToJson = (rows: SystemLogRow[]) => {
+  const json = JSON.stringify(rows, null, 2);
+  downloadBlob(new Blob([json], { type: "application/json;charset=utf-8;" }), `system-logs-${DATE_SLUG()}.json`);
 };
 
 const SystemLogsPage = () => {
@@ -94,7 +104,7 @@ const SystemLogsPage = () => {
 
   const [data, setData] = useState<SystemLogResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"" | "csv" | "json">("");
 
   const [page, setPage] = useState(1);
   const [levelFilter, setLevelFilter] = useState<"" | LogLevel>("");
@@ -143,18 +153,36 @@ const SystemLogsPage = () => {
     setPage(1);
   };
 
-  const handleExport = async () => {
-    setExporting(true);
+  const fetchAllFiltered = async () => {
+    const params = buildParams(1, 10000, levelFilter, categoryFilter, search, from, to);
+    const res = await api.get<ApiResponse<SystemLogResponse>>("/admin/system-logs", { params });
+    if (!res.data.success) throw new Error(res.data.message);
+    return res.data.data.items;
+  };
+
+  const handleExportCsv = async () => {
+    setExporting("csv");
     try {
-      const params = buildParams(1, 10000, levelFilter, categoryFilter, search, from, to);
-      const res = await api.get<ApiResponse<SystemLogResponse>>("/admin/system-logs", { params });
-      if (!res.data.success) { toast.error(res.data.message); return; }
-      exportToCsv(res.data.data.items);
-      toast.success(`Export ${res.data.data.items.length} รายการเรียบร้อย`);
+      const rows = await fetchAllFiltered();
+      exportToCsv(rows);
+      toast.success(`Export CSV ${rows.length} รายการเรียบร้อย`);
     } catch {
       toast.error("Export ไม่สำเร็จ");
     } finally {
-      setExporting(false);
+      setExporting("");
+    }
+  };
+
+  const handleExportJson = async () => {
+    setExporting("json");
+    try {
+      const rows = await fetchAllFiltered();
+      exportToJson(rows);
+      toast.success(`Export JSON ${rows.length} รายการเรียบร้อย`);
+    } catch {
+      toast.error("Export ไม่สำเร็จ");
+    } finally {
+      setExporting("");
     }
   };
 
@@ -172,11 +200,19 @@ const SystemLogsPage = () => {
         <div className="flex shrink-0 gap-2">
           <button
             type="button"
-            onClick={handleExport}
-            disabled={exporting || loading}
+            onClick={() => void handleExportCsv()}
+            disabled={exporting !== "" || loading}
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
           >
-            {exporting ? "Exporting…" : "Export CSV"}
+            {exporting === "csv" ? "Exporting…" : "Export CSV"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportJson()}
+            disabled={exporting !== "" || loading}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            {exporting === "json" ? "Exporting…" : "Export JSON"}
           </button>
           <button
             type="button"
