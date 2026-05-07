@@ -10,9 +10,9 @@ const getNumberEnv = (name: string, fallback: number, min: number, max: number) 
   return Math.min(Math.max(Math.trunc(value), min), max);
 };
 
-const MAX_SUBDOMAINS_PROBE = getNumberEnv("DOMAIN_DISCOVERY_MAX_PROBE", 300, 1, 1000);
+const MAX_SUBDOMAINS_PROBE = getNumberEnv("DOMAIN_DISCOVERY_MAX_PROBE", 25, 1, 300);
 const EXTERNAL_TIMEOUT_MS = 8000;
-const SUBDOMAIN_PROBE_CONCURRENCY = getNumberEnv("DOMAIN_DISCOVERY_PROBE_CONCURRENCY", 8, 1, 50);
+const SUBDOMAIN_PROBE_CONCURRENCY = getNumberEnv("DOMAIN_DISCOVERY_PROBE_CONCURRENCY", 10, 1, 50);
 
 interface RdapVCardEntry {
   0: string;

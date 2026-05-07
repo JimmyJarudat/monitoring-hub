@@ -53,7 +53,7 @@ export default function DomainIntelligencePage() {
     setErrorMsg("");
 
     try {
-      const res = await get<DomainResult>(`/domain/${domain}`);
+      const res = await get<DomainResult>(`/domain/${domain}`, { timeout: 0 });
       setResult(res.data);
       setPhase("done");
     } catch {

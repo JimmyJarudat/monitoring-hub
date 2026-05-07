@@ -9,7 +9,7 @@ export const waybackPlugin: SubdomainDiscoveryPlugin = {
   timeoutMs: TIMEOUT_MS,
   async discover(domain) {
     const data = await fetchJson<unknown[]>(
-      `https://web.archive.org/cdx?url=*.${encodeURIComponent(domain)}/*&output=json&fl=timestamp,original&collapse=urlkey&limit=500`,
+      `https://web.archive.org/cdx/search/cdx?url=*.${encodeURIComponent(domain)}/*&output=json&fl=timestamp,original&collapse=urlkey&limit=500`,
       TIMEOUT_MS,
     );
     if (!Array.isArray(data)) return [];
