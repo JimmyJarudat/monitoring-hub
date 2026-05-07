@@ -19,6 +19,7 @@ model User {
   auditLogs      AuditLog[]
   loginHistory   LoginHistory[]
   refreshTokens  RefreshToken[]
+  domainScans    DomainScanHistory[]
 
   @@map("users")
 }
@@ -299,4 +300,24 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+model DomainScanHistory {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain          String
+  registrar       String?
+  dnsProvider     String
+  nameserverCount Int
+  subdomainCount  Int
+  onlineCount     Int
+  durationMs      Int
+  scannerIp       String?
+  scannedAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([domain])
+  @@index([scannedAt])
+  @@map("domain_scan_history")
 }
