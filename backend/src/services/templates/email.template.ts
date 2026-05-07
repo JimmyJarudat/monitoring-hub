@@ -7,6 +7,7 @@ const STATUS_STYLES = {
   RESOLVED: { bg: "#2D9C5F", label: "RESOLVED", icon: "✅" },
   OPEN_ALERT: { bg: "#D93025", label: "ALERT", icon: "🚨" },
   OPEN_REMINDER: { bg: "#D97706", label: "REMINDER", icon: "⏰" },
+  OPEN_ESCALATION: { bg: "#C2410C", label: "ESCALATION", icon: "🔥" },
 };
 
 const baseHtml = (accentColor: string, headerIcon: string, headerTitle: string, bodyHtml: string) => `
@@ -66,7 +67,9 @@ export const buildEmailIncidentMessage = (data: IncidentTemplateData): EmailTemp
   const style =
     data.status === "RESOLVED"
       ? STATUS_STYLES.RESOLVED
-      : data.kind === "reminder"
+      : data.kind === "escalation"
+        ? STATUS_STYLES.OPEN_ESCALATION
+        : data.kind === "reminder"
         ? STATUS_STYLES.OPEN_REMINDER
         : STATUS_STYLES.OPEN_ALERT;
 

@@ -120,6 +120,7 @@
 - [x] Alert rules management page `/alerts`
 - [x] Rich notification templates per channel type
 - [x] Payload preview in channel form
+- [x] Alert cooldown / dedupe / escalation logic
 
 ### Access control & Audit
 - [x] Role-based access control
@@ -168,23 +169,23 @@
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
-- [ ] Alert cooldown / dedupe / escalation logic
 - [ ] Notification delivery retry / failure tracking
 
 ## Next Recommended Work
 
 ### Dashboard
-- [ ] Dashboard overview page `/dashboard`
-- [ ] Stat cards (monitors up/down, open incidents, recent events)
-- [ ] Attention list (degraded / down items)
-- [ ] Open incidents summary
-- [ ] Group / device summary widgets
+- [x] Dashboard overview page `/dashboard`
+- [x] Stat cards (monitors up/down, open incidents, recent events)
+- [x] Attention list (degraded / down items)
+- [x] Open incidents summary
+- [x] Group / device summary widgets
 
 ### Status Map
-- [ ] Visual topology / status map
+- [x] Visual topology / status map
 
 ### Reports
-- [ ] Scheduled or on-demand availability reports
+- [x] On-demand availability reports
+- [ ] Scheduled availability reports
 
 ## Product Strategy — Take the Best, Cut the Worst
 

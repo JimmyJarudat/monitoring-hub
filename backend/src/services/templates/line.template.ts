@@ -4,6 +4,7 @@ const STATUS_COLORS = {
   RESOLVED: { bg: "#2D9C5F", text: "✅ Incident Resolved" },
   OPEN_ALERT: { bg: "#D93025", text: "🚨 Incident Opened" },
   OPEN_REMINDER: { bg: "#D97706", text: "⏰ Incident Reminder" },
+  OPEN_ESCALATION: { bg: "#C2410C", text: "🔥 Incident Escalation" },
 };
 
 const formatThaiTime = (iso: string) =>
@@ -38,12 +39,20 @@ export const buildLineIncidentMessage = (data: IncidentTemplateData): LineTempla
   const colorMap =
     data.status === "RESOLVED"
       ? STATUS_COLORS.RESOLVED
-      : data.kind === "reminder"
+      : data.kind === "escalation"
+        ? STATUS_COLORS.OPEN_ESCALATION
+        : data.kind === "reminder"
         ? STATUS_COLORS.OPEN_REMINDER
         : STATUS_COLORS.OPEN_ALERT;
 
   const statusBadge =
-    data.status === "RESOLVED" ? "RESOLVED" : data.kind === "reminder" ? "ONGOING" : "ALERT";
+    data.status === "RESOLVED"
+      ? "RESOLVED"
+      : data.kind === "escalation"
+        ? "ESCALATION"
+        : data.kind === "reminder"
+          ? "ONGOING"
+          : "ALERT";
 
   const flexContents = {
     type: "bubble",

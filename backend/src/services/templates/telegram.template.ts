@@ -10,17 +10,20 @@ const DIVIDER = "─────────────────";
 
 export const buildTelegramIncidentMessage = (data: IncidentTemplateData): TelegramTemplateOutput => {
   const icon =
-    data.status === "RESOLVED" ? "✅" : data.kind === "reminder" ? "⏰" : "🚨";
+    data.status === "RESOLVED" ? "✅" : data.kind === "escalation" ? "🔥" : data.kind === "reminder" ? "⏰" : "🚨";
   const title =
     data.status === "RESOLVED"
       ? "Incident Resolved"
-      : data.kind === "reminder"
+      : data.kind === "escalation"
+        ? "Incident Escalation"
+        : data.kind === "reminder"
         ? "Incident Reminder"
         : "Incident Opened";
   const details =
     data.message?.trim() ||
     (data.status === "RESOLVED" ? "Monitor recovered" : "Monitor reported issue");
-  const badgeIcon = data.status === "RESOLVED" ? "🟢" : data.kind === "reminder" ? "🟡" : "🔴";
+  const badgeIcon =
+    data.status === "RESOLVED" ? "🟢" : data.kind === "escalation" ? "🟠" : data.kind === "reminder" ? "🟡" : "🔴";
 
   const lines = [
     `${icon} <b>${esc(title)}</b>`,

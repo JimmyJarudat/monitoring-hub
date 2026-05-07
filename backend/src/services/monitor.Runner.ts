@@ -13,7 +13,7 @@ import { httpCheck } from "./checkers/http.Checker";
 import { pingCheck } from "./checkers/ping.Checker";
 import { tcpCheck } from "./checkers/tcp.Checker";
 import { tlsCheck } from "./checkers/tls.Checker";
-import { notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
+import { notifyIncidentEscalation, notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
 import { getSystemConfig } from "./systemConfig.service";
 import { logger } from "../lib/logger";
 
@@ -52,7 +52,13 @@ const isConfigObject = (value: unknown): value is Prisma.InputJsonObject => {
 const STATUS_INCIDENT_PREFIX = "[STATUS]";
 const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
 const RULE_INCIDENT_PREFIX = "[RULE]";
+const INCIDENT_ESCALATION_ACTION = "INCIDENT_ESCALATION_SENT";
 const INCIDENT_REMINDER_ACTION = "INCIDENT_REMINDER_SENT";
+const ESCALATION_LEVELS = [
+  { level: 1, multiplier: 2 },
+  { level: 2, multiplier: 4 },
+  { level: 3, multiplier: 8 },
+] as const;
 
 let _reminderConfigCache: { hours: number; fetchedAt: number } = { hours: 24, fetchedAt: 0 };
 const REMINDER_CONFIG_TTL_MS = 5 * 60 * 1000;
@@ -161,6 +167,86 @@ const shouldSendIncidentReminder = async (
   return checkedAt.getTime() - lastSentAt.getTime() >= intervalMs;
 };
 
+const getAuditNumber = (value: unknown, key: string) => {
+  if (!isConfigObject(value)) return null;
+  const raw = value[key];
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const getSentEscalationLevels = async (incidentId: string) => {
+  const logs = await prisma.auditLog.findMany({
+    where: {
+      action: INCIDENT_ESCALATION_ACTION,
+      entity: "Incident",
+      entityId: incidentId,
+    },
+    select: { newValue: true },
+  });
+
+  return new Set(
+    logs
+      .map((log) => getAuditNumber(log.newValue, "level"))
+      .filter((level): level is number => level !== null),
+  );
+};
+
+const getDueEscalationLevel = async (
+  incidentId: string,
+  incidentStartedAt: Date,
+  checkedAt: Date,
+) => {
+  const intervalMs = await getReminderIntervalMs();
+  const openMs = checkedAt.getTime() - incidentStartedAt.getTime();
+  const sentLevels = await getSentEscalationLevels(incidentId);
+
+  return ESCALATION_LEVELS.find(
+    (item) => openMs >= intervalMs * item.multiplier && !sentLevels.has(item.level),
+  );
+};
+
+const notifyIncidentEscalationIfDue = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  incidentStartedAt: Date;
+  checkedAt: Date;
+  message: string | null;
+}) => {
+  const escalation = await getDueEscalationLevel(
+    params.incidentId,
+    params.incidentStartedAt,
+    params.checkedAt,
+  );
+  if (!escalation) return;
+
+  const message = `[ESCALATION L${escalation.level}] ${params.message ?? "Incident is still open"}`;
+  await notifyIncidentEscalation({
+    monitor: params.monitor,
+    incidentId: params.incidentId,
+    alertRuleId: params.alertRuleId,
+    message,
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: INCIDENT_ESCALATION_ACTION,
+      entity: "Incident",
+      entityId: params.incidentId,
+      newValue: {
+        monitorId: params.monitor.id,
+        alertRuleId: params.alertRuleId ?? null,
+        level: escalation.level,
+        multiplier: escalation.multiplier,
+        message,
+      },
+    },
+  });
+};
+
 const notifyIncidentReminderIfDue = async (params: {
   monitor: Monitor;
   incidentId: string;
@@ -169,6 +255,8 @@ const notifyIncidentReminderIfDue = async (params: {
   checkedAt: Date;
   message: string | null;
 }) => {
+  await notifyIncidentEscalationIfDue(params);
+
   const shouldNotify = await shouldSendIncidentReminder(
     params.incidentId,
     params.incidentStartedAt,

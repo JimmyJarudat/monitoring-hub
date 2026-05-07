@@ -6,6 +6,7 @@ const STATUS_CONFIG = {
   RESOLVED: { emoji: "✅", label: "Incident Resolved" },
   OPEN_ALERT: { emoji: "🚨", label: "Incident Opened" },
   OPEN_REMINDER: { emoji: "⏰", label: "Incident Reminder" },
+  OPEN_ESCALATION: { emoji: "🔥", label: "Incident Escalation" },
 };
 
 const formatThaiTime = (iso: string) =>
@@ -15,7 +16,9 @@ export const buildSlackIncidentMessage = (data: IncidentTemplateData): SlackTemp
   const cfg =
     data.status === "RESOLVED"
       ? STATUS_CONFIG.RESOLVED
-      : data.kind === "reminder"
+      : data.kind === "escalation"
+        ? STATUS_CONFIG.OPEN_ESCALATION
+        : data.kind === "reminder"
         ? STATUS_CONFIG.OPEN_REMINDER
         : STATUS_CONFIG.OPEN_ALERT;
 

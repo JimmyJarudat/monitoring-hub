@@ -235,7 +235,95 @@ export const toDisplayChannelConfig = (channel: NotificationChannel) => {
   };
 };
 
-type IncidentNotificationKind = "transition" | "reminder";
+type IncidentNotificationKind = "transition" | "reminder" | "escalation";
+
+const INCIDENT_NOTIFICATION_SENT_ACTION = "INCIDENT_NOTIFICATION_SENT";
+const INCIDENT_NOTIFICATION_SUPPRESSED_ACTION = "INCIDENT_NOTIFICATION_SUPPRESSED";
+const INCIDENT_TRANSITION_COOLDOWN_MS = 5 * 60 * 1000;
+const INCIDENT_REMINDER_COOLDOWN_MS = 60 * 1000;
+const INCIDENT_ESCALATION_COOLDOWN_MS = 60 * 1000;
+
+const getIncidentCooldownMs = (kind: IncidentNotificationKind) => {
+  if (kind === "transition") return INCIDENT_TRANSITION_COOLDOWN_MS;
+  if (kind === "escalation") return INCIDENT_ESCALATION_COOLDOWN_MS;
+  return INCIDENT_REMINDER_COOLDOWN_MS;
+};
+
+const normalizeFingerprintMessage = (message: string | null) =>
+  (message ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+
+const buildIncidentNotificationFingerprint = (params: {
+  alertRuleId?: string | null;
+  status: IncidentStatus;
+  message: string | null;
+  kind: IncidentNotificationKind;
+}) =>
+  JSON.stringify({
+    kind: params.kind,
+    status: params.status,
+    alertRuleId: params.alertRuleId ?? null,
+    message: normalizeFingerprintMessage(params.message),
+  });
+
+const getAuditString = (value: unknown, key: string) =>
+  isObject(value) && typeof value[key] === "string" ? value[key] : null;
+
+const shouldSendIncidentNotification = async (params: {
+  incidentId: string;
+  fingerprint: string;
+  kind: IncidentNotificationKind;
+  now: Date;
+}) => {
+  const cooldownMs = getIncidentCooldownMs(params.kind);
+  const recentLogs = await prisma.auditLog.findMany({
+    where: {
+      action: INCIDENT_NOTIFICATION_SENT_ACTION,
+      entity: "Incident",
+      entityId: params.incidentId,
+      createdAt: { gte: new Date(params.now.getTime() - cooldownMs) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { newValue: true },
+    take: 30,
+  });
+
+  return !recentLogs.some((log) => getAuditString(log.newValue, "fingerprint") === params.fingerprint);
+};
+
+const recordIncidentNotificationAudit = async (params: {
+  action: typeof INCIDENT_NOTIFICATION_SENT_ACTION | typeof INCIDENT_NOTIFICATION_SUPPRESSED_ACTION;
+  monitorId: string;
+  incidentId: string;
+  alertRuleId?: string | null;
+  status: IncidentStatus;
+  message: string | null;
+  kind: IncidentNotificationKind;
+  fingerprint: string;
+  channelIds?: string[];
+  deliveredChannelIds?: string[];
+  failedChannels?: { id: string; name: string; type: ChannelType; error: string }[];
+  reason?: string;
+}) => {
+  await prisma.auditLog.create({
+    data: {
+      action: params.action,
+      entity: "Incident",
+      entityId: params.incidentId,
+      newValue: {
+        monitorId: params.monitorId,
+        alertRuleId: params.alertRuleId ?? null,
+        status: params.status,
+        kind: params.kind,
+        message: params.message,
+        fingerprint: params.fingerprint,
+        channelIds: params.channelIds ?? [],
+        deliveredChannelIds: params.deliveredChannelIds ?? [],
+        failedChannels: params.failedChannels ?? [],
+        reason: params.reason ?? null,
+      },
+    },
+  });
+};
 
 const sendTelegram = async (config: TelegramConfig, text: string, parseMode: "HTML" = "HTML") => {
   const response = await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
@@ -392,6 +480,19 @@ export const notifyIncidentReminder = async (params: {
   });
 };
 
+export const notifyIncidentEscalation = async (params: {
+  monitor: Monitor;
+  incidentId: string;
+  alertRuleId?: string | null;
+  message: string | null;
+}) => {
+  await notifyIncident({
+    ...params,
+    status: "OPEN",
+    kind: "escalation",
+  });
+};
+
 const notifyIncident = async (params: {
   monitor: Monitor;
   incidentId: string;
@@ -400,6 +501,29 @@ const notifyIncident = async (params: {
   message: string | null;
   kind: IncidentNotificationKind;
 }) => {
+  const now = new Date();
+  const fingerprint = buildIncidentNotificationFingerprint(params);
+  const shouldSend = await shouldSendIncidentNotification({
+    incidentId: params.incidentId,
+    fingerprint,
+    kind: params.kind,
+    now,
+  });
+  if (!shouldSend) {
+    await recordIncidentNotificationAudit({
+      action: INCIDENT_NOTIFICATION_SUPPRESSED_ACTION,
+      monitorId: params.monitor.id,
+      incidentId: params.incidentId,
+      alertRuleId: params.alertRuleId,
+      status: params.status,
+      message: params.message,
+      kind: params.kind,
+      fingerprint,
+      reason: "cooldown",
+    });
+    return;
+  }
+
   let channels = params.alertRuleId
     ? (
         await prisma.alertRuleChannel.findMany({
@@ -432,19 +556,42 @@ const notifyIncident = async (params: {
     message: params.message,
     kind: params.kind,
     incidentId: params.incidentId,
-    sentAt: new Date().toISOString(),
+    sentAt: now.toISOString(),
   };
   const content = buildIncidentContent(templateData);
+  const deliveredChannelIds: string[] = [];
+  const failedChannels: { id: string; name: string; type: ChannelType; error: string }[] = [];
 
   await Promise.all(
     channels.map(async (channel) => {
       try {
         await deliverChannelMessage(channel, content);
+        deliveredChannelIds.push(channel.id);
       } catch (error) {
+        failedChannels.push({
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          error: error instanceof Error ? error.message : String(error),
+        });
         logger.error("notify", `failed channel ${channel.id} (${channel.type})`, { error: String(error) });
       }
     }),
   );
+
+  await recordIncidentNotificationAudit({
+    action: INCIDENT_NOTIFICATION_SENT_ACTION,
+    monitorId: params.monitor.id,
+    incidentId: params.incidentId,
+    alertRuleId: params.alertRuleId,
+    status: params.status,
+    message: params.message,
+    kind: params.kind,
+    fingerprint,
+    channelIds: channels.map((channel) => channel.id),
+    deliveredChannelIds,
+    failedChannels,
+  });
 };
 
 export const notifyIncidentNow = async (params: {

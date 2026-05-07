@@ -1,4 +1,4 @@
-export type IncidentKind = "transition" | "reminder";
+export type IncidentKind = "transition" | "reminder" | "escalation";
 
 export type IncidentTemplateData = {
   monitorName: string;
