@@ -10,6 +10,7 @@ import { createProtectedRoute } from "@/utils/routeProtected";
 import App from "../App";
 import LoginPage from "@/pages/auth/login";
 import Dashboard from "@/pages/dashboard";
+import StatusMapPage from "@/pages/status-map";
 import IncidentsPage from "@/pages/incidents";
 import MonitorsPage from "@/pages/monitors";
 import AddMonitorPage from "@/pages/monitors/new";
@@ -52,6 +53,7 @@ const routes: RouteObject[] = [
     element: <PrivateLayout />,
     children: [
       createProtectedRoute({ path: "dashboard", element: <Dashboard /> }),
+      createProtectedRoute({ path: "status-map", element: <StatusMapPage /> }),
       createProtectedRoute({ path: "monitors", element: <MonitorsPage /> }),
       createProtectedRoute({ path: "monitors/new", element: <AddMonitorPage />, adminOnly: true }),
       createProtectedRoute({ path: "monitors/:id", element: <MonitorDetailPage /> }),
