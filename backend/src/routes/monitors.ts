@@ -4,6 +4,7 @@ import { requireAdminRole } from "../lib/authorization";
 import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
+import { notifyAdmins } from "../services/appNotification.service";
 import { runMonitorCheck } from "../services/monitor.Runner";
 import { notifyIncidentNow } from "../services/notification.service";
 
@@ -634,6 +635,21 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       };
 
       const monitor = await prisma.monitor.create({ data });
+      await notifyAdmins({
+        type: "MONITOR",
+        severity: "INFO",
+        title: "Monitor created",
+        message: `เพิ่ม monitor ใหม่: ${monitor.name} (${monitor.type})`,
+        href: `/monitors/${monitor.id}`,
+        entity: "Monitor",
+        entityId: monitor.id,
+        metadata: {
+          monitorId: monitor.id,
+          monitorName: monitor.name,
+          monitorType: monitor.type,
+          createdByUserId: currentUser.id,
+        },
+      });
 
       set.status = 201;
       return ok(monitor);
@@ -701,6 +717,18 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         where: { id: params.id },
         data,
       });
+
+      if (body.enabled !== undefined && body.enabled !== existing.enabled) {
+        void notifyAdmins({
+          type: "MONITOR",
+          severity: body.enabled ? "INFO" : "WARNING",
+          title: body.enabled ? "Monitor enabled" : "Monitor disabled",
+          message: `"${monitor.name}" ถูก${body.enabled ? "เปิด" : "ปิด"}ใช้งาน`,
+          entity: "Monitor",
+          entityId: monitor.id,
+          href: `/monitors/${monitor.id}`,
+        });
+      }
 
       return ok(monitor);
     },
@@ -907,6 +935,16 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       }
 
       await prisma.monitor.delete({ where: { id: params.id } });
+
+      void notifyAdmins({
+        type: "MONITOR",
+        severity: "WARNING",
+        title: "Monitor deleted",
+        message: `"${existing.name}" (${existing.type}) ถูกลบโดย admin`,
+        entity: "Monitor",
+        entityId: existing.id,
+      });
+
       return ok({ message: "ลบ monitor แล้ว" });
     },
     {
