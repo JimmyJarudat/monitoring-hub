@@ -1,9 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
 import { isAdminUser } from "@/utils/permissions";
 import { getAvatarUrl } from "@/utils/avatar";
-import { mockNotifications, type MockNotification } from "@/data/mockNotifications";
+import { useApi } from "@/hooks/useApi";
+
+type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
+
+type AppNotification = {
+  id: string;
+  title: string;
+  message: string | null;
+  type: "INCIDENT" | "RESOLVED" | "ALERT" | "SYSTEM" | "DELIVERY" | "SECURITY" | "REPORT" | "MONITOR";
+  severity: "INFO" | "WARNING" | "CRITICAL" | "SUCCESS";
+  href: string | null;
+  createdAt: string;
+  read: boolean;
+};
+
+type NotificationSummary = {
+  unreadCount: number;
+  latest: AppNotification[];
+};
 
 const breadcrumbLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -36,11 +54,15 @@ const notificationDateFormatter = new Intl.DateTimeFormat("th-TH", {
   timeStyle: "short",
 });
 
-const notificationTone: Record<MockNotification["type"], string> = {
-  incident: "bg-rose-50 text-rose-700",
-  alert: "bg-amber-50 text-amber-700",
-  resolved: "bg-emerald-50 text-emerald-700",
-  system: "bg-slate-100 text-slate-700",
+const notificationTone: Record<AppNotification["type"], string> = {
+  INCIDENT: "bg-rose-50 text-rose-700",
+  ALERT: "bg-amber-50 text-amber-700",
+  RESOLVED: "bg-emerald-50 text-emerald-700",
+  SYSTEM: "bg-slate-100 text-slate-700",
+  DELIVERY: "bg-orange-50 text-orange-700",
+  SECURITY: "bg-violet-50 text-violet-700",
+  REPORT: "bg-cyan-50 text-cyan-700",
+  MONITOR: "bg-blue-50 text-blue-700",
 };
 
 const formatNotificationDate = (value: string) => {
@@ -49,13 +71,15 @@ const formatNotificationDate = (value: string) => {
 };
 
 const Navbar = () => {
+  const { api } = useApi();
   const { user, logout } = useSession();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(
-    () => mockNotifications.filter((item) => item.read).map((item) => item.id),
-  );
+  const [notificationSummary, setNotificationSummary] = useState<NotificationSummary>({
+    unreadCount: 0,
+    latest: [],
+  });
   const ref = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
@@ -74,16 +98,48 @@ const Navbar = () => {
   const displayRole =
     typeof user?.role === "string" ? user.role : (user?.role?.name ?? "USER");
   const isAdmin = isAdminUser(user);
-  const visibleNotifications = mockNotifications.slice(0, 4);
-  const unreadCount = mockNotifications.filter(
-    (item) => !readNotificationIds.includes(item.id),
-  ).length;
-  const markNotificationRead = (id: string) => {
-    setReadNotificationIds((current) => (current.includes(id) ? current : [...current, id]));
+
+  const loadNotificationSummary = useCallback(async () => {
+    try {
+      const res = await api.get<ApiResponse<NotificationSummary>>("/notifications/summary");
+      if (res.data.success) {
+        setNotificationSummary(res.data.data);
+      }
+    } catch {
+      // Global interceptor already shows connectivity errors; keep navbar quiet.
+    }
+  }, [api]);
+
+  const markNotificationRead = async (id: string) => {
+    setNotificationSummary((current) => ({
+      unreadCount: Math.max(current.unreadCount - (current.latest.find((item) => item.id === id && !item.read) ? 1 : 0), 0),
+      latest: current.latest.map((item) => (item.id === id ? { ...item, read: true } : item)),
+    }));
+    try {
+      await api.patch(`/notifications/${id}/read`);
+    } catch {
+      void loadNotificationSummary();
+    }
   };
-  const markAllNotificationsRead = () => {
-    setReadNotificationIds(mockNotifications.map((item) => item.id));
+  const markAllNotificationsRead = async () => {
+    setNotificationSummary((current) => ({
+      unreadCount: 0,
+      latest: current.latest.map((item) => ({ ...item, read: true })),
+    }));
+    try {
+      await api.patch("/notifications/read-all");
+    } catch {
+      void loadNotificationSummary();
+    }
   };
+
+  useEffect(() => {
+    void loadNotificationSummary();
+    const timer = window.setInterval(() => {
+      void loadNotificationSummary();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [loadNotificationSummary]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -143,9 +199,9 @@ const Navbar = () => {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
           </svg>
-          {unreadCount > 0 ? (
+          {notificationSummary.unreadCount > 0 ? (
             <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
-              {unreadCount > 9 ? "9+" : unreadCount}
+              {notificationSummary.unreadCount > 9 ? "9+" : notificationSummary.unreadCount}
             </span>
           ) : null}
         </button>
@@ -155,7 +211,9 @@ const Navbar = () => {
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold text-slate-950">การแจ้งเตือน</p>
-                <p className="mt-0.5 text-xs text-slate-500">Mock data สำหรับโครง UI</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {notificationSummary.unreadCount.toLocaleString()} รายการที่ยังไม่ได้อ่าน
+                </p>
               </div>
               <button
                 type="button"
@@ -167,14 +225,19 @@ const Navbar = () => {
             </div>
 
             <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
-              {visibleNotifications.map((item) => {
-                const isRead = readNotificationIds.includes(item.id);
+              {notificationSummary.latest.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-slate-500">
+                  ยังไม่มีการแจ้งเตือน
+                </div>
+              ) : null}
+              {notificationSummary.latest.map((item) => {
+                const isRead = item.read;
                 return (
                   <Link
                     key={item.id}
-                    to={item.href}
+                    to={item.href ?? "/notifications"}
                     onClick={() => {
-                      markNotificationRead(item.id);
+                      void markNotificationRead(item.id);
                       setNotificationOpen(false);
                     }}
                     className="block px-4 py-3 transition hover:bg-slate-50"
@@ -188,7 +251,7 @@ const Navbar = () => {
                             {item.type}
                           </span>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.message}</p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.message ?? "-"}</p>
                         <p className="mt-2 text-[11px] text-slate-400">{formatNotificationDate(item.createdAt)}</p>
                       </div>
                     </div>

@@ -1,24 +1,66 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { mockNotifications, type MockNotification } from "@/data/mockNotifications";
+import { toast } from "react-toastify";
+import { useApi } from "@/hooks/useApi";
+
+type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
+
+type AppNotification = {
+  id: string;
+  recipientId: string;
+  title: string;
+  message: string | null;
+  type: "INCIDENT" | "RESOLVED" | "ALERT" | "SYSTEM" | "DELIVERY" | "SECURITY" | "REPORT" | "MONITOR";
+  severity: "INFO" | "WARNING" | "CRITICAL" | "SUCCESS";
+  href: string | null;
+  entity: string | null;
+  entityId: string | null;
+  createdAt: string;
+  read: boolean;
+};
+
+type NotificationResponse = {
+  items: AppNotification[];
+  page: number;
+  limit: number;
+  total: number;
+  unreadCount: number;
+  hasMore: boolean;
+};
+
+type FilterKey = "ALL" | "UNREAD" | AppNotification["type"];
 
 const dateTimeFormatter = new Intl.DateTimeFormat("th-TH", {
   dateStyle: "medium",
   timeStyle: "short",
 });
 
-const typeClass: Record<MockNotification["type"], string> = {
-  incident: "bg-rose-50 text-rose-700",
-  alert: "bg-amber-50 text-amber-700",
-  resolved: "bg-emerald-50 text-emerald-700",
-  system: "bg-slate-100 text-slate-700",
+const typeClass: Record<AppNotification["type"], string> = {
+  INCIDENT: "bg-rose-50 text-rose-700",
+  ALERT: "bg-amber-50 text-amber-700",
+  RESOLVED: "bg-emerald-50 text-emerald-700",
+  SYSTEM: "bg-slate-100 text-slate-700",
+  DELIVERY: "bg-orange-50 text-orange-700",
+  SECURITY: "bg-violet-50 text-violet-700",
+  REPORT: "bg-cyan-50 text-cyan-700",
+  MONITOR: "bg-blue-50 text-blue-700",
 };
 
-const typeLabel: Record<MockNotification["type"], string> = {
-  incident: "Incident",
-  alert: "Alert",
-  resolved: "Resolved",
-  system: "System",
+const severityClass: Record<AppNotification["severity"], string> = {
+  INFO: "border-blue-200 bg-blue-50 text-blue-700",
+  WARNING: "border-amber-200 bg-amber-50 text-amber-700",
+  CRITICAL: "border-rose-200 bg-rose-50 text-rose-700",
+  SUCCESS: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
+
+const filterTabs: { key: FilterKey; label: string }[] = [
+  { key: "ALL", label: "ทั้งหมด" },
+  { key: "UNREAD", label: "ยังไม่ได้อ่าน" },
+  { key: "INCIDENT", label: "Incidents" },
+  { key: "DELIVERY", label: "Delivery" },
+  { key: "SYSTEM", label: "System" },
+  { key: "MONITOR", label: "Monitor" },
+];
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -26,7 +68,90 @@ const formatDate = (value: string) => {
 };
 
 const NotificationsPage = () => {
-  const unreadCount = mockNotifications.filter((item) => !item.read).length;
+  const { api } = useApi();
+  const [data, setData] = useState<NotificationResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterKey>("ALL");
+  const [page, setPage] = useState(1);
+
+  const params = useMemo(() => ({
+    page,
+    limit: 50,
+    unread: filter === "UNREAD" ? "true" : undefined,
+    type: filter !== "ALL" && filter !== "UNREAD" ? filter : undefined,
+  }), [filter, page]);
+
+  const loadNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<ApiResponse<NotificationResponse>>("/notifications", { params });
+      if (!res.data.success) {
+        toast.error(res.data.message);
+        return;
+      }
+      setData(res.data.data);
+    } catch {
+      toast.error("โหลดการแจ้งเตือนไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
+  }, [api, params]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const changeFilter = (next: FilterKey) => {
+    setFilter(next);
+    setPage(1);
+  };
+
+  const markRead = async (id: string) => {
+    setData((current) => current
+      ? {
+          ...current,
+          unreadCount: Math.max(current.unreadCount - (current.items.find((item) => item.id === id && !item.read) ? 1 : 0), 0),
+          items: current.items.map((item) => (item.id === id ? { ...item, read: true } : item)),
+        }
+      : current);
+    try {
+      await api.patch(`/notifications/${id}/read`);
+    } catch {
+      void loadNotifications();
+    }
+  };
+
+  const markAllRead = async () => {
+    setData((current) => current
+      ? {
+          ...current,
+          unreadCount: 0,
+          items: current.items.map((item) => ({ ...item, read: true })),
+        }
+      : current);
+    try {
+      await api.patch("/notifications/read-all");
+      toast.success("อ่านการแจ้งเตือนทั้งหมดแล้ว");
+    } catch {
+      void loadNotifications();
+    }
+  };
+
+  const dismissNotification = async (id: string) => {
+    setData((current) => current
+      ? {
+          ...current,
+          total: Math.max(current.total - 1, 0),
+          unreadCount: Math.max(current.unreadCount - (current.items.find((item) => item.id === id && !item.read) ? 1 : 0), 0),
+          items: current.items.filter((item) => item.id !== id),
+        }
+      : current);
+    try {
+      await api.patch(`/notifications/${id}/dismiss`);
+    } catch {
+      void loadNotifications();
+    }
+  };
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
@@ -35,41 +160,123 @@ const NotificationsPage = () => {
           <p className="text-sm font-medium text-cyan-700">บัญชีของฉัน</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-950">การแจ้งเตือนทั้งหมด</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            โครง UI สำหรับ notification center ตอนนี้ใช้ mock data ก่อน และจะต่อข้อมูลจริงภายหลัง
+            ศูนย์รวมเหตุการณ์ที่เกี่ยวข้องกับคุณ: incident, delivery, system และ monitor activity
           </p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-          <span className="font-semibold text-slate-950">{unreadCount}</span>
-          <span className="ml-1 text-slate-500">ยังไม่ได้อ่าน</span>
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+            <span className="font-semibold text-slate-950">{(data?.unreadCount ?? 0).toLocaleString()}</span>
+            <span className="ml-1 text-slate-500">ยังไม่ได้อ่าน</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void markAllRead()}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            อ่านทั้งหมด
+          </button>
         </div>
       </div>
 
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {filterTabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => changeFilter(tab.key)}
+              className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                filter === tab.key
+                  ? "bg-slate-950 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
-          <p className="mt-1 text-xs text-slate-500">{mockNotifications.length} mock records</p>
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {loading ? "Loading..." : `${(data?.total ?? 0).toLocaleString()} records`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadNotifications()}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            Refresh
+          </button>
         </div>
 
         <div className="divide-y divide-slate-200">
-          {mockNotifications.map((item) => (
-            <Link
+          {!loading && (data?.items.length ?? 0) === 0 ? (
+            <div className="px-4 py-12 text-center text-sm text-slate-500">
+              ยังไม่มีการแจ้งเตือนในหมวดนี้
+            </div>
+          ) : null}
+
+          {(data?.items ?? []).map((item) => (
+            <div
               key={item.id}
-              to={item.href}
               className="grid gap-3 px-4 py-4 transition hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
-              <div className="min-w-0">
+              <Link
+                to={item.href ?? "/notifications"}
+                onClick={() => void markRead(item.id)}
+                className="min-w-0"
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   {!item.read ? <span className="h-2 w-2 rounded-full bg-cyan-500" /> : null}
                   <h3 className="font-semibold text-slate-950">{item.title}</h3>
                   <span className={`rounded-full px-2 py-1 text-xs font-semibold ${typeClass[item.type]}`}>
-                    {typeLabel[item.type]}
+                    {item.type}
+                  </span>
+                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${severityClass[item.severity]}`}>
+                    {item.severity}
                   </span>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{item.message}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{item.message ?? "-"}</p>
+              </Link>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <time className="text-xs text-slate-500">{formatDate(item.createdAt)}</time>
+                <button
+                  type="button"
+                  onClick={() => void dismissNotification(item.id)}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                >
+                  ซ่อน
+                </button>
               </div>
-              <time className="text-xs text-slate-500">{formatDate(item.createdAt)}</time>
-            </Link>
+            </div>
           ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => Math.max(current - 1, 1))}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-slate-500">
+            Page {data?.page ?? page}
+          </span>
+          <button
+            type="button"
+            disabled={!data?.hasMore}
+            onClick={() => setPage((current) => current + 1)}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
         </div>
       </section>
     </div>
