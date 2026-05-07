@@ -47,7 +47,7 @@ const LEVEL_DOT: Record<LogLevel, string> = {
 };
 
 const SystemLogsPage = () => {
-  const api = useApi();
+  const { api } = useApi();
 
   const [items, setItems] = useState<SystemLogRow[]>([]);
   const [total, setTotal] = useState(0);
