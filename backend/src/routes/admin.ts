@@ -181,7 +181,13 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     "/system-config",
     async ({ body, currentUser }) => {
       requireAdminRole(currentUser.role);
-      await saveSystemConfig(body);
+      const { general: generalPatch, ...rest } = body;
+      if (generalPatch) {
+        const current = await getSystemConfig();
+        await saveSystemConfig({ ...rest, general: { ...current.general, ...generalPatch } });
+      } else {
+        await saveSystemConfig(rest);
+      }
       return ok({ message: "บันทึกการตั้งค่าสำเร็จ" });
     },
     {

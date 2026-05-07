@@ -71,7 +71,7 @@ export async function tlsCheck(config: TlsConfig): Promise<CheckResult> {
         });
       });
 
-      socket.on("error", (error) => {
+      socket.on("error", (error: Error) => {
         cleanup();
         resolve({
           status: "DOWN",

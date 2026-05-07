@@ -218,7 +218,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
       });
 
       const enabledMonitors = monitors.filter((monitor) => monitor.enabled);
-      const latestStatuses = enabledMonitors.map((monitor) => monitor.latestResult?.status ?? "PENDING");
+      const latestStatuses = enabledMonitors.map((monitor) => monitor.latestResult?.status ?? null);
       const groupResponseTimes = results24h
         .map((result) => result.responseTimeMs)
         .filter((value): value is number => typeof value === "number");
@@ -242,7 +242,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
           up: latestStatuses.filter((status) => status === "UP").length,
           degraded: latestStatuses.filter((status) => status === "DEGRADED").length,
           down: latestStatuses.filter((status) => status === "DOWN").length,
-          pending: latestStatuses.filter((status) => status === "PENDING").length,
+          pending: latestStatuses.filter((status) => status === null).length,
           openIncidents: openIncidentCount,
           uptime24h:
             results24h.length > 0
