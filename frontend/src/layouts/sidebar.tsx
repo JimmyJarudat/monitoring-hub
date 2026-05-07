@@ -25,7 +25,7 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Dashboard", path: "/dashboard", icon: "D", end: true },
       { label: "Status Map", path: "/status-map", icon: "S" },
-      { label: "Reports", path: "/reports", icon: "R", badge: "Soon" },
+      { label: "Reports", path: "/reports", icon: "R" },
     ],
   },
   {
