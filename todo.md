@@ -122,6 +122,7 @@
 - [x] Payload preview in channel form
 - [x] Alert cooldown / dedupe / escalation logic
 - [x] Notification delivery retry / failure tracking
+- [x] In-app notifications with read-all and notification center
 
 ### Access control & Audit
 - [x] Role-based access control

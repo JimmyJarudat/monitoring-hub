@@ -391,9 +391,10 @@ const CredentialsPage = () => {
         return;
       }
 
+      const secret = response.data.data.secret;
       setRevealedSecrets((current) => ({
         ...current,
-        [credential.id]: response.data.data.secret,
+        [credential.id]: secret,
       }));
     } catch {
       toast.error("เปิดดู secret ไม่สำเร็จ");
