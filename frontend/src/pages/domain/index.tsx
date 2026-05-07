@@ -1,11 +1,27 @@
 import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 
+type DiscoverySource =
+  | "crt.sh"
+  | "dns-bruteforce"
+  | "subfinder"
+  | "assetfinder"
+  | "securitytrails"
+  | "alienvault-otx"
+  | "commoncrawl"
+  | "wayback";
+
 interface SubdomainInfo {
   host: string;
+  source?: DiscoverySource[];
+  confidenceScore?: number;
+  firstSeen?: string | null;
+  lastSeen?: string | null;
   online: boolean;
   hasSSL: boolean;
   ip: string | null;
+  aRecords?: string[];
+  cnameRecords?: string[];
   sslExpiresAt?: string;
   sslIssuer?: string;
 }
@@ -52,6 +68,12 @@ export default function DomainIntelligencePage() {
 
   const onlineCount = result?.subdomains.filter((s) => s.online).length ?? 0;
   const sslCount = result?.subdomains.filter((s) => s.hasSSL).length ?? 0;
+  const avgConfidence = result?.subdomains.length
+    ? Math.round(
+        result.subdomains.reduce((total, subdomain) => total + (subdomain.confidenceScore ?? 0), 0) /
+          result.subdomains.length,
+      )
+    : 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
@@ -108,6 +130,9 @@ export default function DomainIntelligencePage() {
             ))}
           </div>
           <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
+          <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+            กำลังตรวจ passive sources, external tools, DNS records และ HTTP services
+          </div>
         </div>
       )}
 
@@ -146,7 +171,7 @@ export default function DomainIntelligencePage() {
             />
             <SummaryCard
               label="Subdomains พบ"
-              value={`${result.subdomains.length} host · ${onlineCount} online · ${sslCount} SSL`}
+              value={`${result.subdomains.length} host · ${onlineCount} active · ${sslCount} SSL · ${avgConfidence}% confidence`}
               icon={
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
@@ -182,8 +207,9 @@ export default function DomainIntelligencePage() {
               </h2>
             </div>
             {result.subdomains.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-400">
-                ไม่พบ subdomains จาก crt.sh
+              <div className="space-y-1 py-12 text-center text-sm text-slate-400">
+                <p>ไม่พบ subdomains จาก passive sources</p>
+                <p>ระบบได้ลอง external tools และ DNS Bruteforce เพิ่มเติมแล้ว</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -191,24 +217,48 @@ export default function DomainIntelligencePage() {
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="px-5 py-3">Host</th>
+                      <th className="px-4 py-3">Source</th>
+                      <th className="px-4 py-3">Confidence</th>
                       <th className="px-4 py-3">IP</th>
+                      <th className="px-4 py-3">CNAME</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">SSL</th>
-                      <th className="px-4 py-3">SSL Expires</th>
+                      <th className="px-4 py-3">Last Seen</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {result.subdomains.map((sub) => (
                       <tr key={sub.host} className="transition hover:bg-slate-50">
                         <td className="px-5 py-3 font-mono text-xs text-slate-800">{sub.host}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(sub.source ?? ["crt.sh"]).map((source) => (
+                              <SourceBadge key={`${sub.host}-${source}`} source={source} />
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                          {sub.confidenceScore ?? 0}%
+                        </td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                          {sub.ip ?? <span className="text-slate-300">—</span>}
+                          {(sub.aRecords?.[0] ?? sub.ip) ? (
+                            <span>{sub.aRecords?.join(", ") ?? sub.ip}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                          {sub.cnameRecords?.length ? (
+                            <span>{sub.cnameRecords.join(", ")}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {sub.online ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              Online
+                              Active
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
@@ -235,8 +285,8 @@ export default function DomainIntelligencePage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500">
-                          {sub.sslExpiresAt
-                            ? new Date(sub.sslExpiresAt).toLocaleDateString("th-TH", {
+                          {sub.lastSeen
+                            ? new Date(sub.lastSeen).toLocaleDateString("th-TH", {
                                 year: "numeric",
                                 month: "short",
                                 day: "numeric",
@@ -275,5 +325,24 @@ function SummaryCard({
         <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">{value}</p>
       </div>
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: DiscoverySource }) {
+  const palette: Record<DiscoverySource, string> = {
+    "crt.sh": "border-sky-200 bg-sky-50 text-sky-700",
+    "dns-bruteforce": "border-emerald-200 bg-emerald-50 text-emerald-700",
+    subfinder: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    assetfinder: "border-violet-200 bg-violet-50 text-violet-700",
+    securitytrails: "border-amber-200 bg-amber-50 text-amber-700",
+    "alienvault-otx": "border-rose-200 bg-rose-50 text-rose-700",
+    commoncrawl: "border-slate-200 bg-slate-50 text-slate-700",
+    wayback: "border-cyan-200 bg-cyan-50 text-cyan-700",
+  };
+
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${palette[source]}`}>
+      {source}
+    </span>
   );
 }
