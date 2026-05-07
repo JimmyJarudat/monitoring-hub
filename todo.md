@@ -212,3 +212,233 @@
 - reuse credential และ group ได้เป็นระบบ
 - alerting ครบ ทั้ง channels, rules, และ templates
 - dashboard และ reports เป็น layer สุดท้ายที่ขยายต่อได้โดยไม่ต้องรื้อแกนข้อมูลใหม่
+
+
+---------------------- END Monitor ---------------------------
+
+พอจบส่วนแรกทั้งหมดก่อน ค่อยมาเริ่มวางแฟนส่วนนี้   
+
+---
+
+## DB Insight
+
+> แยกออกจาก monitor checker ปกติ — เป็น deep analysis layer สำหรับ database monitors
+
+### แนวคิดหลัก
+
+- **Monitor** = connectivity check (ทำอยู่แล้ว) — รู้ว่า DB ขึ้นหรือลง
+- **DB Insight** = analysis layer — รู้ว่า DB ทำงานอย่างไร สุขภาพเป็นยังไง
+- Insight runner แยกจาก monitor runner — interval ยาวกว่า (นาที ไม่ใช่วินาที) และ opt-in ต่อ DB
+- ดึง credential จาก credential store เดิม ไม่ต้องสร้างใหม่
+
+---
+
+### DB ที่รองรับ
+
+| DB | Slow queries | Index analysis | Table sizes | Connections / locks | Replication lag | File sizes |
+|---|---|---|---|---|---|---|
+| PostgreSQL | pg_stat_statements | pg_stat_user_indexes | pg_relation_size() | pg_stat_activity | pg_stat_replication | pg_database_size() + log path |
+| MySQL / MariaDB | performance_schema | sys.schema_unused_indexes | information_schema.TABLES | PROCESSLIST | SHOW REPLICA STATUS | data_length + SHOW VARIABLES |
+| SQL Server / Azure SQL | sys.dm_exec_query_stats | sys.dm_db_missing_index_details | sys.dm_db_partition_stats | sys.dm_exec_sessions | sys.dm_hadr_database_replica_states | sys.master_files |
+| MongoDB | system.profile | $indexStats | db.stats() + collection.stats() | serverStatus().connections | rs.status() | dbStats.dataSize + logPath |
+
+---
+
+### หน้า DB Insight `/db-insight/:monitorId`
+
+#### Layout
+
+```
+[Page header]
+  ชื่อ DB · badge (PostgreSQL / MySQL / etc.) · credential ที่ใช้ · เวลา collect ล่าสุด
+  [Time range selector]  [Refresh]  [Export]
+
+[Stat cards — 5 ใบ]
+  Active connections | Slow queries (1h) | DB size | Locks / blocked | Replication lag
+
+[Tabs]
+  Slow queries | Index analysis | Table & file sizes | Connections | Replication
+```
+
+#### Tab: Slow queries
+- ตาราง top N slow queries เรียงตาม avg duration
+- คอลัมน์: query text (truncated), avg duration ms, call count, rows examined
+- badge สี: แดง > threshold alert, เหลือง > threshold warn, น้ำเงิน > 1,000 ms
+- ปุ่ม "Explain" ต่อแถว → แสดง execution plan (phase 2)
+- filter: เลือก threshold / top N
+
+#### Tab: Index analysis
+- แบ่งกลุ่ม: Missing index · Unused index · Healthy
+- Missing: แสดง table, column set, seq scan count, estimated gain, พร้อม suggested `CREATE INDEX` statement (copy)
+- Unused: แสดง index name, last used, size — พร้อม suggested `DROP INDEX` statement (copy)
+- Healthy: แสดง index name, scan count, index-only scan rate
+
+#### Tab: Table & file sizes
+- **File sizes** (ด้านบน)
+  - DB data file size รวม
+  - Log file size รวม — เน้นถ้าโตเกิน threshold
+  - แต่ละ file path + size (SQL Server: sys.master_files / PostgreSQL: pg_relation_filepath)
+- **Table sizes** (ด้านล่าง)
+  - ตาราง: table name, total size, data size, index size, row count, last analyze/vacuum
+  - sort by total size desc by default
+  - bar chart mini แสดงสัดส่วนต่อ DB รวม
+
+#### Tab: Connections
+- สรุป: active / idle / idle in transaction / total vs max
+- ตาราง process list: PID, user, app name, state, duration, query text (truncated)
+- highlight blocked / long-running (> configurable threshold)
+- ปุ่ม "Kill" ต่อแถว (admin only) — ยืนยันก่อนรัน
+
+#### Tab: Replication
+- ตาราง replica list: replica name, state, lag (seconds), sent/write/flush LSN
+- badge: streaming (green) / lagging (amber) / stopped (red)
+- แสดง lag เทียบกับ alert threshold ที่ตั้งไว้
+
+---
+
+### Insight Runner
+
+แยกจาก monitor runner — ทำงานเป็น scheduled job ต่อ DB monitor ที่เปิด insight ไว้
+
+#### การตั้งค่าต่อ DB monitor
+
+```
+[ ] Enable DB Insight
+Collect interval:  [15] minutes
+Slow query threshold:  [1000] ms  (บันทึกใน insight config)
+Top N slow queries:  [20]
+```
+
+#### Flow ของ runner
+
+```
+1. ดึงรายการ DB monitors ที่ enable insight + ถึงเวลา collect
+2. ต่อ DB ด้วย credential ที่ผูกไว้
+3. รัน collector queries ตาม DB type
+4. บันทึกผลลงตาราง insight (snapshot + detail tables)
+5. เปรียบเทียบกับ alert rules → trigger alert ถ้าตรงเงื่อนไข
+6. อัปเดต last_collected_at
+```
+
+#### Alert rules สำหรับ DB Insight
+
+เพิ่มเข้าระบบ alert rules เดิม — เลือก condition type ได้:
+
+| Condition | พารามิเตอร์ | ตัวอย่าง |
+|---|---|---|
+| Slow query avg > X ms | threshold ms | avg > 5,000 ms |
+| Slow query count > N (per interval) | count | > 10 queries |
+| Log file size > X MB/GB | size threshold | > 2 GB |
+| DB data file size > X MB/GB | size threshold | > 50 GB |
+| Table size > X MB/GB | table name + size | orders > 10 GB |
+| Active connections > X% of max | percent | > 80% |
+| Replication lag > X seconds | seconds | > 30 s |
+| Blocked query duration > X seconds | seconds | > 60 s |
+| Unused index count > N | count | > 5 |
+
+Alert ส่งผ่าน notification channels เดิม (LINE / Email / Telegram / Slack / Discord / Webhook)
+
+---
+
+### Schema เพิ่ม
+
+```sql
+-- config ต่อ monitor
+db_insight_config (
+  id, monitor_id, enabled, collect_interval_minutes,
+  slow_query_threshold_ms, top_n_queries,
+  created_at, updated_at
+)
+
+-- snapshot หัว
+db_insight_snapshots (
+  id, monitor_id, db_type, collected_at, collection_duration_ms, error_message
+)
+
+-- slow queries
+db_slow_queries (
+  id, snapshot_id, query_hash, query_text,
+  avg_duration_ms, max_duration_ms, call_count, rows_examined,
+  collected_at
+)
+
+-- index stats
+db_index_stats (
+  id, snapshot_id, table_name, index_name,
+  status,           -- missing | unused | healthy
+  scans_count, size_bytes, last_used,
+  suggested_sql     -- CREATE INDEX / DROP INDEX statement
+)
+
+-- table sizes
+db_table_sizes (
+  id, snapshot_id, table_name,
+  total_bytes, data_bytes, index_bytes, row_count,
+  last_analyzed_at
+)
+
+-- file sizes
+db_file_sizes (
+  id, snapshot_id,
+  file_type,        -- data | log | wal
+  file_path, size_bytes
+)
+
+-- connections snapshot
+db_connection_stats (
+  id, snapshot_id,
+  total, active, idle, idle_in_transaction, max_connections,
+  blocked_count, longest_blocked_seconds
+)
+
+-- replication
+db_replication_status (
+  id, snapshot_id, replica_name,
+  state,            -- streaming | lagging | stopped
+  lag_seconds, detail_json
+)
+```
+
+> retention ใช้ Data Retention settings เดิมของระบบ — ไม่ต้องเพิ่ม config ใหม่
+
+---
+
+### Credential permissions ที่ต้องการ
+
+เพิ่ม hint ใน credential form เมื่อ DB type ถูกเลือก:
+
+```
+PostgreSQL
+  GRANT pg_monitor TO <user>;
+  -- หรือ
+  GRANT SELECT ON pg_stat_statements TO <user>;
+  GRANT SELECT ON pg_stat_activity TO <user>;
+  GRANT SELECT ON pg_stat_replication TO <user>;
+
+MySQL / MariaDB
+  GRANT PROCESS ON *.* TO '<user>';
+  GRANT SELECT ON performance_schema.* TO '<user>';
+  GRANT SELECT ON sys.* TO '<user>';
+
+SQL Server
+  GRANT VIEW SERVER STATE TO [<user>];
+
+MongoDB
+  db.grantRolesToUser("<user>", [{ role: "clusterMonitor", db: "admin" }])
+```
+
+---
+
+### Implementation order (แนะนำ)
+
+- [ ] Schema: สร้างตาราง insight ทั้งหมด + migration
+- [ ] Insight config UI: toggle + interval + threshold ใน monitor edit page
+- [ ] Collector: PostgreSQL ก่อน (ข้อมูลครบ, query ตรงไปตรงมา)
+- [ ] Insight runner: scheduled job + last_collected_at tracking
+- [ ] หน้า DB Insight: stat cards + tabs (slow / index / table+file / connections)
+- [ ] Alert rules: เพิ่ม DB Insight condition types เข้าระบบ alert เดิม
+- [ ] Collector: MySQL / MariaDB
+- [ ] Collector: SQL Server / Azure SQL
+- [ ] Collector: MongoDB
+- [ ] Replication tab
+- [ ] Explain plan viewer (phase 2)
