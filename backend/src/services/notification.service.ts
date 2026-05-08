@@ -627,18 +627,18 @@ const notifyIncident = async (params: {
 
   let channels = params.alertRuleId
     ? (
-        await prisma.alertRuleChannel.findMany({
-          where: {
-            alertRuleId: params.alertRuleId,
-            channel: { enabled: true },
-          },
-          include: { channel: true },
-        })
-      ).map((item) => item.channel)
+      await prisma.alertRuleChannel.findMany({
+        where: {
+          alertRuleId: params.alertRuleId,
+          channel: { enabled: true },
+        },
+        include: { channel: true },
+      })
+    ).map((item) => item.channel)
     : await prisma.notificationChannel.findMany({
-        where: { enabled: true },
-        orderBy: [{ createdAt: "asc" }],
-      });
+      where: { enabled: true },
+      orderBy: [{ createdAt: "asc" }],
+    });
 
   // Rule has no specific channels assigned → fall back to all enabled channels
   if (params.alertRuleId && channels.length === 0) {
@@ -736,9 +736,9 @@ const parseRetryPayload = (value: unknown) => {
     monitorId,
     incidentId,
     alertRuleId: getAuditString(value, "alertRuleId"),
-    incidentStatus,
+    incidentStatus: incidentStatus as "OPEN" | "RESOLVED",
     message: getAuditString(value, "message"),
-    kind,
+    kind: kind as "transition" | "reminder" | "escalation",
     fingerprint: getAuditString(value, "fingerprint"),
     channelId,
     channelName: getAuditString(value, "channelName"),
@@ -949,9 +949,9 @@ export const notifyIncidentNow = async (params: {
     linkedChannels.length > 0
       ? linkedChannels
       : await prisma.notificationChannel.findMany({
-          where: { enabled: true },
-          orderBy: [{ createdAt: "asc" }],
-        });
+        where: { enabled: true },
+        orderBy: [{ createdAt: "asc" }],
+      });
 
   if (channels.length === 0) {
     throw new Error("ไม่มี enabled notification channel ที่ผูกกับ rule นี้ และไม่มี global channel ที่เปิดใช้งาน");

@@ -6,6 +6,7 @@ import { tokenService } from "../services/token.Service";
 import { config } from "../config";
 import { ok, fail } from "../lib/response";
 import prisma from "../lib/prisma";
+import { Prisma } from "../generated/prisma/client";
 
 const writeAudit = (data: {
   userId: string | null;
@@ -22,7 +23,7 @@ const writeAudit = (data: {
         entity: "Auth",
         ipAddress: data.ipAddress ?? null,
         userAgent: data.userAgent ?? null,
-        newValue: data.meta ?? null,
+        newValue: (data.meta ?? Prisma.JsonNull) as Prisma.InputJsonValue | typeof Prisma.JsonNull,
       },
     })
     .catch(() => {});
