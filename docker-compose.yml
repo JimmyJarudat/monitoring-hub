@@ -30,7 +30,11 @@ services:
 
     volumes:
       - uploads_data:/app/uploads
+      - logs_data:/app/logs
     
+    networks:
+      - main_public
+
     deploy:
       replicas: 1
       placement:
@@ -43,10 +47,10 @@ services:
           memory: 128M
       restart_policy:
         condition: on-failure
-    networks:
-      - main_public
+    
 volumes:
   uploads_data:
+  logs_data:
     
 networks:
   main_public:
