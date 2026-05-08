@@ -95,8 +95,11 @@ const bootstrap = async () => {
       set.status = 500;
       return fail("เกิดข้อผิดพลาดภายในระบบ");
     })
-    .use(publicRoutes)
-    .use(protectedRoutes)
+    .group("/api", (app) =>
+      app
+        .use(publicRoutes)
+        .use(protectedRoutes)
+    )
     .listen({ port: config.port, hostname: config.host });
 
   monitorRunner.start();
