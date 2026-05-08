@@ -52,7 +52,7 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Alert Rules", path: "/alerts", icon: "A", adminOnly: true },
       { label: "Channels", path: "/channels", icon: "C", adminOnly: true },
-      { label: "Maintenance", path: "/maintenance", icon: "N", badge: "Soon" },
+      // { label: "Maintenance", path: "/maintenance", icon: "N", badge: "Soon" },
     ],
   },
   {

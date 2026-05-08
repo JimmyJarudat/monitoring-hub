@@ -1,26 +1,77 @@
 version: '3.8'
 
+# ============================================================
+#  MONITORING HUB — Docker Compose
+#  
+#  มี 2 โหมดการใช้งาน:
+#
+#  [A] มี PostgreSQL อยู่แล้ว (default)
+#      → ใช้ไฟล์นี้ได้เลย ไม่ต้องแก้อะไรมาก
+#      → ตั้ง DB_MODE: "existing" และใส่ DATABASE_URL ให้ถูกต้อง
+#
+#  [B] ไม่มี PostgreSQL — ให้ uncomment หมวด postgres ด้านล่าง
+#      → uncomment service "postgres" และ volume "postgres_data"
+#      → เปลี่ยน DATABASE_URL ให้ชี้มาที่ postgres:5432
+#      → เปลี่ยน DB_MODE เป็น "init" (สำหรับครั้งแรก)
+# ============================================================
+
 services:
+
+  # ------------------------------------------------------------
+  #  [B] uncomment ทั้งหมดด้านล่างนี้ถ้าไม่มี PostgreSQL
+  # ------------------------------------------------------------
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: monitoring          # ชื่อ user ของ DB
+  #     POSTGRES_PASSWORD: secret1234      # password — เปลี่ยนด้วย!
+  #     POSTGRES_DB: monitoring_hub        # ชื่อ database
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - main_public
+  #   deploy:
+  #     replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.role == manager
+  #     restart_policy:
+  #       condition: on-failure
+
   monitoring_hub:
-    image: jimmy1998/monitoring-hub:latest  
-    ports: 
+    image: jimmy1998/monitoring-hub:latest
+    ports:
       - "4000:80"
+
+    # ------------------------------------------------------------
+    #  [B] ถ้าใช้ postgres service ด้านบน ให้ uncomment บรรทัดนี้
+    #      เพื่อให้รอ postgres ขึ้นก่อนค่อย start
+    # ------------------------------------------------------------
+    # depends_on:
+    #   - postgres
+
     environment:
       # ===== Database mode =====
-      # existing = ใช้ DB ที่มีอยู่แล้ว ไม่แก้ schema
-      # init     = DB ใหม่ว่าง ๆ → prisma db push + seed
-      # migrate  = ใช้ prisma migrate deploy
-      # fresh    = ล้าง DB แล้วสร้างใหม่ + seed
+      # existing = ใช้ DB ที่มีอยู่แล้ว ไม่แก้ schema         ← ใช้ตอน production ปกติ
+      # init     = DB ใหม่ว่าง ๆ → prisma db push + seed      ← ใช้ตอนติดตั้งครั้งแรก
+      # migrate  = ใช้ prisma migrate deploy                   ← ใช้ตอน update schema
+      # fresh    = ล้าง DB แล้วสร้างใหม่ + seed               ← ⚠️ ลบข้อมูลทั้งหมด!
       DB_MODE: "existing"
-      
+
+      # [B] ถ้าใช้ postgres service ด้านบน เปลี่ยน DATABASE_URL เป็นแบบนี้:
+      # DATABASE_URL: "postgresql://monitoring:secret1234@postgres:5432/monitoring_hub?schema=public"
+      #                                        ↑ user      ↑ service name  ↑ db name
+
       # dev or production
       NODE_ENV: production
       HOST: 0.0.0.0
 
       # ===== Database =====
+      # [A] ใส่ connection string ของ PostgreSQL ที่มีอยู่แล้ว
       DATABASE_URL: "postgresql://username:password@host:port/mydb?schema=public"
 
       # ===== JWT =====
+      # สร้าง secret ใหม่ด้วย: openssl rand -hex 64
       JWT_SECRET: dev-secret-change-this-in-production-use-openssl-rand-hex-64
 
       # ===== CORS =====
@@ -31,7 +82,7 @@ services:
     volumes:
       - uploads_data:/app/uploads
       - logs_data:/app/logs
-    
+
     networks:
       - main_public
 
@@ -47,11 +98,13 @@ services:
           memory: 128M
       restart_policy:
         condition: on-failure
-    
+
 volumes:
   uploads_data:
   logs_data:
-    
+  # [B] uncomment ถ้าใช้ postgres service ด้านบน
+  # postgres_data:
+
 networks:
   main_public:
     external: true
