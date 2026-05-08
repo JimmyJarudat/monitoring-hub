@@ -17,7 +17,7 @@ const flush = async () => {
   if (buffer.length === 0) return;
   const batch = buffer.splice(0, buffer.length);
   try {
-    await prisma.systemLog.createMany({ data: batch });
+    await prisma.systemLog.createMany({ data: batch as any });
   } catch {
     // DB unavailable — entries already printed to console, discard silently
   }
