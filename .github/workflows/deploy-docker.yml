@@ -108,6 +108,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Redeploy Portainer Stack
+        if: success() && steps.merge.outputs.has_changes == 'true'
+        id: redeploy
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+          PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+        run: |
+          STACK_CONTENT=$(curl -s -X GET "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}/file" \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" | jq -r '.StackFileContent')
+
+          curl -s -X PUT "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID}" \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data-binary "$(jq -n \
+              --arg content "$STACK_CONTENT" \
+              '{stackFileContent: $content, pullImage: true, prune: true}')"
+
+          echo "Waiting 15s for service to stabilize..."
+          sleep 15
+
       - name: Send Success Notification (LINE)
         if: success() && steps.merge.outputs.has_changes == 'true'
         env:
@@ -118,7 +140,7 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n🏷️ Version: %s\n\n🕐 %s' \
+          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n🚀 Portainer redeployed\n🏷️ Version: %s\n\n🕐 %s' \
             "${REPO}" "${AUTHOR}" "${MSG}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
