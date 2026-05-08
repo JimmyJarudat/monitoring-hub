@@ -76,20 +76,8 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TEXT="🚀 Merge Completed!
-
-📂 Repo: ${REPO}
-🌿 dev → main
-👤 ${AUTHOR}
-💬 ${MSG}
-
-✅ Merged to main
-✅ Recreated dev branch
-🐳 Starting Docker build...
-🏷️ Version: ${VERSION}
-
-🕐 $(date '+%H:%M %d/%m/%Y')"
-
+          TEXT="$(printf '🚀 Merge Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Starting Docker build...\n🏷️ Version: %s\n\n🕐 %s' \
+            "${REPO}" "${AUTHOR}" "${MSG}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -139,20 +127,8 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TEXT="🎉 Deploy Completed!
-
-📂 Repo: ${REPO}
-🌿 dev → main
-👤 ${AUTHOR}
-💬 ${MSG}
-
-✅ Merged to main
-✅ Recreated dev branch
-🐳 Docker built & pushed
-🏷️ Version: ${VERSION}
-
-🕐 $(date '+%H:%M %d/%m/%Y')"
-
+          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n🏷️ Version: %s\n\n🕐 %s' \
+            "${REPO}" "${AUTHOR}" "${MSG}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -168,15 +144,8 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          TEXT="❌ Deploy Failed!
-
-📂 Repo: ${REPO}
-💬 ${MSG}
-
-🔴 Logs: https://github.com/${REPO}/actions/runs/${RUN_ID}
-
-🕐 $(date '+%H:%M %d/%m/%Y')"
-
+          TEXT="$(printf '❌ Deploy Failed!\n\n📂 Repo: %s\n💬 %s\n\n🔴 Logs: https://github.com/%s/actions/runs/%s\n\n🕐 %s' \
+            "${REPO}" "${MSG}" "${REPO}" "${RUN_ID}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
