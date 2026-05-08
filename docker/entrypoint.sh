@@ -32,9 +32,20 @@ esac
 
 mkdir -p /app/logs
 
+# ลบ log ที่เกิน 90 วัน
+find /app/logs -name "*.log" -mtime +90 -delete
+
+# ตั้งชื่อ log ตามวันที่
+DATE=$(date +%Y-%m-%d)
+
 echo ">>> Starting nginx..."
-nginx -g "daemon off;" 2>&1 | tee /app/logs/nginx.log &
+nginx -g "daemon off;" \
+  > >(tee /app/logs/nginx-${DATE}.log) \
+  2> >(tee /app/logs/nginx-error-${DATE}.log >&2) &
 
 echo ">>> Starting Elysia backend..."
-bun src/index.ts 2>&1 | tee /app/logs/backend.log
+bun src/index.ts \
+  > >(tee /app/logs/backend-${DATE}.log) \
+  2> >(tee /app/logs/backend-error-${DATE}.log >&2)
+
 wait
