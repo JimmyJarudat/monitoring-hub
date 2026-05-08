@@ -3,7 +3,7 @@ import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 import { useSystemConfig } from "@/contexts/systemConfig.context";
 import type { SystemConfig } from "@/contexts/systemConfig.context";
-import { API_BASE_URL } from "@/utils/apiUrl";
+import { API_BASE_URL } from "@/lib/constants";
 
 type RetentionConfig = {
   results_days: number;

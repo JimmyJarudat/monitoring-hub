@@ -25,7 +25,7 @@ type RetriableRequestConfig = AxiosRequestConfig & {
 
 const ACCESS_TOKEN_KEY = "accessToken";
 const REFRESH_TOKEN_KEY = "refreshToken";
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const REFRESH_ENDPOINT = "/auth/refresh";
 
 let refreshPromise: Promise<TokenRefreshResult | null> | null = null;

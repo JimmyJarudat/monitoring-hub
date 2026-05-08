@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
 import { useSystemConfig } from "@/contexts/systemConfig.context";
 import { isAdminUser } from "@/utils/permissions";
-import { API_BASE_URL } from "@/utils/apiUrl";
+import { API_BASE_URL } from "@/lib/constants";
 
 type SidebarItem = {
   label: string;
@@ -78,7 +78,7 @@ const Sidebar = () => {
       <div className="flex h-20 items-center gap-3 border-b border-slate-800 px-5">
         {config.general.logoUrl ? (
           <img
-            src={`${API_BASE_URL}${config.general.logoUrl}`}
+            src={`${API_BASE_URL}${config.general.logoUrl}?v=${Date.now()}`}
             alt="logo"
             className="h-10 w-10 rounded-lg object-cover"
           />

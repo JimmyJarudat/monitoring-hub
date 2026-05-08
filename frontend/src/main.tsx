@@ -10,7 +10,7 @@ import { SessionProvider } from './contexts/session.context';
 
 
 // ตั้งค่า base URL สำหรับ axios
-axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || "/api";
 
 
 
