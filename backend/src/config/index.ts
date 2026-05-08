@@ -16,7 +16,7 @@ if (!process.env.CREDENTIAL_SECRET_KEY) {
 }
 
 export const config = {
-  port: Number(process.env.PORT) || 3000,
+  port: 3000,
   host: process.env.HOST || "0.0.0.0",
   nodeEnv: process.env.NODE_ENV || "development",
   jwtSecret: jwtSecret || "change-me-in-production",
