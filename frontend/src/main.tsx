@@ -7,6 +7,7 @@ import axios from "axios";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { SessionProvider } from './contexts/session.context';
+import { ThemeProvider } from './contexts/theme.context';
 
 
 // ตั้งค่า base URL สำหรับ axios
@@ -16,6 +17,7 @@ axios.defaults.baseURL = import.meta.env.VITE_API_URL || "/api";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <ThemeProvider>
     <SessionProvider>
       <ToastContainer
         position="top-right"
@@ -37,5 +39,6 @@ createRoot(document.getElementById('root')!).render(
       <RouterProvider router={router} />
 
     </SessionProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

@@ -6,8 +6,10 @@ import { Outlet } from "react-router-dom";
 import { useSession } from "@/contexts/session.context";
 import { SystemConfigProvider } from "@/contexts/systemConfig.context";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useTheme } from "@/contexts/theme.context";
 
 const PrivateLayout = () => {
+  const { theme } = useTheme();
   const { isAuthenticated, isLoading, accessToken, refreshAccessToken } = useSession();
   const navigate = useNavigate();
   const hasRedirected = useRef(false);
@@ -68,18 +70,17 @@ const PrivateLayout = () => {
   // 🌐 Web Mode Layout
   return (
     <SystemConfigProvider>
-    <div className="flex h-screen overflow-hidden">
-      <div className="flex-shrink-0">
+    <div className={`flex h-screen overflow-hidden${theme === "dark" ? " dark" : ""}`}>
+      <div className="shrink-0">
         <Sidebar />
       </div>
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Fixed Navbar */}
-        <div className="sticky top-0 z-50 bg-white shadow-sm">
+        <div className="sticky top-0 z-50">
           <Navbar />
         </div>
 
-        <main className="flex-1 bg-base overflow-auto">
+        <main className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
           <Outlet />
         </main>
       </div>

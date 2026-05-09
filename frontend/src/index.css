@@ -1,6 +1,35 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
 
+/* ── Dark mode: page content overrides ──────────────────────────────
+   Scoped to `main` so sidebar/login are unaffected.
+   Specificity: .dark + main + .class = 0-2-1 > 0-1-0 (Tailwind utility)
+   ─────────────────────────────────────────────────────────────────── */
+.dark main .bg-white          { background-color: #1e293b; } /* slate-800 */
+.dark main .bg-slate-50       { background-color: #0f172a; } /* slate-900 */
+.dark main .border-slate-200  { border-color:        #334155; } /* slate-700 */
+.dark main .divide-slate-200 > * + * { border-color: #334155; }
+
+.dark main .text-slate-950    { color: #f1f5f9; } /* slate-100 */
+.dark main .text-slate-900    { color: #f1f5f9; }
+.dark main .text-slate-800    { color: #e2e8f0; } /* slate-200 */
+.dark main .text-slate-700    { color: #cbd5e1; } /* slate-300 */
+.dark main .text-slate-600    { color: #94a3b8; } /* slate-400 */
+.dark main .text-slate-500    { color: #94a3b8; }
+
+.dark main thead th           { background-color: #1e293b; color: #64748b; }
+.dark main tbody tr:hover td  { background-color: rgba(51,65,85,0.4); }
+
+.dark main input:not([type="checkbox"]):not([type="radio"]),
+.dark main select,
+.dark main textarea {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+.dark main input::placeholder,
+.dark main textarea::placeholder { color: #475569; }
 
 /* Custom Scrollbar Styles */
 .scrollbar-thin::-webkit-scrollbar {
