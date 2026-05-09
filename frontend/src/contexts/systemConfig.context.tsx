@@ -14,12 +14,22 @@ export type GeneralConfig = { systemName: string; tagline: string; logoText: str
 export type AlertingConfig = { incidentReminderIntervalHours: number };
 export type MonitorDefaultsConfig = { intervalSeconds: number; timeoutMs: number };
 export type SecurityConfig = { passwordMinLength: number; sessionDays: number; maxLoginAttempts: number };
+export type EmailConfig = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  from: string;
+};
 
 export type SystemConfig = {
   general: GeneralConfig;
   alerting: AlertingConfig;
   monitorDefaults: MonitorDefaultsConfig;
   security: SecurityConfig;
+  email: EmailConfig;
 };
 
 const DEFAULTS: SystemConfig = {
@@ -27,6 +37,7 @@ const DEFAULTS: SystemConfig = {
   alerting: { incidentReminderIntervalHours: 24 },
   monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
   security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+  email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
 };
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
