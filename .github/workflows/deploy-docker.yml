@@ -117,13 +117,13 @@ jobs:
           PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
           PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
         run: |
-          # Step 1: ดึง stack content (เหมือน Invoke-RestMethod ดึง StackFileContent)
+          # ดึง stack content
           STACK_CONTENT=$(curl -s -X GET "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}/file" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" | jq '.StackFileContent')
 
           echo "Stack fetched OK"
 
-          # Step 2: Redeploy (เหมือน Invoke-RestMethod PUT พร้อม body)
+          # Swarm stack ต้องใช้ endpoint นี้
           RESPONSE=$(curl -s -X PUT "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID}" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
             -H "Content-Type: application/json" \
@@ -131,7 +131,10 @@ jobs:
 
           echo "Response: $RESPONSE"
 
-          echo "Waiting 15s for service to stabilize..."
+          # เช็คว่า success
+          echo "$RESPONSE" | jq -e '.Id' > /dev/null 2>&1 || { echo "❌ Redeploy failed"; exit 1; }
+
+          echo "✅ Portainer redeploy successful"
           sleep 15
 
       - name: Send Success Notification (LINE)
