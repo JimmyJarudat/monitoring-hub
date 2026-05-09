@@ -41,6 +41,7 @@ const breadcrumbLabels: Record<string, string> = {
   profile: "My Profile",
   "login-history": "ประวัติการล็อกอินของฉัน",
   "change-password": "Change Password",
+  "api-tokens": "API Tokens",
   notifications: "Notifications",
   domain: "Domain Intelligence",
 };
@@ -337,6 +338,12 @@ const Navbar = () => {
                   <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 4a1 1 0 10-2 0v4a1 1 0 00.293.707l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" />
                 </svg>
                 ประวัติการล็อกอินของฉัน
+              </Link>
+              <Link to="/api-tokens" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
+                </svg>
+                API Tokens
               </Link>
             </div>
 
