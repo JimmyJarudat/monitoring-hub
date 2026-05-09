@@ -186,7 +186,7 @@
 
 ### Reports
 - [x] On-demand availability reports
-- [ ] Scheduled availability reports
+- [x] Scheduled availability reports
 
 ## Product Strategy — Take the Best, Cut the Worst
 

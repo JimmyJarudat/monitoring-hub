@@ -37,12 +37,19 @@ export type EmailConfig = {
   from: string;
 };
 
+export type ScheduledReportConfig = {
+  enabled: boolean;
+  time: string;
+  channelIds: string[];
+};
+
 export type SystemConfig = {
   general: GeneralConfig;
   alerting: AlertingConfig;
   monitorDefaults: MonitorDefaultsConfig;
   security: SecurityConfig;
   email: EmailConfig;
+  scheduledReport: ScheduledReportConfig;
 };
 
 export const SYSTEM_CONFIG_DEFAULTS: SystemConfig = {
@@ -59,6 +66,7 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfig = {
     maxLoginAttempts: 10,
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
+  scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
 };
 
 const KEYS = {
@@ -67,6 +75,7 @@ const KEYS = {
   monitorDefaults: "config.monitor_defaults",
   security: "config.security",
   email: "config.email",
+  scheduledReport: "config.scheduled_report",
 } as const;
 
 const safeParse = <T>(raw: string | null | undefined, defaults: T): T => {
@@ -94,6 +103,7 @@ export const getSystemConfig = async (): Promise<SystemConfig> => {
       ...email,
       password: email.password ? "••••••••" : "",
     },
+    scheduledReport: safeParse(map[KEYS.scheduledReport], SYSTEM_CONFIG_DEFAULTS.scheduledReport),
   };
 };
 
@@ -120,6 +130,7 @@ export const saveSystemConfig = async (patch: Partial<SystemConfig>): Promise<vo
   if (patch.alerting) upserts.push(upsert(KEYS.alerting, patch.alerting));
   if (patch.monitorDefaults) upserts.push(upsert(KEYS.monitorDefaults, patch.monitorDefaults));
   if (patch.security) upserts.push(upsert(KEYS.security, patch.security));
+  if (patch.scheduledReport) upserts.push(upsert(KEYS.scheduledReport, patch.scheduledReport));
   if (patch.email) {
     const current = await getResolvedEmailConfig();
     const next = { ...current, ...patch.email };

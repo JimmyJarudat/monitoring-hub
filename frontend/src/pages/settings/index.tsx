@@ -80,6 +80,7 @@ const SYS_DEFAULTS: SystemConfig = {
     maxLoginAttempts: 10,
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
+  scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
 };
 
 const REMINDER_OPTIONS = [1, 2, 4, 6, 12, 24, 48, 72];
@@ -88,7 +89,6 @@ const TIMEOUT_OPTIONS = [3000, 5000, 10000, 15000, 30000];
 const PW_MIN_OPTIONS = [6, 8, 10, 12, 16, 20];
 const SESSION_OPTIONS = [1, 7, 14, 30, 60, 90, 180, 365];
 const LOGIN_ATTEMPT_OPTIONS = [3, 5, 10, 20, 0];
-
 const SettingsPage = () => {
   const { api } = useApi();
   const { reload: reloadSysConfig } = useSystemConfig();

@@ -31,6 +31,11 @@ export type EmailConfig = {
   password: string;
   from: string;
 };
+export type ScheduledReportConfig = {
+  enabled: boolean;
+  time: string;
+  channelIds: string[];
+};
 
 export type SystemConfig = {
   general: GeneralConfig;
@@ -38,6 +43,7 @@ export type SystemConfig = {
   monitorDefaults: MonitorDefaultsConfig;
   security: SecurityConfig;
   email: EmailConfig;
+  scheduledReport: ScheduledReportConfig;
 };
 
 const DEFAULTS: SystemConfig = {
@@ -54,6 +60,7 @@ const DEFAULTS: SystemConfig = {
     maxLoginAttempts: 10,
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
+  scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
 };
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };

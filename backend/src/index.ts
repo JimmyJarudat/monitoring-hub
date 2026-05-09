@@ -9,6 +9,7 @@ import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
 import { startNotificationRetryScheduler } from "./services/notification.service";
 import { startRetentionScheduler } from "./services/retention.service";
+import { startScheduledReportScheduler } from "./services/scheduledReport.service";
 import { logger } from "./lib/logger";
 
 const getErrorCause = (error: unknown) => {
@@ -118,6 +119,7 @@ const bootstrap = async () => {
   monitorRunner.start();
   startNotificationRetryScheduler();
   startRetentionScheduler();
+  startScheduledReportScheduler();
 
   logger.info("server", `running at http://${app.server?.hostname}:${app.server?.port}`);
 };

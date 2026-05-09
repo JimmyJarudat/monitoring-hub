@@ -5,3 +5,12 @@ export { buildEmailIncidentMessage, buildEmailTestMessage } from "./email.templa
 export { buildWebhookIncidentPayload, buildWebhookTestPayload } from "./webhook.template";
 export { buildSlackIncidentMessage, buildSlackTestMessage } from "./slack.template";
 export { buildDiscordIncidentMessage, buildDiscordTestMessage } from "./discord.template";
+export {
+  buildDailyReportDiscordMessage,
+  buildDailyReportEmailMessage,
+  buildDailyReportLineMessage,
+  buildDailyReportSlackMessage,
+  buildDailyReportTelegramMessage,
+  buildDailyReportWebhookPayload,
+  type DailyStatusReportTemplateData,
+} from "./report.template";
