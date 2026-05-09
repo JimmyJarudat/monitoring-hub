@@ -139,7 +139,7 @@ const UsersPage = () => {
 
   const handleResetPassword = async () => {
     if (!resetTarget) return;
-    if (pwForm.password.length < 8) { toast.error("Password ต้องมีอย่างน้อย 8 ตัวอักษร"); return; }
+    if (!pwForm.password) { toast.error("กรุณากรอก password ใหม่"); return; }
     if (pwForm.password !== pwForm.confirm) { toast.error("Password ไม่ตรงกัน"); return; }
     setResetting(true);
     try {

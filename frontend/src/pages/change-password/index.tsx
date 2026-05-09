@@ -22,7 +22,7 @@ const ChangePasswordPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.currentPassword) { toast.error("กรุณากรอกรหัสผ่านปัจจุบัน"); return; }
-    if (form.newPassword.length < 8) { toast.error("รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร"); return; }
+    if (!form.newPassword) { toast.error("กรุณากรอกรหัสผ่านใหม่"); return; }
     if (form.newPassword !== form.confirm) { toast.error("รหัสผ่านใหม่ไม่ตรงกัน"); return; }
     if (form.newPassword === form.currentPassword) { toast.error("รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสเดิม"); return; }
 

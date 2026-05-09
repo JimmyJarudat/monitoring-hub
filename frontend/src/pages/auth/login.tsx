@@ -169,8 +169,8 @@ const Login = () => {
       return;
     }
 
-    if (newPassword.length < 8) {
-      toast.error("Password ต้องมีอย่างน้อย 8 ตัวอักษร");
+    if (!newPassword) {
+      toast.error("กรุณากรอกรหัสผ่านใหม่");
       return;
     }
 

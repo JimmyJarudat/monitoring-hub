@@ -70,7 +70,15 @@ const SYS_DEFAULTS: SystemConfig = {
   general: { systemName: "Monitoring Hub", tagline: "Lightweight Monitor", logoText: "MH", logoUrl: null },
   alerting: { incidentReminderIntervalHours: 24 },
   monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
-  security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+  security: {
+    passwordMinLength: 8,
+    requireLowercase: false,
+    requireUppercase: false,
+    requireNumber: false,
+    requireSpecial: false,
+    sessionDays: 30,
+    maxLoginAttempts: 10,
+  },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
 };
 
@@ -448,7 +456,7 @@ const SettingsPage = () => {
       </SysSection>
 
       {/* ── Security ────────────────────────────────────────── */}
-      <SysSection title="Security" description="นโยบาย password, session และ login attempt (ใช้เป็น reference — ต้องตรงกับ backend config)">
+      <SysSection title="Security" description="นโยบาย password, session และ login attempt ที่ backend ใช้ตรวจจริง">
         <div className="grid gap-4 sm:grid-cols-3">
           <SysField label="Password ขั้นต่ำ (ตัวอักษร)">
             <select
@@ -479,6 +487,38 @@ const SettingsPage = () => {
               ))}
             </select>
           </SysField>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-800">Password complexity</p>
+          <p className="mt-1 text-xs text-slate-500">
+            เปิดเงื่อนไขที่ต้องการบังคับใช้ตอนสร้างผู้ใช้, reset password, change password และ forgot password
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <SecurityToggle
+              label="บังคับตัวพิมพ์เล็ก"
+              description="ต้องมี a-z อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireLowercase}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireLowercase: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับตัวพิมพ์ใหญ่"
+              description="ต้องมี A-Z อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireUppercase}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireUppercase: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับตัวเลข"
+              description="ต้องมี 0-9 อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireNumber}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireNumber: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับอักขระพิเศษ"
+              description="ต้องมีสัญลักษณ์ เช่น ! @ # $"
+              checked={sysConfig.security.requireSpecial}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireSpecial: value } }))}
+            />
+          </div>
         </div>
         <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ security: sysConfig.security }, "Security")} />
       </SysSection>
@@ -883,6 +923,31 @@ const SysField = ({ label, children }: { label: string; children: React.ReactNod
   <label className="block">
     <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
     {children}
+  </label>
+);
+
+const SecurityToggle = ({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) => (
+  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <span>
+      <span className="block text-sm font-medium text-slate-800">{label}</span>
+      <span className="mt-0.5 block text-xs text-slate-500">{description}</span>
+    </span>
+    <input
+      type="checkbox"
+      className="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-200"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+    />
   </label>
 );
 

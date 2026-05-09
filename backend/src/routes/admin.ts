@@ -275,6 +275,10 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
           }),
           security: t.Object({
             passwordMinLength: t.Number({ minimum: 6, maximum: 32 }),
+            requireLowercase: t.Boolean(),
+            requireUppercase: t.Boolean(),
+            requireNumber: t.Boolean(),
+            requireSpecial: t.Boolean(),
             sessionDays: t.Number({ minimum: 1, maximum: 365 }),
             maxLoginAttempts: t.Number({ minimum: 0, maximum: 100 }),
           }),

@@ -19,6 +19,10 @@ export type MonitorDefaultsConfig = {
 
 export type SecurityConfig = {
   passwordMinLength: number;
+  requireLowercase: boolean;
+  requireUppercase: boolean;
+  requireNumber: boolean;
+  requireSpecial: boolean;
   sessionDays: number;
   maxLoginAttempts: number;
 };
@@ -45,7 +49,15 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfig = {
   general: { systemName: "Monitoring Hub", tagline: "Lightweight Monitor", logoText: "MH", logoUrl: null },
   alerting: { incidentReminderIntervalHours: 24 },
   monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
-  security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+  security: {
+    passwordMinLength: 8,
+    requireLowercase: false,
+    requireUppercase: false,
+    requireNumber: false,
+    requireSpecial: false,
+    sessionDays: 30,
+    maxLoginAttempts: 10,
+  },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
 };
 

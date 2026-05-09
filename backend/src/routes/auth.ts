@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/auth";
 import prisma from "../lib/prisma";
 import { ok, fail } from "../lib/response";
 import { getSystemConfig } from "../services/systemConfig.service";
+import { validatePasswordPolicy } from "../services/passwordPolicy.service";
 
 export const authProtectedRoutes = new Elysia()
   .use(authMiddleware)
@@ -131,6 +132,11 @@ export const authProtectedRoutes = new Elysia()
         set.status = 400;
         return fail("รหัสผ่านปัจจุบันไม่ถูกต้อง");
       }
+      const policyError = await validatePasswordPolicy(body.newPassword);
+      if (policyError) {
+        set.status = 400;
+        return fail(policyError);
+      }
 
       const hashed = await Bun.password.hash(body.newPassword);
       await prisma.user.update({ where: { id: currentUser.id }, data: { password: hashed } });
@@ -141,7 +147,7 @@ export const authProtectedRoutes = new Elysia()
     {
       body: t.Object({
         currentPassword: t.String({ minLength: 1 }),
-        newPassword: t.String({ minLength: 8, maxLength: 255 }),
+        newPassword: t.String({ minLength: 1, maxLength: 255 }),
       }),
     },
   );

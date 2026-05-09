@@ -10,6 +10,7 @@ import { ok, fail } from "../lib/response";
 import prisma from "../lib/prisma";
 import { Prisma } from "../generated/prisma/client";
 import { getResolvedEmailConfig } from "../services/systemConfig.service";
+import { validatePasswordPolicy } from "../services/passwordPolicy.service";
 
 const writeAudit = (data: {
   userId: string | null;
@@ -59,6 +60,11 @@ export const authController = new Elysia({ prefix: "/auth" })
         set.status = 409;
         return fail("Email นี้ถูกใช้ไปแล้ว");
       }
+      const policyError = await validatePasswordPolicy(body.password);
+      if (policyError) {
+        set.status = 400;
+        return fail(policyError);
+      }
 
       const user = await authService.createUser(body.username, body.email, body.password);
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
@@ -74,7 +80,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       body: t.Object({
         username: t.String({ minLength: 3 }),
         email: t.String({ format: "email" }),
-        password: t.String({ minLength: 8 }),
+        password: t.String({ minLength: 1, maxLength: 255 }),
       }),
     }
   )
@@ -94,9 +100,12 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       // ตรวจ account lockout
       if (await authService.isLockedOut(user.id)) {
+        const maxLoginAttempts = await authService.getMaxLoginAttempts();
         writeAudit({ userId: user.id, action: "LOGIN_LOCKED", ipAddress, userAgent });
         set.status = 423;
-        return fail(`บัญชีถูกล็อกชั่วคราว เนื่องจากพยายามเข้าสู่ระบบผิดพลาดหลายครั้ง กรุณารอ ${config.lockout.durationMinutes} นาที`);
+        return fail(
+          `บัญชีถูกล็อกชั่วคราวหลังเข้าสู่ระบบผิดพลาด ${maxLoginAttempts} ครั้ง กรุณารอ ${config.lockout.durationMinutes} นาที`,
+        );
       }
 
       const valid = await authService.verifyPassword(body.password, user.password);
@@ -366,6 +375,12 @@ export const authController = new Elysia({ prefix: "/auth" })
         return fail("รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว");
       }
 
+      const policyError = await validatePasswordPolicy(body.password);
+      if (policyError) {
+        set.status = 400;
+        return fail(policyError);
+      }
+
       const hashed = await Bun.password.hash(body.password);
 
       await prisma.$transaction([
@@ -403,7 +418,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       body: t.Object({
         email: t.String({ format: "email", maxLength: 255 }),
         code: t.String({ minLength: 6, maxLength: 6 }),
-        password: t.String({ minLength: 8, maxLength: 255 }),
+        password: t.String({ minLength: 1, maxLength: 255 }),
       }),
     },
   )

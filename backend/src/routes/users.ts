@@ -3,6 +3,7 @@ import { requireAdminRole } from "../lib/authorization";
 import prisma from "../lib/prisma";
 import { ok, fail } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
+import { validatePasswordPolicy } from "../services/passwordPolicy.service";
 
 const userSelect = {
   id: true,
@@ -62,6 +63,11 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
         set.status = 400;
         return fail("ไม่พบ role ที่เลือก");
       }
+      const policyError = await validatePasswordPolicy(body.password);
+      if (policyError) {
+        set.status = 400;
+        return fail(policyError);
+      }
 
       const hashed = await Bun.password.hash(body.password);
       const user = await prisma.user.create({
@@ -81,7 +87,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       body: t.Object({
         username: t.String({ minLength: 3, maxLength: 80 }),
         email: t.String({ format: "email", maxLength: 255 }),
-        password: t.String({ minLength: 8, maxLength: 255 }),
+        password: t.String({ minLength: 1, maxLength: 255 }),
         roleId: t.String(),
       }),
     },
@@ -170,6 +176,11 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
         set.status = 404;
         return fail("ไม่พบ user");
       }
+      const policyError = await validatePasswordPolicy(body.password);
+      if (policyError) {
+        set.status = 400;
+        return fail(policyError);
+      }
 
       const hashed = await Bun.password.hash(body.password);
       await prisma.user.update({ where: { id: params.id }, data: { password: hashed } });
@@ -179,7 +190,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
     },
     {
       params: t.Object({ id: t.String() }),
-      body: t.Object({ password: t.String({ minLength: 8, maxLength: 255 }) }),
+      body: t.Object({ password: t.String({ minLength: 1, maxLength: 255 }) }),
     },
   )
   .delete(
