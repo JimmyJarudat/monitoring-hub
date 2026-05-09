@@ -3,19 +3,19 @@ import { useSession } from "@/contexts/session.context";
 
 const featureCards = [
   {
-    title: "Monitor Everything",
+    title: "Broad Monitor Coverage",
     description:
-      "Track web services, ports, databases, Docker endpoints, and the next wave of network devices from one place.",
+      "Create HTTP, TCP, ping, DNS, TLS, database, Docker, and SNMP monitors with the checks each type actually needs.",
   },
   {
-    title: "Investigate Fast",
+    title: "Device And Network Visibility",
     description:
-      "See recent results, filter by time range, and move from global results into each monitor detail without losing context.",
+      "Track device identity, CPU, memory, disk, uptime, interface traffic, errors, discards, and historical metric trends.",
   },
   {
-    title: "Build Toward NMS",
+    title: "Incidents, Alerts, And Audit",
     description:
-      "The platform is set up to grow into SNMP-based device monitoring, incidents, alerting, and long-term history management.",
+      "Turn degraded checks into incidents, route notifications through configured channels, and keep access history traceable.",
   },
 ];
 
@@ -31,7 +31,7 @@ const App = () => {
           <header className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-cyan-300">Monitoring Hub</p>
-              <p className="mt-1 text-sm text-slate-400">Lightweight Monitor direction</p>
+              <p className="mt-1 text-sm text-slate-400">Service, device, and incident monitoring</p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -56,14 +56,14 @@ const App = () => {
             <div className="grid w-full gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-end">
               <div>
                 <p className="text-sm font-medium uppercase tracking-wide text-cyan-300">
-                  Public Entry
+                  Monitoring workspace
                 </p>
                 <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight text-white sm:text-5xl">
-                  Central monitoring for services now, device visibility next.
+                  One place to monitor services, devices, incidents, and alerts.
                 </h1>
                 <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
-                  This front page stays public. The working area behind it requires login, so
-                  monitors, results, and operational controls remain private.
+                  Monitoring Hub combines lightweight uptime checks with NMS-style device insight, grouped inventory,
+                  reusable credentials, alert rules, notification channels, audit logs, and availability reports.
                 </p>
 
                 <div className="mt-8 flex flex-wrap gap-3">
@@ -75,9 +75,9 @@ const App = () => {
                   </Link>
                   <Link
                     className="rounded-md border border-slate-700 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-900"
-                    to="/results"
+                    to="/dashboard"
                   >
-                    Private Results Area
+                    View operations dashboard
                   </Link>
                 </div>
               </div>
