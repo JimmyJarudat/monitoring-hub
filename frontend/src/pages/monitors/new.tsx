@@ -47,6 +47,7 @@ type FormState = {
   portainerUrl: string;
   apiKey: string;
   endpointId: string;
+  stackId: string;
   containerId: string;
 };
 
@@ -170,6 +171,7 @@ const initialForm: FormState = {
   portainerUrl: "",
   apiKey: "",
   endpointId: "1",
+  stackId: "",
   containerId: "",
 };
 
@@ -265,7 +267,8 @@ const buildConfig = (form: FormState) => {
       portainerUrl: form.portainerUrl,
       apiKey: form.apiKey,
       endpointId: Number(form.endpointId),
-      containerId: form.containerId,
+      ...(form.stackId ? { stackId: Number(form.stackId) } : {}),
+      ...(form.containerId ? { containerId: form.containerId } : {}),
     });
   }
 
@@ -385,14 +388,15 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
     tip: "SYSTEM monitor จะเก็บ metric samples แยกไว้สำหรับทำกราฟ CPU/RAM/Disk/Net ต่อภายหลัง",
   },
   DOCKER: {
-    summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ endpoint หรือ container เฉพาะตัว",
+    summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ Stack, Container หรือ Endpoint",
     fields: [
       { name: "Portainer URL", desc: "ที่อยู่ Portainer เช่น https://portainer.example.com หรือ http://192.168.1.1:9000", required: true },
       { name: "API key", desc: "สร้างได้ที่ Portainer → User settings → Access tokens", required: true },
       { name: "Endpoint ID", desc: "ID ของ environment ใน Portainer ดูได้จาก URL เช่น /#!/1/docker → ID = 1", required: true },
-      { name: "Container ID", desc: "ถ้าว่างจะเช็ค endpoint health ทั้งหมด · ถ้าระบุจะเช็ค container นั้นเฉพาะ" },
+      { name: "Stack ID (แนะนำ)", desc: "ตัวเลข ID ของ Stack ใน Portainer เช่น 12 · ดูได้จาก Portainer → Stacks → URL เช่น /#!/stacks/12" },
+      { name: "Container ID / Name", desc: "ใช้เมื่อไม่ได้เช็ค Stack · ใส่ชื่อ container หรือ short ID เช่น nginx หรือ abc123def" },
     ],
-    tip: "Container ID หาได้จาก Portainer → Containers แล้วดูที่ column ID หรือ URL",
+    tip: "ลำดับ: Stack ID → Container ID/Name → Endpoint overview (ถ้าว่างทั้งคู่)",
   },
   DATABASE: {
     summary: "เปิด connection ไปยัง database แล้วรัน query ง่ายๆ เพื่อเช็คว่า database ตอบสนอง",
@@ -1230,12 +1234,24 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Container ID</span>
+                    <span className="text-sm font-medium text-slate-700">
+                      Stack ID <span className="text-xs font-normal text-cyan-600">(แนะนำ)</span>
+                    </span>
+                    <input
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      type="number"
+                      value={form.stackId}
+                      onChange={(event) => updateField("stackId", event.target.value)}
+                      placeholder="เช่น 12 — ดูจาก Portainer → Stacks → URL"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Container ID / Name</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.containerId}
                       onChange={(event) => updateField("containerId", event.target.value)}
-                      placeholder="optional"
+                      placeholder="เช่น nginx หรือ abc123def — ถ้าว่างและไม่มี Stack ID จะเช็ค endpoint ภาพรวม"
                     />
                   </label>
                 </>
