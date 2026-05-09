@@ -163,7 +163,7 @@ jobs:
           DID_REDEPLOY: ${{ steps.flags.outputs.redeploy }}
         run: |
           if [ "${DID_REDEPLOY}" = "true" ]; then
-            TITLE="🎉 Deploy Completed!"
+            TITLE="🎉 Build & Deploy Completed!"
             PORTAINER_LINE="🚀 Portainer redeployed"
           else
             TITLE="🐳 Build Completed!"
