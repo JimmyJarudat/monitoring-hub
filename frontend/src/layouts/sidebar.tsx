@@ -4,6 +4,7 @@ import { useSystemConfig } from "@/contexts/systemConfig.context";
 import { isAdminUser } from "@/utils/permissions";
 import { API_BASE_URL } from "@/lib/constants";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 // ── Heroicons 2.0 outline (24px viewBox) ──────────────────────────
 
@@ -133,58 +134,59 @@ type SidebarSection = {
   items: SidebarItem[];
 };
 
-const sidebarSections: SidebarSection[] = [
-  {
-    title: "Overview",
-    items: [
-      { label: "Dashboard", path: "/dashboard", icon: <IconDashboard />, end: true },
-      { label: "Status Map", path: "/status-map", icon: <IconStatusMap /> },
-      { label: "Reports", path: "/reports", icon: <IconReports /> },
-    ],
-  },
-  {
-    title: "Inventory",
-    items: [
-      { label: "Devices", path: "/devices", icon: <IconDevices /> },
-      { label: "Interfaces", path: "/interfaces", icon: <IconInterfaces /> },
-      { label: "Groups", path: "/groups", icon: <IconGroups /> },
-      { label: "Credentials", path: "/credentials", icon: <IconCredentials />, adminOnly: true },
-    ],
-  },
-  {
-    title: "Monitoring",
-    items: [
-      { label: "Monitors", path: "/monitors", icon: <IconMonitors /> },
-      { label: "Add Monitor", path: "/monitors/new", icon: <IconAdd />, adminOnly: true },
-      { label: "Results", path: "/results", icon: <IconResults /> },
-      { label: "Incidents", path: "/incidents", icon: <IconIncidents /> },
-    ],
-  },
-  {
-    title: "Alerting",
-    items: [
-      { label: "Alert Rules", path: "/alerts", icon: <IconAlertRules />, adminOnly: true },
-      { label: "Channels", path: "/channels", icon: <IconChannels />, adminOnly: true },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { label: "Users", path: "/users", icon: <IconUsers />, adminOnly: true },
-      { label: "Audit Logs", path: "/audit-logs", icon: <IconAuditLogs />, adminOnly: true },
-      { label: "System Logs", path: "/system-logs", icon: <IconSystemLogs />, adminOnly: true },
-      { label: "Scheduled Reports", path: "/scheduled-reports", icon: <IconScheduledReports />, adminOnly: true },
-      { label: "Settings", path: "/settings", icon: <IconSettings />, adminOnly: true },
-    ],
-  },
-];
-
 // ── Component ─────────────────────────────────────────────────────
 
 const Sidebar = () => {
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
   const { config } = useSystemConfig();
+  const { t } = useTranslation();
+
+  const sidebarSections: SidebarSection[] = [
+    {
+      title: t("sidebar.overview"),
+      items: [
+        { label: t("sidebar.dashboard"),  path: "/dashboard",  icon: <IconDashboard />, end: true },
+        { label: t("sidebar.statusMap"),  path: "/status-map", icon: <IconStatusMap /> },
+        { label: t("sidebar.reports"),    path: "/reports",    icon: <IconReports /> },
+      ],
+    },
+    {
+      title: t("sidebar.inventory"),
+      items: [
+        { label: t("sidebar.devices"),     path: "/devices",     icon: <IconDevices /> },
+        { label: t("sidebar.interfaces"),  path: "/interfaces",  icon: <IconInterfaces /> },
+        { label: t("sidebar.groups"),      path: "/groups",      icon: <IconGroups /> },
+        { label: t("sidebar.credentials"), path: "/credentials", icon: <IconCredentials />, adminOnly: true },
+      ],
+    },
+    {
+      title: t("sidebar.monitoring"),
+      items: [
+        { label: t("sidebar.monitors"),   path: "/monitors",     icon: <IconMonitors /> },
+        { label: t("sidebar.addMonitor"), path: "/monitors/new", icon: <IconAdd />, adminOnly: true },
+        { label: t("sidebar.results"),    path: "/results",      icon: <IconResults /> },
+        { label: t("sidebar.incidents"),  path: "/incidents",    icon: <IconIncidents /> },
+      ],
+    },
+    {
+      title: t("sidebar.alerting"),
+      items: [
+        { label: t("sidebar.alertRules"), path: "/alerts",   icon: <IconAlertRules />, adminOnly: true },
+        { label: t("sidebar.channels"),   path: "/channels", icon: <IconChannels />,   adminOnly: true },
+      ],
+    },
+    {
+      title: t("sidebar.system"),
+      items: [
+        { label: t("sidebar.users"),            path: "/users",             icon: <IconUsers />,           adminOnly: true },
+        { label: t("sidebar.auditLogs"),        path: "/audit-logs",        icon: <IconAuditLogs />,       adminOnly: true },
+        { label: t("sidebar.systemLogs"),       path: "/system-logs",       icon: <IconSystemLogs />,      adminOnly: true },
+        { label: t("sidebar.scheduledReports"), path: "/scheduled-reports", icon: <IconScheduledReports />, adminOnly: true },
+        { label: t("sidebar.settings"),         path: "/settings",          icon: <IconSettings />,        adminOnly: true },
+      ],
+    },
+  ];
 
   return (
     <aside className="flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-950 text-white dark:border-slate-700 dark:bg-slate-800">

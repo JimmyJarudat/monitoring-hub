@@ -8,6 +8,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { SessionProvider } from './contexts/session.context';
 import { ThemeProvider } from './contexts/theme.context';
+import "./i18n";
 
 
 // ตั้งค่า base URL สำหรับ axios

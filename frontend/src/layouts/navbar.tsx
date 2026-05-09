@@ -5,6 +5,8 @@ import { useTheme } from "@/contexts/theme.context";
 import { isAdminUser } from "@/utils/permissions";
 import { getAvatarUrl } from "@/utils/avatar";
 import { useApi } from "@/hooks/useApi";
+import { useTranslation } from "react-i18next";
+import { toggleLanguage } from "@/i18n";
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
 
@@ -24,31 +26,30 @@ type NotificationSummary = {
   latest: AppNotification[];
 };
 
-const breadcrumbLabels: Record<string, string> = {
-  dashboard: "Dashboard",
-  monitors: "Monitors",
-  results: "Monitor Results",
-  incidents: "Incidents",
-  alerts: "Alert Rules",
-  channels: "Notification Channels",
-  reports: "Reports",
-  devices: "Devices",
-  interfaces: "Interfaces",
-  credentials: "Credentials",
-  groups: "Groups",
-  users: "Users",
-  "audit-logs": "Audit Logs",
-  settings: "Settings",
-  profile: "My Profile",
-  "login-history": "ประวัติการล็อกอินของฉัน",
-  "change-password": "Change Password",
-  notifications: "Notifications",
-  domain: "Domain Intelligence",
-  "api-tokens": "API Tokens",
+const breadcrumbKeys: Record<string, string> = {
+  dashboard:        "nav.dashboard",
+  monitors:         "nav.monitors",
+  results:          "nav.results",
+  incidents:        "nav.incidents",
+  alerts:           "nav.alerts",
+  channels:         "nav.channels",
+  reports:          "nav.reports",
+  devices:          "nav.devices",
+  interfaces:       "nav.interfaces",
+  credentials:      "nav.credentials",
+  groups:           "nav.groups",
+  users:            "nav.users",
+  "audit-logs":     "nav.auditLogs",
+  settings:         "nav.settings",
+  profile:          "nav.profile",
+  "login-history":  "nav.loginHistory",
+  "change-password":"nav.changePassword",
+  notifications:    "nav.notifications",
+  domain:           "nav.domain",
+  "api-tokens":     "nav.apiTokens",
+  "scheduled-reports": "nav.scheduledReports",
+  "system-logs":    "nav.systemLogs",
 };
-
-const formatSegment = (segment: string) =>
-  breadcrumbLabels[segment] ?? segment.replace(/-/g, " ");
 
 const notificationDateFormatter = new Intl.DateTimeFormat("th-TH", {
   dateStyle: "short",
@@ -87,6 +88,7 @@ const Navbar = () => {
   const { api } = useApi();
   const { user, logout } = useSession();
   const { theme, toggleTheme } = useTheme();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -101,11 +103,11 @@ const Navbar = () => {
   const breadcrumbs =
     segments.length > 0
       ? segments.map((segment, index) => ({
-          label: formatSegment(segment),
+          label: breadcrumbKeys[segment] ? t(breadcrumbKeys[segment]) : segment.replace(/-/g, " "),
           path: `/${segments.slice(0, index + 1).join("/")}`,
           isLast: index === segments.length - 1,
         }))
-      : [{ label: "Dashboard", path: "/dashboard", isLast: true }];
+      : [{ label: t("nav.dashboard"), path: "/dashboard", isLast: true }];
 
   const displayName = user?.username ?? "demo";
   const displayEmail = user?.email ?? "";
@@ -174,7 +176,7 @@ const Navbar = () => {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
           </svg>
-          <span className="hidden sm:inline">Home</span>
+          <span className="hidden sm:inline">{t("nav.home")}</span>
         </Link>
 
         {breadcrumbs.map((item) => (
@@ -216,9 +218,9 @@ const Navbar = () => {
             <div className="absolute right-0 top-full z-50 mt-2 w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
                 <div>
-                  <p className="text-sm font-semibold text-slate-950 dark:text-white">การแจ้งเตือน</p>
+                  <p className="text-sm font-semibold text-slate-950 dark:text-white">{t("notification.title")}</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    {notificationSummary.unreadCount.toLocaleString()} รายการที่ยังไม่ได้อ่าน
+                    {notificationSummary.unreadCount.toLocaleString()} {t("notification.unread")}
                   </p>
                 </div>
                 <button
@@ -226,14 +228,14 @@ const Navbar = () => {
                   onClick={markAllNotificationsRead}
                   className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
-                  อ่านทั้งหมด
+                  {t("notification.markAllRead")}
                 </button>
               </div>
 
               <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
                 {notificationSummary.latest.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                    ยังไม่มีการแจ้งเตือน
+                    {t("notification.empty")}
                   </div>
                 ) : null}
                 {notificationSummary.latest.map((item) => {
@@ -269,12 +271,22 @@ const Navbar = () => {
                   onClick={() => setNotificationOpen(false)}
                   className="flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-900/30"
                 >
-                  ดูการแจ้งเตือนทั้งหมด
+                  {t("notification.viewAll")}
                 </Link>
               </div>
             </div>
           ) : null}
         </div>
+
+        {/* Language toggle */}
+        <button
+          type="button"
+          onClick={toggleLanguage}
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white focus:outline-none"
+          aria-label="Toggle language"
+        >
+          {i18n.language === "th" ? "EN" : "TH"}
+        </button>
 
         {/* Theme toggle */}
         <button
@@ -327,13 +339,13 @@ const Navbar = () => {
               {/* Account section */}
               <div className="p-1.5">
                 <p className="mb-0.5 px-3 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  บัญชีของฉัน
+                  {t("user.myAccount")}
                 </p>
                 {[
-                  { to: "/profile", label: "โปรไฟล์ของฉัน", icon: <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /> },
-                  { to: "/change-password", label: "เปลี่ยนรหัสผ่าน", icon: <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /> },
-                  { to: "/login-history", label: "ประวัติการล็อกอิน", icon: <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 4a1 1 0 10-2 0v4a1 1 0 00.293.707l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" /> },
-                  { to: "/api-tokens", label: "API Tokens", icon: <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" /> },
+                  { to: "/profile",         label: t("user.profile"),         icon: <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /> },
+                  { to: "/change-password", label: t("user.changePassword"),   icon: <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /> },
+                  { to: "/login-history",   label: t("user.loginHistory"),     icon: <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 4a1 1 0 10-2 0v4a1 1 0 00.293.707l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" /> },
+                  { to: "/api-tokens",      label: t("user.apiTokens"),        icon: <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" /> },
                 ].map(({ to, label, icon }) => (
                   <Link key={to} to={to} onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
@@ -350,11 +362,11 @@ const Navbar = () => {
               {isAdmin ? (
                 <div className="p-1.5">
                   <p className="mb-0.5 px-3 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    การตั้งค่า
+                    {t("user.configuration")}
                   </p>
                   {[
-                    { to: "/settings", label: "ตั้งค่าระบบ", icon: <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /> },
-                    { to: "/channels", label: "ช่องทางแจ้งเตือน", icon: <><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" /><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" /></> },
+                    { to: "/settings", label: t("user.systemSettings"),      icon: <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /> },
+                    { to: "/channels", label: t("user.notificationChannels"), icon: <><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" /><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" /></> },
                   ].map(({ to, label, icon }) => (
                     <Link key={to} to={to} onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
@@ -375,9 +387,9 @@ const Navbar = () => {
                       Admin
                     </p>
                     {[
-                      { to: "/users", label: "จัดการผู้ใช้งาน", icon: <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" /> },
-                      { to: "/audit-logs", label: "Audit Logs", icon: <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /> },
-                      { to: "/domain", label: "Domain Intelligence", icon: <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16A8 8 0 0010 2zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clipRule="evenodd" /> },
+                      { to: "/users",      label: t("user.manageUsers"),       icon: <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" /> },
+                      { to: "/audit-logs", label: t("user.auditLogs"),          icon: <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /> },
+                      { to: "/domain",     label: t("user.domainIntelligence"), icon: <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16A8 8 0 0010 2zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clipRule="evenodd" /> },
                     ].map(({ to, label, icon }) => (
                       <Link key={to} to={to} onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
@@ -400,7 +412,7 @@ const Navbar = () => {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
                   </svg>
-                  ออกจากระบบ
+                  {t("user.signOut")}
                 </button>
               </div>
             </div>
