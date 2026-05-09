@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
@@ -60,19 +62,6 @@ type TimeRangePreset = "day" | "week" | "month" | "custom";
 
 const PAGE_SIZE = 50;
 
-const timeRangeOptions: Array<{ label: string; value: TimeRangePreset }> = [
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-  { label: "Custom", value: "custom" },
-];
-
-const statusOptions: Array<{ label: string; value: "ALL" | MonitorStatus }> = [
-  { label: "All status", value: "ALL" },
-  { label: "UP", value: "UP" },
-  { label: "DEGRADED", value: "DEGRADED" },
-  { label: "DOWN", value: "DOWN" },
-];
 
 const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
   { label: "All types", value: "ALL" },
@@ -112,7 +101,8 @@ const toIsoFromLocalValue = (value: string) => {
 };
 
 const formatDateTime = (value: string) => {
-  return new Intl.DateTimeFormat("th-TH", {
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -142,6 +132,7 @@ const getTarget = (monitor: ResultMonitor) => {
 
 const ResultsPage = () => {
   const { api } = useApi();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [results, setResults] = useState<MonitorResultRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -169,6 +160,26 @@ const ResultsPage = () => {
     DEGRADED: 0,
   });
   const [page, setPage] = useState(1);
+
+  const timeRangeOptions = useMemo(
+    () => [
+      { label: t("incidents.rangeDay"), value: "day" as TimeRangePreset },
+      { label: t("incidents.rangeWeek"), value: "week" as TimeRangePreset },
+      { label: t("incidents.rangeMonth"), value: "month" as TimeRangePreset },
+      { label: t("incidents.rangeCustom"), value: "custom" as TimeRangePreset },
+    ],
+    [t],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { label: t("results.statusAll"), value: "ALL" as "ALL" | MonitorStatus },
+      { label: "UP", value: "UP" as MonitorStatus },
+      { label: "DEGRADED", value: "DEGRADED" as MonitorStatus },
+      { label: "DOWN", value: "DOWN" as MonitorStatus },
+    ],
+    [t],
+  );
 
   const fetchResults = useCallback(
     async (nextPage: number, mode: "replace" | "append") => {
@@ -206,13 +217,13 @@ const ResultsPage = () => {
           setStatusCounts(response.data.data.statusCounts);
         }
       } catch {
-        toast.error("โหลดผลตรวจไม่สำเร็จ");
+        toast.error(t("results.loadError"));
       } finally {
         setIsLoading(false);
         setIsLoadingMore(false);
       }
     },
-    [api, appliedFrom, appliedTo, groupFilter, statusFilter, typeFilter],
+    [api, appliedFrom, appliedTo, groupFilter, statusFilter, typeFilter, t],
   );
 
   useEffect(() => {
@@ -229,12 +240,12 @@ const ResultsPage = () => {
         }
         setGroups(response.data.data);
       } catch {
-        toast.error("โหลด groups ไม่สำเร็จ");
+        toast.error(t("monitors.loadGroupsError"));
       }
     };
 
     void loadGroups();
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     const currentValue = searchParams.get("groupId")?.trim() || "ALL";
@@ -267,12 +278,12 @@ const ResultsPage = () => {
     const to = toIsoFromLocalValue(customTo);
 
     if (!from || !to) {
-      toast.error("กรุณาเลือกช่วงเวลาให้ครบ");
+      toast.error(t("incidents.validationRange"));
       return;
     }
 
     if (new Date(from).getTime() > new Date(to).getTime()) {
-      toast.error("เวลาเริ่มต้นต้องไม่มากกว่าเวลาสิ้นสุด");
+      toast.error(t("incidents.validationRangeOrder"));
       return;
     }
 
@@ -301,19 +312,17 @@ const ResultsPage = () => {
     if (timeRange === "custom") {
       return `${formatDateTime(appliedFrom)} - ${formatDateTime(appliedTo)}`;
     }
-
-    return timeRangeOptions.find((option) => option.value === timeRange)?.label ?? "Day";
-  }, [appliedFrom, appliedTo, timeRange]);
+    return timeRangeOptions.find((option) => option.value === timeRange)?.label ?? t("incidents.rangeDay");
+  }, [appliedFrom, appliedTo, timeRange, timeRangeOptions, t]);
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Monitoring</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Monitor Results</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("results.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("results.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            รวมผลตรวจของทุก monitor ในหน้าเดียว เพื่อไล่ดูช่วงเวลาที่มีปัญหา, down หลายตัวพร้อมกัน,
-            และ response time ที่ผิดปกติได้เร็วขึ้น
+            {t("results.description")}
           </p>
         </div>
 
@@ -323,25 +332,25 @@ const ResultsPage = () => {
             type="button"
             onClick={() => void fetchResults(1, "replace")}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <Link
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             to="/monitors"
           >
-            Back to Monitors
+            {t("results.backToMonitors")}
           </Link>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
-          { label: "Displayed", value: summary.total, tone: "text-slate-950" },
-          { label: "UP", value: summary.up, tone: "text-emerald-700" },
-          { label: "Degraded", value: summary.degraded, tone: "text-amber-700" },
-          { label: "Down", value: summary.down, tone: "text-rose-700" },
+          { label: t("results.summaryDisplayed"), value: summary.total, tone: "text-slate-950" },
+          { label: t("results.summaryUp"), value: summary.up, tone: "text-emerald-700" },
+          { label: t("results.summaryDegraded"), value: summary.degraded, tone: "text-amber-700" },
+          { label: t("results.summaryDown"), value: summary.down, tone: "text-rose-700" },
           {
-            label: "Avg response",
+            label: t("results.summaryAvgResponse"),
             value: summary.avgResponseTimeMs === null ? "-" : `${summary.avgResponseTimeMs} ms`,
             tone: "text-cyan-700",
           },
@@ -357,9 +366,9 @@ const ResultsPage = () => {
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-950">Filters</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("incidents.filtersTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Current range: <span className="font-medium text-slate-700">{activeRangeLabel}</span>
+                {t("incidents.currentRange")} <span className="font-medium text-slate-700">{activeRangeLabel}</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -387,7 +396,7 @@ const ResultsPage = () => {
 
           <div className="grid gap-4 lg:grid-cols-4">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Status</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterStatus")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={statusFilter}
@@ -402,7 +411,7 @@ const ResultsPage = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Monitor type</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterType")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={typeFilter}
@@ -410,20 +419,20 @@ const ResultsPage = () => {
               >
                 {typeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {option.value === "ALL" ? t("incidents.typeAll") : option.label}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Group</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterGroup")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={groupFilter}
                 onChange={(event) => setGroupFilter(event.target.value)}
               >
-                <option value="ALL">All groups</option>
+                <option value="ALL">{t("monitors.allGroups")}</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -435,7 +444,7 @@ const ResultsPage = () => {
             {timeRange === "custom" ? (
               <>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">From</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterFrom")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="datetime-local"
@@ -445,7 +454,7 @@ const ResultsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">To</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterTo")}</span>
                   <div className="mt-2 flex gap-2">
                     <input
                       className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -458,7 +467,7 @@ const ResultsPage = () => {
                       type="button"
                       onClick={handleApplyCustomRange}
                     >
-                      Apply
+                      {t("incidents.apply")}
                     </button>
                   </div>
                 </label>
@@ -466,9 +475,9 @@ const ResultsPage = () => {
             ) : (
               <div className="lg:col-span-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-medium text-slate-700">Quick snapshot</p>
+                  <p className="text-sm font-medium text-slate-700">{t("incidents.quickSnapshot")}</p>
                   <p className="mt-2 text-sm text-slate-500">
-                    Page 1 counts in the current filter:
+                    {t("results.pageSnapshot")}
                     <span className="ml-2 text-emerald-700">UP {statusCounts.UP}</span>
                     <span className="ml-3 text-amber-700">DEGRADED {statusCounts.DEGRADED}</span>
                     <span className="ml-3 text-rose-700">DOWN {statusCounts.DOWN}</span>
@@ -483,31 +492,31 @@ const ResultsPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Global results log</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("results.tableTitle")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Showing {results.length} rows from page {page}
+              {t("incidents.showingRows", { count: results.length, page: page })}
             </p>
           </div>
-          {isLoading ? <p className="text-xs text-slate-400">Loading...</p> : null}
+          {isLoading ? <p className="text-xs text-slate-400">{t("common.loading")}</p> : null}
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Monitor</th>
-                <th className="px-4 py-3">Target</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Response</th>
-                <th className="px-4 py-3">Message</th>
+                <th className="px-4 py-3">{t("results.colTime")}</th>
+                <th className="px-4 py-3">{t("results.colMonitor")}</th>
+                <th className="px-4 py-3">{t("results.colTarget")}</th>
+                <th className="px-4 py-3">{t("results.colStatus")}</th>
+                <th className="px-4 py-3">{t("results.colResponse")}</th>
+                <th className="px-4 py-3">{t("results.colMessage")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {!isLoading && results.length === 0 ? (
                 <tr>
                   <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={6}>
-                    ไม่พบผลตรวจในช่วงเวลานี้
+                    {t("results.noResults")}
                   </td>
                 </tr>
               ) : null}
@@ -525,7 +534,7 @@ const ResultsPage = () => {
                       {result.monitor.name}
                     </Link>
                     <div className="text-xs text-slate-500">
-                      {result.monitor.type} · every {result.monitor.interval}s
+                      {result.monitor.type} · {t("monitors.intervalEvery", { interval: result.monitor.interval })}
                     </div>
                   </td>
                   <td className="max-w-xs px-4 py-3 text-slate-600">
@@ -556,7 +565,7 @@ const ResultsPage = () => {
 
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
           <p className="text-xs text-slate-500">
-            Time filters support daily, weekly, monthly, and custom range
+            {t("results.footerHint")}
           </p>
           <button
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -564,7 +573,7 @@ const ResultsPage = () => {
             onClick={() => void fetchResults(page + 1, "append")}
             disabled={!hasMore || isLoading || isLoadingMore}
           >
-            {isLoadingMore ? "Loading..." : hasMore ? "Load more results" : "No more results"}
+            {isLoadingMore ? t("common.loading") : hasMore ? t("results.loadMore") : t("results.noMore")}
           </button>
         </div>
       </section>

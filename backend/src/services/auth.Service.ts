@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma";
 import { config } from "../config";
+import { getSystemConfig } from "./systemConfig.service";
 
 const safeUserSelect = {
   id: true,
@@ -33,14 +34,22 @@ export const authService = {
 
   // ตรวจว่าบัญชีถูกล็อกอยู่หรือไม่
   async isLockedOut(userId: string): Promise<boolean> {
-    const { maxFailures, windowMinutes } = config.lockout;
+    const { security } = await getSystemConfig();
+    if (security.maxLoginAttempts <= 0) return false;
+
+    const { windowMinutes } = config.lockout;
     const since = new Date(Date.now() - windowMinutes * 60_000);
 
     const failures = await prisma.loginHistory.count({
       where: { userId, status: "FAILED", createdAt: { gte: since } },
     });
 
-    return failures >= maxFailures;
+    return failures >= security.maxLoginAttempts;
+  },
+
+  async getMaxLoginAttempts(): Promise<number> {
+    const { security } = await getSystemConfig();
+    return security.maxLoginAttempts;
   },
 
   async recordLogin(

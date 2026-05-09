@@ -57,6 +57,28 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
       })),
     );
   })
+  .get(
+    "/:id",
+    async ({ params, currentUser, set }) => {
+      requireAdminRole(currentUser.role);
+
+      const channel = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
+      if (!channel) {
+        set.status = 404;
+        return fail("ไม่พบ notification channel");
+      }
+
+      return ok({
+        id: channel.id,
+        name: channel.name,
+        type: channel.type,
+        enabled: channel.enabled,
+        createdAt: channel.createdAt,
+        config: toDisplayChannelConfig(channel),
+      });
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
   .post(
     "/",
     async ({ body, currentUser, set }) => {

@@ -1,7 +1,7 @@
 {
   "name": "monitoring-hub-web",
   "private": true,
-  "version": "1.1.4",
+  "version": "1.2.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "axios": "^1.16.0",
+    "i18next": "^26.0.10",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-i18next": "^17.0.7",
     "react-router-dom": "^7.15.0",
     "react-toastify": "^11.1.0",
     "recharts": "^3.8.1"

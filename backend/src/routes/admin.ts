@@ -14,6 +14,7 @@ import {
   runRetentionCleanup,
 } from "../services/retention.service";
 import { getSystemConfig, saveSystemConfig } from "../services/systemConfig.service";
+import { sendScheduledAvailabilityReport } from "../services/scheduledReport.service";
 
 export const adminRoutes = new Elysia({ prefix: "/admin" })
   .use(authMiddleware)
@@ -275,13 +276,35 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
           }),
           security: t.Object({
             passwordMinLength: t.Number({ minimum: 6, maximum: 32 }),
+            requireLowercase: t.Boolean(),
+            requireUppercase: t.Boolean(),
+            requireNumber: t.Boolean(),
+            requireSpecial: t.Boolean(),
             sessionDays: t.Number({ minimum: 1, maximum: 365 }),
             maxLoginAttempts: t.Number({ minimum: 0, maximum: 100 }),
+          }),
+          email: t.Object({
+            enabled: t.Boolean(),
+            host: t.String({ maxLength: 255 }),
+            port: t.Number({ minimum: 1, maximum: 65535 }),
+            secure: t.Boolean(),
+            username: t.String({ maxLength: 255 }),
+            password: t.String({ maxLength: 3000 }),
+            from: t.String({ maxLength: 255 }),
+          }),
+          scheduledReport: t.Object({
+            enabled: t.Boolean(),
+            time: t.String({ minLength: 5, maxLength: 5 }),
+            channelIds: t.Array(t.String()),
           }),
         }),
       ),
     },
   )
+  .post("/scheduled-report/send-now", async ({ currentUser }) => {
+    requireAdminRole(currentUser.role);
+    return ok(await sendScheduledAvailabilityReport("manual"));
+  })
   .post(
     "/system-config/logo",
     async ({ body, currentUser, set }) => {

@@ -34,8 +34,9 @@ RUN bunx prisma generate
 # ─────────────────────────────────────────────
 FROM oven/bun:1-alpine AS runner
 
-# ติดตั้ง nginx + bash + openssl + gettext สำหรับ envsubst
-RUN apk add --no-cache nginx bash openssl gettext
+# ติดตั้ง nginx + bash + openssl + gettext + tzdata
+RUN apk add --no-cache nginx bash openssl gettext tzdata
+ENV TZ=Asia/Bangkok
 
 WORKDIR /app
 

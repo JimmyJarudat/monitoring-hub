@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
@@ -106,8 +108,8 @@ const getOpenUrl = (monitor: MonitorRow) => {
 
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -123,6 +125,7 @@ const toConfigText = (config: Record<string, unknown>) => {
 
 const MonitorsPage = () => {
   const { api } = useApi();
+  const { t } = useTranslation();
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -163,11 +166,11 @@ const MonitorsPage = () => {
 
       setMonitors(response.data.data);
     } catch {
-      toast.error("โหลด monitor ไม่สำเร็จ");
+      toast.error(t("monitors.loadError"));
     } finally {
       setIsLoading(false);
     }
-  }, [api, groupFilter]);
+  }, [api, groupFilter, t]);
 
   useEffect(() => {
     void fetchMonitors();
@@ -183,12 +186,12 @@ const MonitorsPage = () => {
         }
         setGroups(response.data.data);
       } catch {
-        toast.error("โหลด groups ไม่สำเร็จ");
+        toast.error(t("monitors.loadGroupsError"));
       }
     };
 
     void loadGroups();
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     const currentValue = searchParams.get("groupId")?.trim() || "ALL";
@@ -207,24 +210,24 @@ const MonitorsPage = () => {
     const latestStatuses = monitors.map((monitor) => monitor.latestResult?.status ?? "PENDING");
 
     return [
-      { label: "Total", value: monitors.length, className: "text-slate-950" },
+      { label: t("monitors.summaryTotal"), value: monitors.length, className: "text-slate-950" },
       {
-        label: "Up",
+        label: t("monitors.summaryUp"),
         value: latestStatuses.filter((status) => status === "UP").length,
         className: "text-emerald-600",
       },
       {
-        label: "Degraded",
+        label: t("monitors.summaryDegraded"),
         value: latestStatuses.filter((status) => status === "DEGRADED").length,
         className: "text-amber-600",
       },
       {
-        label: "Down",
+        label: t("monitors.summaryDown"),
         value: latestStatuses.filter((status) => status === "DOWN").length,
         className: "text-rose-600",
       },
     ];
-  }, [monitors]);
+  }, [monitors, t]);
 
   const handleCheckNow = async (monitor: MonitorRow) => {
     setOpenMenu(null);
@@ -238,10 +241,10 @@ const MonitorsPage = () => {
         return;
       }
 
-      toast.success(`เช็ก ${monitor.name} แล้ว`);
+      toast.success(t("monitors.checkSuccess", { name: monitor.name }));
       await fetchMonitors();
     } catch {
-      toast.error("สั่งเช็กไม่สำเร็จ");
+      toast.error(t("monitors.checkError"));
     } finally {
       setBusyId(null);
     }
@@ -261,10 +264,10 @@ const MonitorsPage = () => {
         return;
       }
 
-      toast.success(monitor.enabled ? "ปิด monitor แล้ว" : "เปิด monitor แล้ว");
+      toast.success(monitor.enabled ? t("monitors.disableSuccess") : t("monitors.enableSuccess"));
       await fetchMonitors();
     } catch {
-      toast.error("เปลี่ยนสถานะไม่สำเร็จ");
+      toast.error(t("monitors.toggleError"));
     } finally {
       setBusyId(null);
     }
@@ -288,12 +291,12 @@ const MonitorsPage = () => {
     const interval = Number(editForm.interval);
 
     if (!editForm.name.trim()) {
-      toast.error("กรุณาระบุชื่อ monitor");
+      toast.error(t("monitors.validationName"));
       return;
     }
 
     if (!Number.isFinite(interval) || interval < 10) {
-      toast.error("interval ต้องมากกว่าหรือเท่ากับ 10 วินาที");
+      toast.error(t("monitors.validationInterval"));
       return;
     }
 
@@ -303,13 +306,13 @@ const MonitorsPage = () => {
       const parsed = JSON.parse(editForm.configText) as unknown;
 
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        toast.error("config ต้องเป็น JSON object");
+        toast.error(t("monitors.validationConfigObject"));
         return;
       }
 
       config = parsed as Record<string, unknown>;
     } catch {
-      toast.error("config JSON ไม่ถูกต้อง");
+      toast.error(t("monitors.validationConfigJson"));
       return;
     }
 
@@ -329,11 +332,11 @@ const MonitorsPage = () => {
         return;
       }
 
-      toast.success("แก้ไข monitor แล้ว");
+      toast.success(t("monitors.updateSuccess"));
       setEditingMonitor(null);
       await fetchMonitors();
     } catch {
-      toast.error("แก้ไข monitor ไม่สำเร็จ");
+      toast.error(t("monitors.updateError"));
     } finally {
       setBusyId(null);
     }
@@ -355,11 +358,11 @@ const MonitorsPage = () => {
         return;
       }
 
-      toast.success("ลบ monitor แล้ว");
+      toast.success(t("monitors.deleteSuccess"));
       setDeletingMonitor(null);
       await fetchMonitors();
     } catch {
-      toast.error("ลบ monitor ไม่สำเร็จ");
+      toast.error(t("monitors.deleteError"));
     } finally {
       setBusyId(null);
     }
@@ -416,10 +419,10 @@ const MonitorsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Monitoring</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Monitors</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("monitors.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("monitors.title")}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            สถานะล่าสุด, ประวัติ down ล่าสุด, และ uptime 24 ชั่วโมงของ monitor ทั้งหมด
+            {t("monitors.description")}
           </p>
         </div>
 
@@ -430,14 +433,14 @@ const MonitorsPage = () => {
             onClick={() => void fetchMonitors()}
             disabled={isLoading}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           {isAdmin ? (
             <Link
               className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
               to="/monitors/new"
             >
-              Add Monitor
+              {t("monitors.addMonitor")}
             </Link>
           ) : null}
         </div>
@@ -455,13 +458,13 @@ const MonitorsPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_1fr] lg:items-end">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Group</span>
+            <span className="text-sm font-medium text-slate-700">{t("monitors.group")}</span>
             <select
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={groupFilter}
               onChange={(event) => setGroupFilter(event.target.value)}
             >
-              <option value="ALL">All groups</option>
+              <option value="ALL">{t("monitors.allGroups")}</option>
               {groups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -470,36 +473,38 @@ const MonitorsPage = () => {
             </select>
           </label>
           <p className="text-sm text-slate-500">
-            โฟกัสดู monitor ตามกลุ่มที่จัดไว้ เพื่อแยก environment, site, หรือ service zone ได้เร็วขึ้น
+            {t("monitors.groupFilterHint")}
           </p>
         </div>
       </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-950">Active monitor inventory</h2>
-          <p className="text-xs text-slate-500">{isLoading ? "Loading..." : `${monitors.length} monitors`}</p>
+          <h2 className="text-sm font-semibold text-slate-950">{t("monitors.inventoryTitle")}</h2>
+          <p className="text-xs text-slate-500">
+            {isLoading ? t("common.loading") : t("monitors.countMonitors", { count: monitors.length })}
+          </p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Target</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Response</th>
-                <th className="px-4 py-3">Last checked</th>
-                <th className="px-4 py-3">Last down</th>
-                <th className="px-4 py-3">24h uptime</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">{t("monitors.colName")}</th>
+                <th className="px-4 py-3">{t("monitors.colTarget")}</th>
+                <th className="px-4 py-3">{t("monitors.colStatus")}</th>
+                <th className="px-4 py-3">{t("monitors.colResponse")}</th>
+                <th className="px-4 py-3">{t("monitors.colLastChecked")}</th>
+                <th className="px-4 py-3">{t("monitors.colLastDown")}</th>
+                <th className="px-4 py-3">{t("monitors.colUptime")}</th>
+                <th className="px-4 py-3 text-right">{t("monitors.colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {!isLoading && monitors.length === 0 ? (
                 <tr>
                   <td className="px-4 py-10 text-center text-slate-500" colSpan={8}>
-                    ยังไม่มี monitor
+                    {t("monitors.noMonitors")}
                   </td>
                 </tr>
               ) : null}
@@ -523,7 +528,7 @@ const MonitorsPage = () => {
                         {monitor.name}
                       </Link>
                       <div className="text-xs text-slate-500">
-                        {monitor.type} · every {monitor.interval}s
+                        {monitor.type} · {t("monitors.intervalEvery", { interval: monitor.interval })}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -556,13 +561,17 @@ const MonitorsPage = () => {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       <div>{formatDateTime(monitor.lastDownAt)}</div>
                       {monitor.downCount24h > 0 ? (
-                        <div className="text-xs text-rose-600">{monitor.downCount24h} down / 24h</div>
+                        <div className="text-xs text-rose-600">
+                          {t("monitors.downPer24h", { count: monitor.downCount24h })}
+                        </div>
                       ) : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {monitor.uptime24h === null ? "-" : `${monitor.uptime24h}%`}
                       {monitor.checkCount24h > 0 ? (
-                        <div className="text-xs text-slate-400">{monitor.checkCount24h} checks</div>
+                        <div className="text-xs text-slate-400">
+                          {t("monitors.checksCount", { count: monitor.checkCount24h })}
+                        </div>
                       ) : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -574,14 +583,14 @@ const MonitorsPage = () => {
                             rel="noreferrer"
                             target="_blank"
                           >
-                            Open
+                            {t("common.open")}
                           </a>
                         ) : null}
                         <Link
                           className="rounded-md border border-cyan-200 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
                           to={`/monitors/${monitor.id}`}
                         >
-                          View
+                          {t("common.view")}
                         </Link>
                         {isAdmin ? (
                           <div className="relative">
@@ -614,14 +623,14 @@ const MonitorsPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Edit monitor</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{t("monitors.editTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">{editingMonitor.name}</p>
             </div>
 
             <div className="max-h-[75vh] overflow-y-auto p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Name</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.name")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="text"
@@ -633,7 +642,7 @@ const MonitorsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Type</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.type")}</span>
                   <select
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={editForm.type}
@@ -657,7 +666,7 @@ const MonitorsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Interval</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.interval")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="number"
@@ -678,11 +687,11 @@ const MonitorsPage = () => {
                       setEditForm((current) => ({ ...current, enabled: event.target.checked }))
                     }
                   />
-                  <span className="text-sm font-medium text-slate-700">Enabled</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.enabled")}</span>
                 </label>
 
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Config JSON</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitors.configJson")}</span>
                   <textarea
                     className="mt-2 min-h-52 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={editForm.configText}
@@ -702,7 +711,7 @@ const MonitorsPage = () => {
                 onClick={() => setEditingMonitor(null)}
                 disabled={busyId === editingMonitor.id}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -710,7 +719,7 @@ const MonitorsPage = () => {
                 onClick={() => void handleUpdateMonitor()}
                 disabled={busyId === editingMonitor.id}
               >
-                Save changes
+                {t("common.save")}
               </button>
             </div>
           </div>
@@ -721,16 +730,15 @@ const MonitorsPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Delete monitor</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{t("monitors.deleteTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                ลบ monitor นี้พร้อมผลตรวจและข้อมูลที่เกี่ยวข้อง
+                {t("monitors.deleteDesc")}
               </p>
             </div>
 
             <div className="p-5">
               <p className="text-sm text-slate-600">
-                ต้องการลบ <span className="font-semibold text-slate-950">{deletingMonitor.name}</span>{" "}
-                ใช่ไหม?
+                {t("monitors.deleteConfirm", { name: deletingMonitor.name })}
               </p>
             </div>
 
@@ -741,7 +749,7 @@ const MonitorsPage = () => {
                 onClick={() => setDeletingMonitor(null)}
                 disabled={busyId === deletingMonitor.id}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -749,7 +757,7 @@ const MonitorsPage = () => {
                 onClick={() => void handleDeleteMonitor()}
                 disabled={busyId === deletingMonitor.id}
               >
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
@@ -786,7 +794,7 @@ const MonitorsPage = () => {
                     onClick={() => void handleCheckNow(activeMonitor)}
                     disabled={isMenuBusy || !activeMonitor.enabled}
                   >
-                    Check now
+                    {t("monitors.checkNow")}
                   </button>
                   <button
                     className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -794,7 +802,7 @@ const MonitorsPage = () => {
                     onClick={() => void handleToggleEnabled(activeMonitor)}
                     disabled={isMenuBusy}
                   >
-                    {activeMonitor.enabled ? "Disable" : "Enable"}
+                    {activeMonitor.enabled ? t("common.disable") : t("common.enable")}
                   </button>
                   <button
                     className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -802,7 +810,7 @@ const MonitorsPage = () => {
                     onClick={() => openEditModal(activeMonitor)}
                     disabled={isMenuBusy}
                   >
-                    Edit
+                    {t("common.edit")}
                   </button>
                   <button
                     className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -813,7 +821,7 @@ const MonitorsPage = () => {
                     }}
                     disabled={isMenuBusy}
                   >
-                    Delete
+                    {t("common.delete")}
                   </button>
                 </>
               );

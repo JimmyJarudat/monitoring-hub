@@ -9,6 +9,7 @@ import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
 import { startNotificationRetryScheduler } from "./services/notification.service";
 import { startRetentionScheduler } from "./services/retention.service";
+import { startScheduledReportScheduler } from "./services/scheduledReport.service";
 import { logger } from "./lib/logger";
 
 const getErrorCause = (error: unknown) => {
@@ -39,6 +40,14 @@ const getErrorMessage = (error: unknown): string => {
   const cause = getErrorCause(error);
   if (cause) return getErrorMessage(cause);
   return "เกิดข้อผิดพลาดภายในระบบ";
+};
+
+const getErrorDetails = (error: unknown, status: number | null) => {
+  if (status && status < 500) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  return error instanceof Error ? error.stack ?? error.message : String(error);
 };
 
 const migratePlaintextCredentialSecrets = async () => {
@@ -77,15 +86,20 @@ const bootstrap = async () => {
     .onError(({ error, set, request }) => {
       const status = getErrorStatus(error);
       const message = getErrorMessage(error);
-
-      // log ทุก error เสมอ
-      logger.error("server", "request failed", {
-        status: status ?? 500,
+      const resolvedStatus = status ?? 500;
+      const metadata = {
+        status: resolvedStatus,
         method: request.method,
         url: request.url,
         message,
-        error: error instanceof Error ? error.stack ?? error.message : String(error),
-      });
+        error: getErrorDetails(error, status),
+      };
+
+      if (resolvedStatus >= 500) {
+        logger.error("server", "request failed", metadata);
+      } else {
+        logger.warn("server", "request rejected", metadata);
+      }
 
       if (status) {
         set.status = status;
@@ -105,6 +119,7 @@ const bootstrap = async () => {
   monitorRunner.start();
   startNotificationRetryScheduler();
   startRetentionScheduler();
+  startScheduledReportScheduler();
 
   logger.info("server", `running at http://${app.server?.hostname}:${app.server?.port}`);
 };

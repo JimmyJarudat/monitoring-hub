@@ -490,7 +490,7 @@ const sendEmailMessage = async (
   await transporter.sendMail({ from: config.from, to: config.to, subject, text, html });
 };
 
-type AllChannelContent = {
+export type AllChannelContent = {
   telegram: { text: string; parseMode: "HTML" };
   line: { altText: string; flexContents: object };
   email: { subject: string; text: string; html: string };
@@ -517,7 +517,7 @@ const buildTestContent = (data: { channelName: string; channelType: string; sent
   webhook: buildWebhookTestPayload(data),
 });
 
-const deliverChannelMessage = async (channel: NotificationChannel, content: AllChannelContent) => {
+export const deliverChannelMessage = async (channel: NotificationChannel, content: AllChannelContent) => {
   if (channel.type === "TELEGRAM") {
     const cfg = resolveTelegramConfig(channel);
     if (!cfg) throw new Error("Invalid telegram config");

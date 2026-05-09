@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import {
   Bar,
   BarChart,
@@ -172,8 +174,8 @@ const typeAccentClasses = [
 
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -181,8 +183,8 @@ const formatDateTime = (value: string | null | undefined) => {
 
 const formatTime = (value: string | null | undefined) => {
   if (!value) return "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
@@ -235,6 +237,7 @@ type DashboardData = {
 
 const DashboardPage = () => {
   const { api } = useApi();
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<MonitorSummary | null>(null);
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
@@ -283,7 +286,7 @@ const DashboardPage = () => {
     try {
       applyDashboardData(await fetchDashboardData());
     } catch {
-      toast.error("โหลด Dashboard ไม่สำเร็จ");
+      toast.error(t("dashboard.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -421,10 +424,10 @@ const DashboardPage = () => {
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-sm font-medium text-cyan-700">Monitoring Command Center</p>
-                <h1 className="mt-1 text-2xl font-semibold text-slate-950">Dashboard</h1>
+                <p className="text-sm font-medium text-cyan-700">{t("dashboard.subtitle")}</p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("dashboard.title")}</h1>
                 <p className="mt-2 max-w-3xl text-sm text-slate-500">
-                  ภาพรวมสุขภาพ monitor, incident ที่เปิดอยู่, กลุ่มที่มีความเสี่ยง และผลตรวจล่าสุดในจุดเดียว
+                  {t("dashboard.description")}
                 </p>
               </div>
 
@@ -435,23 +438,23 @@ const DashboardPage = () => {
                   disabled={isLoading}
                   className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isLoading ? "Refreshing..." : "Refresh"}
+                  {isLoading ? t("dashboard.refreshing") : t("dashboard.refresh")}
                 </button>
                 <Link
                   to="/monitors/new"
                   className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
-                  Add monitor
+                  {t("dashboard.addMonitor")}
                 </Link>
               </div>
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Fleet health</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("dashboard.fleetHealth")}</p>
                 <div className="mt-3 flex items-end gap-3">
                   <p className="text-4xl font-semibold text-slate-950">{healthyPercent}%</p>
-                  <p className="pb-1 text-sm text-slate-500">{summary?.up ?? statusCounts.UP} healthy</p>
+                  <p className="pb-1 text-sm text-slate-500">{t("dashboard.healthy", { count: summary?.up ?? statusCounts.UP })}</p>
                 </div>
                 <HealthBar
                   className="mt-4"
@@ -463,17 +466,17 @@ const DashboardPage = () => {
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Attention required</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("dashboard.attentionRequired")}</p>
                 <p className={["mt-3 text-4xl font-semibold", needsAttention > 0 ? "text-rose-700" : "text-emerald-700"].join(" ")}>
                   {needsAttention}
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
-                  {(summary?.down ?? statusCounts.DOWN)} down, {(summary?.degraded ?? statusCounts.DEGRADED)} degraded
+                  {t("dashboard.downDegraded", { down: summary?.down ?? statusCounts.DOWN, degraded: summary?.degraded ?? statusCounts.DEGRADED })}
                 </p>
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Open incident focus</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("dashboard.incidentFocus")}</p>
                 {activeIncident ? (
                   <>
                     <Link
@@ -482,12 +485,12 @@ const DashboardPage = () => {
                     >
                       {activeIncident.monitor.name}
                     </Link>
-                    <p className="mt-1 text-sm text-rose-700">Open for {formatDuration(activeIncident.startedAt)}</p>
+                    <p className="mt-1 text-sm text-rose-700">{t("dashboard.openFor", { duration: formatDuration(activeIncident.startedAt) })}</p>
                   </>
                 ) : (
                   <>
-                    <p className="mt-3 text-2xl font-semibold text-emerald-700">Clear</p>
-                    <p className="mt-1 text-sm text-slate-500">No open incidents in the queue.</p>
+                    <p className="mt-3 text-2xl font-semibold text-emerald-700">{t("dashboard.clear")}</p>
+                    <p className="mt-1 text-sm text-slate-500">{t("dashboard.noQueueIncidents")}</p>
                   </>
                 )}
               </div>
@@ -497,18 +500,18 @@ const DashboardPage = () => {
           <section className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-slate-300">24h operating signal</p>
+                <p className="text-sm font-medium text-slate-300">{t("dashboard.signal24h")}</p>
                 <p className="mt-2 text-3xl font-semibold">{formatPercent(summary?.uptime24h)}</p>
               </div>
               <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200">
-                Live
+                {t("dashboard.live")}
               </span>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <MetricTile label="Avg response" value={formatResponseTime(summary?.avgResponseTimeMs)} />
-              <MetricTile label="Devices" value={deviceSummary.total} />
-              <MetricTile label="Open incidents" value={summary?.openIncidents ?? incidents.length} />
-              <MetricTile label="Disabled" value={statusCounts.DISABLED} />
+              <MetricTile label={t("dashboard.avgResponse")} value={formatResponseTime(summary?.avgResponseTimeMs)} />
+              <MetricTile label={t("dashboard.devices")} value={deviceSummary.total} />
+              <MetricTile label={t("dashboard.openIncidents")} value={summary?.openIncidents ?? incidents.length} />
+              <MetricTile label={t("dashboard.disabled")} value={statusCounts.DISABLED} />
             </div>
           </section>
         </div>
@@ -519,36 +522,36 @@ const DashboardPage = () => {
           <>
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
-                label="Total monitors"
+                label={t("dashboard.totalMonitors")}
                 value={totalMonitors}
-                detail={`${statusCounts.PENDING} pending checks, ${statusCounts.DISABLED} disabled`}
+                detail={t("dashboard.totalMonitorsDetail", { pending: statusCounts.PENDING, disabled: statusCounts.DISABLED })}
                 tone="slate"
               />
               <SummaryCard
-                label="Healthy now"
+                label={t("dashboard.healthyNow")}
                 value={`${summary?.up ?? statusCounts.UP}/${totalMonitors}`}
-                detail={`${healthyPercent}% of all configured monitors`}
+                detail={t("dashboard.healthyNowDetail", { percent: healthyPercent })}
                 tone="emerald"
               />
               <SummaryCard
-                label="Open incidents"
+                label={t("dashboard.openIncidents")}
                 value={summary?.openIncidents ?? incidents.length}
-                detail={incidents.length > 0 ? "Incident queue needs review" : "No active incidents"}
+                detail={incidents.length > 0 ? t("dashboard.incidentQueueReview") : t("dashboard.noActiveIncidents")}
                 tone={(summary?.openIncidents ?? incidents.length) > 0 ? "rose" : "emerald"}
               />
               <SummaryCard
-                label="Device health"
+                label={t("dashboard.deviceHealth")}
                 value={deviceSummary.total}
-                detail={`${deviceSummary.up} up, ${deviceSummary.degraded} degraded, ${deviceSummary.down} down`}
+                detail={t("dashboard.deviceHealthDetail", { up: deviceSummary.up, degraded: deviceSummary.degraded, down: deviceSummary.down })}
                 tone={deviceSummary.down > 0 ? "rose" : "cyan"}
               />
             </section>
 
             <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
               <Panel
-                title="Status distribution"
-                description="Current state of every monitor"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/monitors">Inventory</Link>}
+                title={t("dashboard.statusDistribution")}
+                description={t("dashboard.currentState")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/monitors">{t("dashboard.viewInventory")}</Link>}
               >
                 <div className="grid gap-4 p-5 sm:grid-cols-[180px_1fr] sm:items-center">
                   <div className="h-44">
@@ -571,7 +574,7 @@ const DashboardPage = () => {
                         </PieChart>
                       </ResponsiveContainer>
                     ) : (
-                      <EmptyState compact title="No monitor data" message="Create monitors to populate this chart." />
+                      <EmptyState compact title={t("dashboard.noMonitorData")} message={t("dashboard.createMonitorsChart")} />
                     )}
                   </div>
                   <div className="space-y-3">
@@ -598,9 +601,9 @@ const DashboardPage = () => {
               </Panel>
 
               <Panel
-                title="Recent response trend"
-                description="Last checks across all monitors"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/results">View results</Link>}
+                title={t("dashboard.responseTrend")}
+                description={t("dashboard.lastChecks")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/results">{t("dashboard.viewResults")}</Link>}
               >
                 <div className="h-64 p-5">
                   {responseTrendData.length > 0 ? (
@@ -627,7 +630,7 @@ const DashboardPage = () => {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <EmptyState compact title="No recent checks" message="Run checks to see response time trends." />
+                    <EmptyState compact title={t("dashboard.noRecentChecks")} message={t("dashboard.runChecksMsg")} />
                   )}
                 </div>
               </Panel>
@@ -635,12 +638,12 @@ const DashboardPage = () => {
 
             <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
               <Panel
-                title="Attention list"
-                description="Down, degraded, or incident-backed monitors"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/monitors">View monitors</Link>}
+                title={t("dashboard.attentionList")}
+                description={t("dashboard.attentionListDesc")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/monitors">{t("dashboard.viewMonitors")}</Link>}
               >
                 {attentionMonitors.length === 0 ? (
-                  <EmptyState title="No urgent monitors" message="All enabled monitors are currently healthy." />
+                  <EmptyState title={t("dashboard.noUrgentMonitors")} message={t("dashboard.allHealthy")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {attentionMonitors.map((monitor) => {
@@ -661,11 +664,11 @@ const DashboardPage = () => {
                             </p>
                           </div>
                           <div className="text-xs text-slate-500">
-                            <p className="font-semibold text-slate-700">24h uptime</p>
+                            <p className="font-semibold text-slate-700">{t("dashboard.uptime24h")}</p>
                             <p>{formatPercent(monitor.uptime24h)}</p>
                           </div>
                           <div className="text-xs text-slate-500">
-                            <p className="font-semibold text-slate-700">Last check</p>
+                            <p className="font-semibold text-slate-700">{t("dashboard.lastCheck")}</p>
                             <p>{formatDateTime(monitor.latestResult?.checkedAt)}</p>
                           </div>
                         </Link>
@@ -676,12 +679,12 @@ const DashboardPage = () => {
               </Panel>
 
               <Panel
-                title="Open incidents"
-                description="Oldest active items first"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/incidents?status=OPEN">View all</Link>}
+                title={t("dashboard.openIncidentPanel")}
+                description={t("dashboard.oldestFirst")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/incidents?status=OPEN">{t("dashboard.viewAll")}</Link>}
               >
                 {incidents.length === 0 ? (
-                  <EmptyState title="No open incidents" message="Nothing is currently waiting for incident handling." />
+                  <EmptyState title={t("dashboard.noOpenIncidentsTitle")} message={t("dashboard.noOpenIncidentsMsg")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {incidents.map((incident) => (
@@ -697,7 +700,7 @@ const DashboardPage = () => {
                           </span>
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                          {incident.message ?? "Incident is open"}
+                          {incident.message ?? t("dashboard.incidentIsOpen")}
                         </p>
                       </Link>
                     ))}
@@ -708,12 +711,12 @@ const DashboardPage = () => {
 
             <section className="grid gap-4 xl:grid-cols-3">
               <Panel
-                title="Group health"
-                description="Business or site-level view"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/groups">Groups</Link>}
+                title={t("dashboard.groupHealth")}
+                description={t("dashboard.businessView")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/groups">{t("dashboard.viewGroups")}</Link>}
               >
                 {groupWidgets.length === 0 ? (
-                  <EmptyState title="No groups yet" message="Create groups to see business or device-level health." />
+                  <EmptyState title={t("dashboard.noGroupsYet")} message={t("dashboard.createGroupsMsg")} />
                 ) : (
                   <div className="space-y-3 p-5">
                     {groupWidgets.map((group) => (
@@ -725,7 +728,7 @@ const DashboardPage = () => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-slate-950">{group.name}</p>
-                            <p className="text-xs text-slate-500">{group.monitorCount} monitors</p>
+                            <p className="text-xs text-slate-500">{t("dashboard.monitorsCount", { count: group.monitorCount })}</p>
                           </div>
                           <span className="text-lg font-semibold text-slate-950">
                             {group.health === null ? "-" : `${group.health}%`}
@@ -739,7 +742,7 @@ const DashboardPage = () => {
                           unknown={group.pending}
                         />
                         <p className="mt-2 text-xs text-slate-500">
-                          {group.up} up, {group.degraded} degraded, {group.down} down
+                          {t("dashboard.upDegradedDown", { up: group.up, degraded: group.degraded, down: group.down })}
                         </p>
                       </Link>
                     ))}
@@ -747,9 +750,9 @@ const DashboardPage = () => {
                 )}
               </Panel>
 
-              <Panel title="Monitor types" description="Inventory coverage by checker">
+              <Panel title={t("dashboard.monitorTypes")} description={t("dashboard.coverageByChecker")}>
                 {typeBreakdown.length === 0 ? (
-                  <EmptyState title="No monitors yet" message="Add monitors to see inventory coverage." />
+                  <EmptyState title={t("dashboard.noMonitorsYet")} message={t("dashboard.addMonitorsMsg")} />
                 ) : (
                   <div className="space-y-4 p-5">
                     {typeBreakdown.map((item, index) => (
@@ -773,9 +776,9 @@ const DashboardPage = () => {
                 )}
               </Panel>
 
-              <Panel title="24h risk ranking" description="Most unstable monitors">
+              <Panel title={t("dashboard.riskRanking")} description={t("dashboard.mostUnstable")}>
                 {topRiskMonitors.length === 0 ? (
-                  <EmptyState title="No risk data yet" message="Recent checks will populate this ranking." />
+                  <EmptyState title={t("dashboard.noRiskData")} message={t("dashboard.populatingMsg")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {topRiskMonitors.map((monitor) => (
@@ -787,7 +790,7 @@ const DashboardPage = () => {
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-950">{monitor.name}</p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {monitor.downCount24h} down / {monitor.checkCount24h} checks
+                            {t("dashboard.downChecks", { down: monitor.downCount24h, total: monitor.checkCount24h })}
                           </p>
                         </div>
                         <span className="shrink-0 text-sm font-semibold text-slate-950">
@@ -801,12 +804,12 @@ const DashboardPage = () => {
             </section>
 
             <Panel
-              title="Recent problem checks"
-              description="Latest non-UP results"
-              action={<Link className="text-sm font-semibold text-cyan-700" to="/results">View results</Link>}
+              title={t("dashboard.recentProblems")}
+              description={t("dashboard.latestNonUp")}
+              action={<Link className="text-sm font-semibold text-cyan-700" to="/results">{t("dashboard.viewResults")}</Link>}
             >
               {recentProblemResults.length === 0 ? (
-                <EmptyState title="No recent failures" message="Latest checks are not reporting down or degraded states." />
+                <EmptyState title={t("dashboard.noRecentFailures")} message={t("dashboard.noFailuresMsg")} />
               ) : (
                 <div className="divide-y divide-slate-100">
                   {recentProblemResults.map((result) => (

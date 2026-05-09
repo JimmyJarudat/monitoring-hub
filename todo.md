@@ -166,6 +166,42 @@
   - Manual clear history
 - [x] Sidebar footer — version badge from `package.json` (build-time injection)
 
+## i18n Translation Progress (EN/TH)
+
+งาน: ไล่แปลทีละเพจ คอมมิตทีละเพจ
+
+### เสร็จแล้ว (committed)
+- [x] Sidebar + Navbar
+- [x] Dashboard (`/dashboard`)
+- [x] Monitors (`/monitors`)
+- [x] Incidents (`/incidents`)
+- [x] Results (`/results`)
+
+### เหลือ (ยังไม่ได้แปล)
+- [ ] Alerts (`/alerts`) ← **ถัดไป** — JSON keys มีแล้วใน en/th.json, แค่ยังไม่แก้ไฟล์ .tsx
+- [ ] Channels (`/channels`) ← JSON keys มีแล้วเช่นกัน
+- [ ] Devices (`/devices`)
+- [ ] Interfaces (`/interfaces`)
+- [ ] Groups (`/groups` + `/groups/:id`)
+- [ ] Credentials (`/credentials`)
+- [ ] Reports (`/reports`)
+- [ ] Status Map (`/status-map`)
+- [ ] System Logs (`/system-logs`)
+- [ ] Scheduled Reports (`/scheduled-reports`)
+- [ ] Settings (`/settings`)
+- [ ] Users (`/users`)
+- [ ] Audit Logs (`/audit-logs`)
+- [ ] Profile (`/profile`)
+- [ ] Login History (`/login-history`)
+- [ ] Change Password (`/change-password`)
+- [ ] Notifications (`/notifications`)
+- [ ] Domain (`/domain`)
+- [ ] API Tokens (`/api-tokens`)
+- [ ] Monitor Detail (`/monitors/:id`)
+- [ ] New Monitor (`/monitors/new`)
+
+---
+
 ## Remaining Known Gaps
 
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
@@ -186,7 +222,7 @@
 
 ### Reports
 - [x] On-demand availability reports
-- [ ] Scheduled availability reports
+- [x] Scheduled availability reports
 
 ## Product Strategy — Take the Best, Cut the Worst
 

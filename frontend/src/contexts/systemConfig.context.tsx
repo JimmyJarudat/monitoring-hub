@@ -13,20 +13,54 @@ import { useApi } from "@/hooks/useApi";
 export type GeneralConfig = { systemName: string; tagline: string; logoText: string; logoUrl: string | null };
 export type AlertingConfig = { incidentReminderIntervalHours: number };
 export type MonitorDefaultsConfig = { intervalSeconds: number; timeoutMs: number };
-export type SecurityConfig = { passwordMinLength: number; sessionDays: number; maxLoginAttempts: number };
+export type SecurityConfig = {
+  passwordMinLength: number;
+  requireLowercase: boolean;
+  requireUppercase: boolean;
+  requireNumber: boolean;
+  requireSpecial: boolean;
+  sessionDays: number;
+  maxLoginAttempts: number;
+};
+export type EmailConfig = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  from: string;
+};
+export type ScheduledReportConfig = {
+  enabled: boolean;
+  time: string;
+  channelIds: string[];
+};
 
 export type SystemConfig = {
   general: GeneralConfig;
   alerting: AlertingConfig;
   monitorDefaults: MonitorDefaultsConfig;
   security: SecurityConfig;
+  email: EmailConfig;
+  scheduledReport: ScheduledReportConfig;
 };
 
 const DEFAULTS: SystemConfig = {
   general: { systemName: "Monitoring Hub", tagline: "Lightweight Monitor", logoText: "MH", logoUrl: null },
   alerting: { incidentReminderIntervalHours: 24 },
   monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
-  security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+  security: {
+    passwordMinLength: 8,
+    requireLowercase: false,
+    requireUppercase: false,
+    requireNumber: false,
+    requireSpecial: false,
+    sessionDays: 30,
+    maxLoginAttempts: 10,
+  },
+  email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
+  scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
 };
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };

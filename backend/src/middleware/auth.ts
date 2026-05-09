@@ -3,6 +3,7 @@ import { jwt } from "@elysiajs/jwt";
 import { decodeJwt } from "jose";
 import { config } from "../config";
 import prisma from "../lib/prisma";
+import { hashApiToken } from "../lib/apiToken";
 
 export class AuthError extends Error {
   status: number;
@@ -56,6 +57,26 @@ export const authMiddleware = new Elysia({ name: "authMiddleware" })
     }
 
     const token = authorization.slice(7);
+
+    if (token.startsWith("mh_")) {
+      const hash = hashApiToken(token);
+      const apiToken = await prisma.apiToken.findUnique({
+        where: { tokenHash: hash },
+        include: { user: { select: { id: true, username: true, role: { select: { name: true } } } } },
+      });
+      if (!apiToken) throw new AuthError("API token ไม่ถูกต้อง");
+      if (apiToken.expiresAt && apiToken.expiresAt < new Date()) throw new AuthError("API token หมดอายุแล้ว");
+      void prisma.apiToken.update({ where: { id: apiToken.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
+      return {
+        currentUser: { id: apiToken.user.id, role: apiToken.user.role.name },
+        _reqInfo: {
+          method: request.method,
+          path: new URL(request.url).pathname,
+          username: apiToken.user.username,
+          userId: apiToken.user.id,
+        },
+      };
+    }
 
     let userId: string | undefined;
 

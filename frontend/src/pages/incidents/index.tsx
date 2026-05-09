@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
@@ -72,32 +74,6 @@ type TimeRangePreset = "day" | "week" | "month" | "custom";
 
 const PAGE_SIZE = 50;
 
-const timeRangeOptions: Array<{ label: string; value: TimeRangePreset }> = [
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-  { label: "Custom", value: "custom" },
-];
-
-const statusOptions: Array<{ label: string; value: "ALL" | IncidentStatus }> = [
-  { label: "All incidents", value: "ALL" },
-  { label: "OPEN", value: "OPEN" },
-  { label: "RESOLVED", value: "RESOLVED" },
-];
-
-const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
-  { label: "All types", value: "ALL" },
-  { label: "PING", value: "PING" },
-  { label: "TCP", value: "TCP" },
-  { label: "HTTP", value: "HTTP" },
-  { label: "TLS_CERT", value: "TLS_CERT" },
-  { label: "DNS", value: "DNS" },
-  { label: "SNMP", value: "SNMP" },
-  { label: "SYSTEM", value: "SYSTEM" },
-  { label: "DOCKER", value: "DOCKER" },
-  { label: "DATABASE", value: "DATABASE" },
-];
-
 const presetDurationsMs: Record<Exclude<TimeRangePreset, "custom">, number> = {
   day: 24 * 60 * 60 * 1000,
   week: 7 * 24 * 60 * 60 * 1000,
@@ -122,15 +98,14 @@ const toDateTimeLocalValue = (date: Date) => {
 
 const toIsoFromLocalValue = (value: string) => {
   if (!value) return undefined;
-
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -168,8 +143,22 @@ const getTarget = (monitor: IncidentMonitor) => {
   return "-";
 };
 
+const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
+  { label: "All types", value: "ALL" },
+  { label: "PING", value: "PING" },
+  { label: "TCP", value: "TCP" },
+  { label: "HTTP", value: "HTTP" },
+  { label: "TLS_CERT", value: "TLS_CERT" },
+  { label: "DNS", value: "DNS" },
+  { label: "SNMP", value: "SNMP" },
+  { label: "SYSTEM", value: "SYSTEM" },
+  { label: "DOCKER", value: "DOCKER" },
+  { label: "DATABASE", value: "DATABASE" },
+];
+
 const IncidentsPage = () => {
   const { api, del, patch } = useApi();
+  const { t } = useTranslation();
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -199,6 +188,25 @@ const IncidentsPage = () => {
     RESOLVED: 0,
   });
   const [page, setPage] = useState(1);
+
+  const timeRangeOptions = useMemo(
+    () => [
+      { label: t("incidents.rangeDay"), value: "day" as TimeRangePreset },
+      { label: t("incidents.rangeWeek"), value: "week" as TimeRangePreset },
+      { label: t("incidents.rangeMonth"), value: "month" as TimeRangePreset },
+      { label: t("incidents.rangeCustom"), value: "custom" as TimeRangePreset },
+    ],
+    [t],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { label: t("incidents.statusAll"), value: "ALL" as "ALL" | IncidentStatus },
+      { label: "OPEN", value: "OPEN" as IncidentStatus },
+      { label: "RESOLVED", value: "RESOLVED" as IncidentStatus },
+    ],
+    [t],
+  );
 
   const fetchIncidents = useCallback(
     async (nextPage: number, mode: "replace" | "append") => {
@@ -236,13 +244,13 @@ const IncidentsPage = () => {
           setStatusCounts(response.data.data.statusCounts);
         }
       } catch {
-        toast.error("โหลด incidents ไม่สำเร็จ");
+        toast.error(t("incidents.loadError"));
       } finally {
         setIsLoading(false);
         setIsLoadingMore(false);
       }
     },
-    [api, appliedFrom, appliedTo, groupFilter, statusFilter, typeFilter],
+    [api, appliedFrom, appliedTo, groupFilter, statusFilter, typeFilter, t],
   );
 
   useEffect(() => {
@@ -259,12 +267,12 @@ const IncidentsPage = () => {
         }
         setGroups(response.data.data);
       } catch {
-        toast.error("โหลด groups ไม่สำเร็จ");
+        toast.error(t("monitors.loadGroupsError"));
       }
     };
 
     void loadGroups();
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     const currentValue = searchParams.get("groupId")?.trim() || "ALL";
@@ -297,12 +305,12 @@ const IncidentsPage = () => {
     const to = toIsoFromLocalValue(customTo);
 
     if (!from || !to) {
-      toast.error("กรุณาเลือกช่วงเวลาให้ครบ");
+      toast.error(t("incidents.validationRange"));
       return;
     }
 
     if (new Date(from).getTime() > new Date(to).getTime()) {
-      toast.error("เวลาเริ่มต้นต้องไม่มากกว่าเวลาสิ้นสุด");
+      toast.error(t("incidents.validationRangeOrder"));
       return;
     }
 
@@ -321,10 +329,10 @@ const IncidentsPage = () => {
         return;
       }
 
-      toast.success(status === "RESOLVED" ? "Resolve incident แล้ว" : "Reopen incident แล้ว");
+      toast.success(status === "RESOLVED" ? t("incidents.resolveSuccess") : t("incidents.reopenSuccess"));
       await fetchIncidents(1, "replace");
     } catch {
-      toast.error("อัปเดต incident ไม่สำเร็จ");
+      toast.error(t("incidents.updateError"));
     } finally {
       setBusyId(null);
     }
@@ -332,7 +340,7 @@ const IncidentsPage = () => {
 
   const handleDeleteIncident = async (incident: IncidentRow) => {
     const confirmed = window.confirm(
-      `ต้องการลบ incident ของ ${incident.monitor.name} ที่เริ่มเมื่อ ${formatDateTime(incident.startedAt)} ใช่ไหม`,
+      t("incidents.deleteConfirm", { name: incident.monitor.name, time: formatDateTime(incident.startedAt) }),
     );
 
     if (!confirmed) return;
@@ -347,10 +355,10 @@ const IncidentsPage = () => {
         return;
       }
 
-      toast.success("ลบ incident แล้ว");
+      toast.success(t("incidents.deleteSuccess"));
       await fetchIncidents(1, "replace");
     } catch {
-      toast.error("ลบ incident ไม่สำเร็จ");
+      toast.error(t("incidents.deleteError"));
     } finally {
       setBusyId(null);
     }
@@ -368,19 +376,17 @@ const IncidentsPage = () => {
     if (timeRange === "custom") {
       return `${formatDateTime(appliedFrom)} - ${formatDateTime(appliedTo)}`;
     }
-
-    return timeRangeOptions.find((option) => option.value === timeRange)?.label ?? "Week";
-  }, [appliedFrom, appliedTo, timeRange]);
+    return timeRangeOptions.find((option) => option.value === timeRange)?.label ?? t("incidents.rangeWeek");
+  }, [appliedFrom, appliedTo, timeRange, timeRangeOptions, t]);
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Monitoring</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Incidents</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("incidents.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("incidents.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            ดูเหตุการณ์ล่มหรือผิดปกติที่ควร action แทนการไล่ raw check ทีละแถว ช่วยให้เห็นว่า
-            monitor ไหนเริ่มมีปัญหาเมื่อไร และยังเปิดค้างอยู่หรือไม่
+            {t("incidents.description")}
           </p>
         </div>
 
@@ -390,24 +396,24 @@ const IncidentsPage = () => {
             type="button"
             onClick={() => void fetchIncidents(1, "replace")}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <Link
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             to="/results"
           >
-            View Results
+            {t("incidents.viewResults")}
           </Link>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Displayed", value: summary.total, tone: "text-slate-950" },
-          { label: "OPEN", value: summary.open, tone: "text-rose-700" },
-          { label: "Resolved", value: summary.resolved, tone: "text-emerald-700" },
+          { label: t("incidents.summaryDisplayed"), value: summary.total, tone: "text-slate-950" },
+          { label: t("incidents.summaryOpen"), value: summary.open, tone: "text-rose-700" },
+          { label: t("incidents.summaryResolved"), value: summary.resolved, tone: "text-emerald-700" },
           {
-            label: "Page snapshot",
+            label: t("incidents.summarySnapshot"),
             value: `${statusCounts.OPEN} / ${statusCounts.RESOLVED}`,
             tone: "text-cyan-700",
           },
@@ -423,9 +429,9 @@ const IncidentsPage = () => {
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-950">Filters</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("incidents.filtersTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Current range: <span className="font-medium text-slate-700">{activeRangeLabel}</span>
+                {t("incidents.currentRange")} <span className="font-medium text-slate-700">{activeRangeLabel}</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -453,7 +459,7 @@ const IncidentsPage = () => {
 
           <div className="grid gap-4 lg:grid-cols-4">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Status</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterStatus")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={statusFilter}
@@ -468,7 +474,7 @@ const IncidentsPage = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Monitor type</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterType")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={typeFilter}
@@ -476,20 +482,20 @@ const IncidentsPage = () => {
               >
                 {typeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {option.value === "ALL" ? t("incidents.typeAll") : option.label}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Group</span>
+              <span className="text-sm font-medium text-slate-700">{t("incidents.filterGroup")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={groupFilter}
                 onChange={(event) => setGroupFilter(event.target.value)}
               >
-                <option value="ALL">All groups</option>
+                <option value="ALL">{t("monitors.allGroups")}</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -501,7 +507,7 @@ const IncidentsPage = () => {
             {timeRange === "custom" ? (
               <>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">From</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterFrom")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="datetime-local"
@@ -511,7 +517,7 @@ const IncidentsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">To</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterTo")}</span>
                   <div className="mt-2 flex gap-2">
                     <input
                       className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -524,7 +530,7 @@ const IncidentsPage = () => {
                       type="button"
                       onClick={handleApplyCustomRange}
                     >
-                      Apply
+                      {t("incidents.apply")}
                     </button>
                   </div>
                 </label>
@@ -532,9 +538,9 @@ const IncidentsPage = () => {
             ) : (
               <div className="lg:col-span-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-medium text-slate-700">Quick snapshot</p>
+                  <p className="text-sm font-medium text-slate-700">{t("incidents.quickSnapshot")}</p>
                   <p className="mt-2 text-sm text-slate-500">
-                    Current page incidents:
+                    {t("incidents.pageIncidents")}
                     <span className="ml-2 text-rose-700">OPEN {statusCounts.OPEN}</span>
                     <span className="ml-3 text-emerald-700">RESOLVED {statusCounts.RESOLVED}</span>
                   </p>
@@ -548,33 +554,33 @@ const IncidentsPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Incident queue</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("incidents.queueTitle")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Showing {incidents.length} rows from page {page}
+              {t("incidents.showingRows", { count: incidents.length, page })}
             </p>
           </div>
-          {isLoading ? <p className="text-xs text-slate-400">Loading...</p> : null}
+          {isLoading ? <p className="text-xs text-slate-400">{t("common.loading")}</p> : null}
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Started</th>
-                <th className="px-4 py-3">Monitor</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Duration</th>
-                <th className="px-4 py-3">Resolved</th>
-                <th className="px-4 py-3">Alert rule</th>
-                <th className="px-4 py-3">Message</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3">{t("incidents.colStarted")}</th>
+                <th className="px-4 py-3">{t("incidents.colMonitor")}</th>
+                <th className="px-4 py-3">{t("incidents.colStatus")}</th>
+                <th className="px-4 py-3">{t("incidents.colDuration")}</th>
+                <th className="px-4 py-3">{t("incidents.colResolved")}</th>
+                <th className="px-4 py-3">{t("incidents.colAlertRule")}</th>
+                <th className="px-4 py-3">{t("incidents.colMessage")}</th>
+                <th className="px-4 py-3 text-right">{t("incidents.colAction")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {!isLoading && incidents.length === 0 ? (
                 <tr>
                   <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={8}>
-                    ไม่พบ incident ในช่วงเวลานี้
+                    {t("incidents.noIncidents")}
                   </td>
                 </tr>
               ) : null}
@@ -624,7 +630,7 @@ const IncidentsPage = () => {
                               {severity}
                             </span>
                             <span className="text-xs text-slate-500">
-                              {incident.alertRule.enabled ? "Enabled" : "Disabled"}
+                              {incident.alertRule.enabled ? t("incidents.alertEnabled") : t("incidents.alertDisabled")}
                             </span>
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
@@ -651,7 +657,7 @@ const IncidentsPage = () => {
                               onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
                               disabled={isBusy}
                             >
-                              Resolve
+                              {t("incidents.resolve")}
                             </button>
                           ) : (
                             <button
@@ -660,7 +666,7 @@ const IncidentsPage = () => {
                               onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
                               disabled={isBusy}
                             >
-                              Reopen
+                              {t("incidents.reopen")}
                             </button>
                           )}
 
@@ -670,11 +676,11 @@ const IncidentsPage = () => {
                             onClick={() => void handleDeleteIncident(incident)}
                             disabled={isBusy}
                           >
-                            Delete
+                            {t("common.delete")}
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">Read only</span>
+                        <span className="text-xs text-slate-400">{t("incidents.readOnly")}</span>
                       )}
                     </td>
                   </tr>
@@ -686,7 +692,7 @@ const IncidentsPage = () => {
 
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
           <p className="text-xs text-slate-500">
-            Filter incidents by day, week, month, or any custom incident window
+            {t("incidents.footerHint")}
           </p>
           <button
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -694,7 +700,7 @@ const IncidentsPage = () => {
             onClick={() => void fetchIncidents(page + 1, "append")}
             disabled={!hasMore || isLoading || isLoadingMore}
           >
-            {isLoadingMore ? "Loading..." : hasMore ? "Load more incidents" : "No more incidents"}
+            {isLoadingMore ? t("common.loading") : hasMore ? t("incidents.loadMore") : t("incidents.noMore")}
           </button>
         </div>
       </section>

@@ -1,13 +1,13 @@
 import { randomBytes } from "crypto";
 import prisma from "../lib/prisma";
-
-const REFRESH_TOKEN_EXPIRES_DAYS = 30;
+import { getSystemConfig } from "./systemConfig.service";
 
 export const tokenService = {
   async createRefreshToken(userId: string) {
     const token = randomBytes(64).toString("hex");
+    const { security } = await getSystemConfig();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_DAYS);
+    expiresAt.setDate(expiresAt.getDate() + security.sessionDays);
 
     return prisma.refreshToken.create({
       data: { token, userId, expiresAt },

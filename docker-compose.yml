@@ -65,6 +65,7 @@ services:
       # dev or production
       NODE_ENV: production
       HOST: 0.0.0.0
+      TZ: Asia/Bangkok
 
       # ===== Database =====
       # [A] ใส่ connection string ของ PostgreSQL ที่มีอยู่แล้ว

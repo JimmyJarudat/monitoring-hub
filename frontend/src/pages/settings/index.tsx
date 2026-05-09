@@ -70,7 +70,17 @@ const SYS_DEFAULTS: SystemConfig = {
   general: { systemName: "Monitoring Hub", tagline: "Lightweight Monitor", logoText: "MH", logoUrl: null },
   alerting: { incidentReminderIntervalHours: 24 },
   monitorDefaults: { intervalSeconds: 60, timeoutMs: 10000 },
-  security: { passwordMinLength: 8, sessionDays: 30, maxLoginAttempts: 10 },
+  security: {
+    passwordMinLength: 8,
+    requireLowercase: false,
+    requireUppercase: false,
+    requireNumber: false,
+    requireSpecial: false,
+    sessionDays: 30,
+    maxLoginAttempts: 10,
+  },
+  email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
+  scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
 };
 
 const REMINDER_OPTIONS = [1, 2, 4, 6, 12, 24, 48, 72];
@@ -79,7 +89,6 @@ const TIMEOUT_OPTIONS = [3000, 5000, 10000, 15000, 30000];
 const PW_MIN_OPTIONS = [6, 8, 10, 12, 16, 20];
 const SESSION_OPTIONS = [1, 7, 14, 30, 60, 90, 180, 365];
 const LOGIN_ATTEMPT_OPTIONS = [3, 5, 10, 20, 0];
-
 const SettingsPage = () => {
   const { api } = useApi();
   const { reload: reloadSysConfig } = useSystemConfig();
@@ -87,6 +96,7 @@ const SettingsPage = () => {
   // ── System config state ───────────────────────────────────────
   const [sysConfig, setSysConfig] = useState<SystemConfig>(SYS_DEFAULTS);
   const [sysSaving, setSysSaving] = useState(false);
+  const [emailEditing, setEmailEditing] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoRemoving, setLogoRemoving] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +148,23 @@ const SettingsPage = () => {
       await reloadSysConfig();
     } catch { toast.error("บันทึกไม่สำเร็จ"); }
     finally { setSysSaving(false); }
+  };
+
+  const isEmailConfigured = useMemo(
+    () =>
+      Boolean(
+        sysConfig.email.host.trim() &&
+        sysConfig.email.port &&
+        sysConfig.email.username.trim() &&
+        sysConfig.email.password.trim() &&
+        sysConfig.email.from.trim(),
+      ),
+    [sysConfig.email],
+  );
+
+  const handleSaveEmail = async () => {
+    await saveSysSection({ email: { ...sysConfig.email, enabled: true } }, "Email");
+    setEmailEditing(false);
   };
 
   // ── Retention state ───────────────────────────────────────────
@@ -429,7 +456,7 @@ const SettingsPage = () => {
       </SysSection>
 
       {/* ── Security ────────────────────────────────────────── */}
-      <SysSection title="Security" description="นโยบาย password, session และ login attempt (ใช้เป็น reference — ต้องตรงกับ backend config)">
+      <SysSection title="Security" description="นโยบาย password, session และ login attempt ที่ backend ใช้ตรวจจริง">
         <div className="grid gap-4 sm:grid-cols-3">
           <SysField label="Password ขั้นต่ำ (ตัวอักษร)">
             <select
@@ -461,7 +488,162 @@ const SettingsPage = () => {
             </select>
           </SysField>
         </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-800">Password complexity</p>
+          <p className="mt-1 text-xs text-slate-500">
+            เปิดเงื่อนไขที่ต้องการบังคับใช้ตอนสร้างผู้ใช้, reset password, change password และ forgot password
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <SecurityToggle
+              label="บังคับตัวพิมพ์เล็ก"
+              description="ต้องมี a-z อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireLowercase}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireLowercase: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับตัวพิมพ์ใหญ่"
+              description="ต้องมี A-Z อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireUppercase}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireUppercase: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับตัวเลข"
+              description="ต้องมี 0-9 อย่างน้อย 1 ตัว"
+              checked={sysConfig.security.requireNumber}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireNumber: value } }))}
+            />
+            <SecurityToggle
+              label="บังคับอักขระพิเศษ"
+              description="ต้องมีสัญลักษณ์ เช่น ! @ # $"
+              checked={sysConfig.security.requireSpecial}
+              onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireSpecial: value } }))}
+            />
+          </div>
+        </div>
         <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ security: sysConfig.security }, "Security")} />
+      </SysSection>
+
+      {/* ── Email / Password Reset ─────────────────────────── */}
+      <SysSection title="Email" description="SMTP สำหรับส่งรหัส reset password และอีเมลระบบ">
+        {isEmailConfigured && !emailEditing ? (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-emerald-800">Email configured</p>
+                <p className="mt-1 text-xs text-emerald-700">
+                  ระบบจะใช้ SMTP นี้สำหรับส่งรหัสยืนยัน reset password
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailEditing(true)}
+                className="w-fit rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+              >
+                แก้ไข
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <EmailSettingItem label="SMTP host" value={sysConfig.email.host} />
+              <EmailSettingItem label="SMTP port" value={String(sysConfig.email.port)} />
+              <EmailSettingItem label="Username" value={sysConfig.email.username} />
+              <EmailSettingItem label="Password" value="••••••••" />
+              <EmailSettingItem label="From email" value={sysConfig.email.from} />
+              <EmailSettingItem label="Security" value={sysConfig.email.secure ? "SSL" : "STARTTLS / Plain"} />
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+              {isEmailConfigured
+                ? "แก้ไขค่า SMTP สำหรับส่งรหัส reset password"
+                : "ยังไม่ได้ตั้งค่า SMTP กรอกข้อมูลด้านล่างเพื่อให้ระบบส่งรหัส reset password ทางอีเมลได้"}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SysField label="SMTP host">
+                <input
+                  type="text"
+                  value={sysConfig.email.host}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, host: e.target.value } }))}
+                  placeholder="smtp.example.com"
+                  className={INPUT_CLS}
+                />
+              </SysField>
+              <SysField label="SMTP port">
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={sysConfig.email.port}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, port: Number(e.target.value) } }))}
+                  className={INPUT_CLS}
+                />
+              </SysField>
+              <SysField label="Username">
+                <input
+                  type="text"
+                  value={sysConfig.email.username}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, username: e.target.value } }))}
+                  placeholder="smtp user"
+                  className={INPUT_CLS}
+                />
+              </SysField>
+              <SysField label="Password">
+                <input
+                  type="password"
+                  value={sysConfig.email.password}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, password: e.target.value } }))}
+                  placeholder={sysConfig.email.password ? "••••••••" : "smtp password"}
+                  autoComplete="new-password"
+                  className={INPUT_CLS}
+                />
+              </SysField>
+              <SysField label="From email">
+                <input
+                  type="email"
+                  value={sysConfig.email.from}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, from: e.target.value } }))}
+                  placeholder="monitoring@example.com"
+                  className={INPUT_CLS}
+                />
+              </SysField>
+              <SysField label="Connection security">
+                <select
+                  value={sysConfig.email.secure ? "ssl" : "starttls"}
+                  onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, secure: e.target.value === "ssl" } }))}
+                  className={INPUT_CLS}
+                >
+                  <option value="starttls">STARTTLS / Plain (587)</option>
+                  <option value="ssl">SSL (465)</option>
+                </select>
+              </SysField>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              {isEmailConfigured ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailEditing(false);
+                    void fetchSysConfig();
+                  }}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  ยกเลิก
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={sysSaving}
+                onClick={() => void handleSaveEmail()}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
+              >
+                {sysSaving ? "กำลังบันทึก..." : "บันทึก"}
+              </button>
+            </div>
+          </>
+        )}
       </SysSection>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -742,6 +924,40 @@ const SysField = ({ label, children }: { label: string; children: React.ReactNod
     <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
     {children}
   </label>
+);
+
+const SecurityToggle = ({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) => (
+  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <span>
+      <span className="block text-sm font-medium text-slate-800">{label}</span>
+      <span className="mt-0.5 block text-xs text-slate-500">{description}</span>
+    </span>
+    <input
+      type="checkbox"
+      className="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-200"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+    />
+  </label>
+);
+
+const EmailSettingItem = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+    <p className="mt-1 truncate text-sm font-semibold text-slate-800" title={value}>
+      {value || "-"}
+    </p>
+  </div>
 );
 
 const SysSaveBtn = ({ loading, onClick }: { loading: boolean; onClick: () => void }) => (
