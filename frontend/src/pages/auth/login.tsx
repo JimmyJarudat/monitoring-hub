@@ -220,28 +220,25 @@ const Login = () => {
         <section className="relative hidden overflow-hidden bg-slate-950 text-white lg:block">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.22),transparent_28%),radial-gradient(circle_at_78%_32%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(135deg,#020617_0%,#0f172a_55%,#111827_100%)]" />
           <div className="relative flex h-full flex-col justify-between px-12 py-10">
-            <Link to="/" className="inline-flex w-fit items-center gap-3 text-sm font-semibold text-white">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-cyan-400 text-base font-black text-slate-950">
-                M
-              </span>
+            <Link to="/" className="inline-flex w-fit items-center text-2xl font-semibold text-white">
               Monitoring Hub
             </Link>
 
             <div className="max-w-xl pb-12">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">Operations console</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">Account access</p>
               <h1 className="mt-5 text-5xl font-semibold leading-tight text-white">
-                Sign in to watch every service from one calm control room.
+                Sign in to continue managing your monitoring workspace.
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-slate-300">
-                Monitor uptime, incidents, alerts, reports, and notification channels with a focused dashboard built for daily operations.
+                Use your authorized account to review current service status, acknowledge incidents, and keep notification workflows under control.
               </p>
             </div>
 
             <div className="grid max-w-2xl grid-cols-3 gap-3 pb-2">
               {[
-                ["24/7", "status tracking"],
-                ["Alerts", "channel routing"],
-                ["Audit", "secure access"],
+                ["Secure", "authenticated session"],
+                ["Reset", "email verification"],
+                ["Audit", "login activity"],
               ].map(([value, label]) => (
                 <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-4 backdrop-blur">
                   <p className="text-xl font-semibold text-white">{value}</p>
@@ -255,10 +252,7 @@ const Login = () => {
         <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
           <div className="w-full max-w-md">
             <div className="mb-8 flex items-center justify-between lg:hidden">
-              <Link to="/" className="inline-flex items-center gap-3 text-sm font-semibold text-slate-950">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-slate-950 text-base font-black text-cyan-300">
-                  M
-                </span>
+              <Link to="/" className="inline-flex items-center text-xl font-semibold text-slate-950">
                 Monitoring Hub
               </Link>
             </div>
