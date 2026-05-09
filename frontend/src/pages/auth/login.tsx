@@ -23,7 +23,6 @@ const Login = () => {
       return;
     }
 
-    toast.success("เข้าสู่ระบบสำเร็จ");
     navigate("/dashboard", { replace: true });
   };
 
