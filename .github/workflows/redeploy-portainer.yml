@@ -1,4 +1,4 @@
-name: Deploy Docker
+name: Deploy Portainer
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   deploy:
     name: Deploy dev to main
-    if: contains(github.event.head_commit.message, 're deploy')
+    if: contains(github.event.head_commit.message, 'deploy portainer')
     runs-on: ubuntu-latest
 
     steps:
