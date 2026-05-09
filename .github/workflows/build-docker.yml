@@ -163,12 +163,14 @@ jobs:
           DID_REDEPLOY: ${{ steps.flags.outputs.redeploy }}
         run: |
           if [ "${DID_REDEPLOY}" = "true" ]; then
+            TITLE="🎉 Deploy Completed!"
             PORTAINER_LINE="🚀 Portainer redeployed"
           else
+            TITLE="🐳 Build Completed!"
             PORTAINER_LINE="⏭️ Portainer skipped"
           fi
-          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n%s\n🏷️ Version: %s\n\n🕐 %s' \
-            "${REPO}" "${AUTHOR}" "${MSG}" "${PORTAINER_LINE}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
+          TEXT="$(printf '%s\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n%s\n🏷️ Version: %s\n\n🕐 %s' \
+            "${TITLE}" "${REPO}" "${AUTHOR}" "${MSG}" "${PORTAINER_LINE}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
