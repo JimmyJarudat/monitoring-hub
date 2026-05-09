@@ -73,12 +73,12 @@ const App = () => {
                   >
                     Sign in to continue
                   </Link>
-                  <Link
+                  {/* <Link
                     className="rounded-md border border-slate-700 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-900"
                     to="/dashboard"
                   >
                     View operations dashboard
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
 
