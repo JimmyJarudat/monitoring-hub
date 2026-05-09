@@ -1,4 +1,4 @@
-name: Deploy Docker
+name: Build Docker
 
 on:
   push:
@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy dev to main
-    if: contains(github.event.head_commit.message, 're deploy')
+    name: Build & Deploy
+    if: contains(github.event.head_commit.message, 'build docker')
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +28,17 @@ jobs:
           echo "Found version: $VERSION"
           echo "value=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Check if redeploy requested
+        id: flags
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if echo "${COMMIT_MSG}" | grep -qi "deploy portainer"; then
+            echo "redeploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "redeploy=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Merge dev into main
         id: merge
         env:
@@ -38,7 +49,7 @@ jobs:
           git fetch origin main
           git checkout main
           BEFORE=$(git rev-parse HEAD)
-          CLEAN_MSG=$(echo "${COMMIT_MSG}" | sed 's/re deploy//gi' | xargs)
+          CLEAN_MSG=$(echo "${COMMIT_MSG}" | sed 's/build docker//gi' | sed 's/deploy portainer//gi' | xargs)
           git merge origin/dev --no-ff -X theirs -m "chore: deploy — ${CLEAN_MSG}"
           AFTER=$(git rev-parse HEAD)
           if [ "$BEFORE" = "$AFTER" ]; then
@@ -66,9 +77,15 @@ jobs:
           AUTHOR: ${{ github.event.head_commit.author.name }}
           MSG: ${{ github.event.head_commit.message }}
           VERSION: ${{ steps.version.outputs.value }}
+          WILL_REDEPLOY: ${{ steps.flags.outputs.redeploy }}
         run: |
-          TEXT="$(printf '🚀 Merge Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Starting Docker build...\n🏷️ Version: %s\n\n🕐 %s' \
-            "${REPO}" "${AUTHOR}" "${MSG}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
+          if [ "${WILL_REDEPLOY}" = "true" ]; then
+            NEXT="🐳 Starting Docker build + Portainer redeploy..."
+          else
+            NEXT="🐳 Starting Docker build..."
+          fi
+          TEXT="$(printf '🚀 Merge Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n%s\n🏷️ Version: %s\n\n🕐 %s' \
+            "${REPO}" "${AUTHOR}" "${MSG}" "${NEXT}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -109,7 +126,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Redeploy Portainer Stack
-        if: success() && steps.merge.outputs.has_changes == 'true'
+        if: success() && steps.merge.outputs.has_changes == 'true' && steps.flags.outputs.redeploy == 'true'
         id: redeploy
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
@@ -117,13 +134,11 @@ jobs:
           PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
           PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
         run: |
-          # ดึง stack content
           STACK_CONTENT=$(curl -s -X GET "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}/file" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" | jq '.StackFileContent')
 
           echo "Stack fetched OK"
 
-          # Swarm stack ต้องใช้ endpoint นี้
           RESPONSE=$(curl -s -X PUT "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID}" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
             -H "Content-Type: application/json" \
@@ -131,7 +146,6 @@ jobs:
 
           echo "Response: $RESPONSE"
 
-          # เช็คว่า success
           echo "$RESPONSE" | jq -e '.Id' > /dev/null 2>&1 || { echo "❌ Redeploy failed"; exit 1; }
 
           echo "✅ Portainer redeploy successful"
@@ -146,9 +160,15 @@ jobs:
           AUTHOR: ${{ github.event.head_commit.author.name }}
           MSG: ${{ github.event.head_commit.message }}
           VERSION: ${{ steps.version.outputs.value }}
+          DID_REDEPLOY: ${{ steps.flags.outputs.redeploy }}
         run: |
-          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n🚀 Portainer redeployed\n🏷️ Version: %s\n\n🕐 %s' \
-            "${REPO}" "${AUTHOR}" "${MSG}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
+          if [ "${DID_REDEPLOY}" = "true" ]; then
+            PORTAINER_LINE="🚀 Portainer redeployed"
+          else
+            PORTAINER_LINE="⏭️ Portainer skipped"
+          fi
+          TEXT="$(printf '🎉 Deploy Completed!\n\n📂 Repo: %s\n🌿 dev → main\n👤 %s\n💬 %s\n\n✅ Merged to main\n✅ Recreated dev branch\n🐳 Docker built & pushed\n%s\n🏷️ Version: %s\n\n🕐 %s' \
+            "${REPO}" "${AUTHOR}" "${MSG}" "${PORTAINER_LINE}" "${VERSION}" "$(date '+%H:%M %d/%m/%Y')")"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -H "Content-Type: application/json" \
