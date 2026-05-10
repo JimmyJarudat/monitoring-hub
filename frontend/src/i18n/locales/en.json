@@ -83,6 +83,7 @@
     "enable": "Enable",
     "disable": "Disable",
     "enabled": "Enabled",
+    "disabled": "Disabled",
     "name": "Name",
     "type": "Type",
     "status": "Status",
@@ -253,7 +254,12 @@
     "validationStatusThreshold": "Status threshold must be 1=DOWN, 2=DEGRADED, or 3=UP",
     "validationPctThreshold": "Percent threshold must be between 0-100",
     "validationResponseTime": "Response time must be >= 0",
-    "validationDeviceMonitor": "CPU/RAM/Disk rules require a SYSTEM or SNMP monitor"
+    "validationDeviceMonitor": "CPU/RAM/Disk rules require a SYSTEM or SNMP monitor",
+    "metricStatus": "Status",
+    "metricResponseTime": "Response time",
+    "metricCpu": "CPU threshold",
+    "metricMemory": "RAM threshold",
+    "metricDisk": "Disk threshold"
   },
   "channels": {
     "title": "Notification Channels",

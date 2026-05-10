@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorType = "PING" | "TCP" | "HTTP" | "TLS_CERT" | "DNS" | "SNMP" | "SYSTEM" | "DOCKER" | "DATABASE";
@@ -55,20 +56,20 @@ type RuleForm = {
 
 type MetricOption = {
   value: string;
-  label: string;
+  labelKey: string;
   defaultThreshold: number;
   defaultOperator: AlertOperator;
 };
 
 const baseMetrics: MetricOption[] = [
-  { value: "status", label: "Status", defaultThreshold: 2, defaultOperator: "LT" },
-  { value: "response_time", label: "Response time", defaultThreshold: 1000, defaultOperator: "GT" },
+  { value: "status", labelKey: "alerts.metricStatus", defaultThreshold: 2, defaultOperator: "LT" },
+  { value: "response_time", labelKey: "alerts.metricResponseTime", defaultThreshold: 1000, defaultOperator: "GT" },
 ];
 
 const deviceMetrics: MetricOption[] = [
-  { value: "cpu.used_pct", label: "CPU threshold", defaultThreshold: 85, defaultOperator: "GT" },
-  { value: "memory.used_pct", label: "RAM threshold", defaultThreshold: 85, defaultOperator: "GT" },
-  { value: "disk.used_pct", label: "Disk threshold", defaultThreshold: 90, defaultOperator: "GT" },
+  { value: "cpu.used_pct", labelKey: "alerts.metricCpu", defaultThreshold: 85, defaultOperator: "GT" },
+  { value: "memory.used_pct", labelKey: "alerts.metricMemory", defaultThreshold: 85, defaultOperator: "GT" },
+  { value: "disk.used_pct", labelKey: "alerts.metricDisk", defaultThreshold: 90, defaultOperator: "GT" },
 ];
 
 const operatorLabels: Record<AlertOperator, string> = {
@@ -92,9 +93,6 @@ const channelTypeLabels: Record<ChannelType, string> = {
   TELEGRAM: "Telegram",
   WEBHOOK: "Webhook",
 };
-
-const metricLabel = (metric: string) =>
-  [...baseMetrics, ...deviceMetrics].find((option) => option.value === metric)?.label ?? metric;
 
 const isDeviceMonitor = (monitor?: MonitorOption | null) =>
   monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
@@ -128,6 +126,7 @@ const formatThreshold = (metric: string, threshold: number) => {
 };
 
 const AlertsPage = () => {
+  const { t } = useTranslation();
   const { api } = useApi();
   const [rules, setRules] = useState<AlertRuleRow[]>([]);
   const [monitors, setMonitors] = useState<MonitorOption[]>([]);
@@ -165,11 +164,11 @@ const AlertsPage = () => {
       setMonitors(monitorsRes.data.data);
       setChannels(channelsRes.data.data);
     } catch {
-      toast.error("โหลด alert rules ไม่สำเร็จ");
+      toast.error(t("alerts.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     void loadData();
@@ -191,6 +190,13 @@ const AlertsPage = () => {
   );
 
   const metricOptions = useMemo(() => getMetricOptions(selectedMonitor), [selectedMonitor]);
+  const metricLabel = useCallback(
+    (metric: string) => {
+      const option = [...baseMetrics, ...deviceMetrics].find((item) => item.value === metric);
+      return option ? t(option.labelKey) : metric;
+    },
+    [t],
+  );
 
   const openCreate = (metricValue?: string) => {
     const needsDeviceMonitor = Boolean(metricValue?.endsWith("_pct"));
@@ -199,7 +205,7 @@ const AlertsPage = () => {
       : monitors[0];
 
     if (needsDeviceMonitor && !preferredMonitor) {
-      toast.error("CPU/RAM/Disk rule ต้องใช้ SYSTEM หรือ SNMP monitor");
+      toast.error(t("alerts.validationDeviceMonitor"));
       return;
     }
 
@@ -273,24 +279,24 @@ const AlertsPage = () => {
 
   const validateForm = () => {
     if (!form.monitorId) {
-      toast.error("กรุณาเลือก monitor");
+      toast.error(t("alerts.validationMonitor"));
       return false;
     }
     const threshold = Number(form.threshold);
     if (!Number.isFinite(threshold)) {
-      toast.error("threshold ต้องเป็นตัวเลข");
+      toast.error(t("alerts.validationThreshold"));
       return false;
     }
     if (form.metric === "status" && ![1, 2, 3].includes(threshold)) {
-      toast.error("status threshold ต้องเป็น 1=DOWN, 2=DEGRADED, 3=UP");
+      toast.error(t("alerts.validationStatusThreshold"));
       return false;
     }
     if (form.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
-      toast.error("percent threshold ต้องอยู่ระหว่าง 0-100");
+      toast.error(t("alerts.validationPctThreshold"));
       return false;
     }
     if (form.metric === "response_time" && threshold < 0) {
-      toast.error("response time ต้องมากกว่าหรือเท่ากับ 0");
+      toast.error(t("alerts.validationResponseTime"));
       return false;
     }
     return true;
@@ -322,11 +328,11 @@ const AlertsPage = () => {
         return;
       }
 
-      toast.success(editing ? "อัปเดต alert rule แล้ว" : "สร้าง alert rule แล้ว");
+      toast.success(editing ? t("alerts.updateSuccess") : t("alerts.createSuccess"));
       closeModal();
       await loadData();
     } catch {
-      toast.error("บันทึก alert rule ไม่สำเร็จ");
+      toast.error(t("alerts.saveError"));
     } finally {
       setSaving(false);
     }
@@ -342,7 +348,7 @@ const AlertsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success("ส่งแจ้งเตือนแล้ว");
+      toast.success(t("alerts.notifySuccess"));
     } catch (error) {
       const apiMessage =
         error &&
@@ -357,7 +363,7 @@ const AlertsPage = () => {
         typeof (error.response.data as { message?: unknown }).message === "string"
           ? (error.response.data as { message: string }).message
           : null;
-      toast.error(apiMessage ?? "ส่งแจ้งเตือนไม่สำเร็จ");
+      toast.error(apiMessage ?? t("alerts.notifyError"));
     } finally {
       setNotifyingId(null);
     }
@@ -373,15 +379,15 @@ const AlertsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success(!rule.enabled ? "เปิดใช้งาน rule แล้ว" : "ปิดใช้งาน rule แล้ว");
+      toast.success(!rule.enabled ? t("alerts.enableSuccess") : t("alerts.disableSuccess"));
       await loadData();
     } catch {
-      toast.error("เปลี่ยนสถานะ rule ไม่สำเร็จ");
+      toast.error(t("alerts.toggleError"));
     }
   };
 
   const handleDelete = async (rule: AlertRuleRow) => {
-    if (!window.confirm(`ต้องการลบ rule ${metricLabel(rule.metric)} ของ "${rule.monitor.name}" ใช่ไหม`)) return;
+    if (!window.confirm(t("alerts.deleteConfirm", { metric: metricLabel(rule.metric), name: rule.monitor.name }))) return;
 
     try {
       const res = await api.delete<ApiResponse<{ message: string }>>(
@@ -391,10 +397,10 @@ const AlertsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success("ลบ alert rule แล้ว");
+      toast.success(t("alerts.deleteSuccess"));
       await loadData();
     } catch {
-      toast.error("ลบ alert rule ไม่สำเร็จ");
+      toast.error(t("alerts.deleteError"));
     }
   };
 
@@ -402,10 +408,10 @@ const AlertsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Alerting</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Alert Rules</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("alerts.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("alerts.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            ตั้งเงื่อนไขและช่องทางแจ้งเตือนแยกตาม monitor ได้จากหน้ารวมนี้
+            {t("alerts.description")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -414,7 +420,7 @@ const AlertsPage = () => {
             onClick={() => void loadData()}
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <button
             type="button"
@@ -422,24 +428,24 @@ const AlertsPage = () => {
             disabled={monitors.length === 0}
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            New rule
+            {t("alerts.newRule")}
           </button>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-4">
-        <SummaryCard label="Total rules" value={summary.total} tone="text-slate-950" />
-        <SummaryCard label="Enabled" value={summary.enabled} tone="text-emerald-700" />
-        <SummaryCard label="Open incidents" value={summary.open} tone="text-rose-700" />
-        <SummaryCard label="Device rules" value={summary.device} tone="text-cyan-700" />
+        <SummaryCard label={t("alerts.summaryTotal")} value={summary.total} tone="text-slate-950" />
+        <SummaryCard label={t("alerts.summaryEnabled")} value={summary.enabled} tone="text-emerald-700" />
+        <SummaryCard label={t("alerts.summaryOpenIncidents")} value={summary.open} tone="text-rose-700" />
+        <SummaryCard label={t("alerts.summaryDevice")} value={summary.device} tone="text-cyan-700" />
       </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Quick device thresholds</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("alerts.deviceThresholds")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              ใช้กับ SYSTEM/SNMP monitor สำหรับ CPU, RAM และ Disk
+              {t("alerts.deviceThresholdsDesc")}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -451,7 +457,7 @@ const AlertsPage = () => {
                 disabled={monitors.length === 0}
                 className="rounded-md border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {metric.label}
+                {t(metric.labelKey)}
               </button>
             ))}
           </div>
@@ -460,9 +466,9 @@ const AlertsPage = () => {
 
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-950">Configured alert rules</h2>
+          <h2 className="text-sm font-semibold text-slate-950">{t("alerts.rulesTitle")}</h2>
           <p className="mt-1 text-xs text-slate-500">
-            {loading ? "Loading..." : `${rules.length} rules`}
+            {loading ? t("common.loading") : t("alerts.rulesCount", { count: rules.length })}
           </p>
         </div>
 
@@ -470,19 +476,19 @@ const AlertsPage = () => {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Monitor</th>
-                <th className="px-4 py-3">Rule</th>
-                <th className="px-4 py-3">Channels</th>
-                <th className="px-4 py-3">State</th>
-                <th className="px-4 py-3">Incident</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3">{t("alerts.colMonitor")}</th>
+                <th className="px-4 py-3">{t("alerts.colRule")}</th>
+                <th className="px-4 py-3">{t("alerts.colChannels")}</th>
+                <th className="px-4 py-3">{t("alerts.colState")}</th>
+                <th className="px-4 py-3">{t("alerts.colIncident")}</th>
+                <th className="px-4 py-3 text-right">{t("alerts.colAction")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {!loading && rules.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
-                    ยังไม่มี alert rule
+                    {t("alerts.noRules")}
                   </td>
                 </tr>
               ) : null}
@@ -497,7 +503,7 @@ const AlertsPage = () => {
                       {rule.monitor.name}
                     </Link>
                     <p className="mt-1 text-xs text-slate-500">
-                      {rule.monitor.type} · {rule.monitor.enabled ? "monitor enabled" : "monitor disabled"}
+                      {rule.monitor.type} · {rule.monitor.enabled ? t("alerts.monitorEnabled") : t("alerts.monitorDisabled")}
                     </p>
                   </td>
                   <td className="px-4 py-3">
@@ -508,7 +514,7 @@ const AlertsPage = () => {
                   </td>
                   <td className="px-4 py-3">
                     {rule.channels.length === 0 ? (
-                      <span className="text-xs text-slate-400">All enabled channels</span>
+                      <span className="text-xs text-slate-400">{t("alerts.allChannels")}</span>
                     ) : (
                       <div className="flex max-w-sm flex-wrap gap-1">
                         {rule.channels.map(({ channel }) => (
@@ -534,7 +540,7 @@ const AlertsPage = () => {
                           rule.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
                         }`}
                       >
-                        {rule.enabled ? "Enabled" : "Disabled"}
+                        {rule.enabled ? t("common.enabled") : t("common.disabled")}
                       </span>
                     </div>
                   </td>
@@ -544,7 +550,7 @@ const AlertsPage = () => {
                         {rule.openIncident.message}
                       </p>
                     ) : (
-                      <span className="text-xs text-slate-400">No open incident</span>
+                      <span className="text-xs text-slate-400">{t("alerts.noOpenIncident")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -556,7 +562,7 @@ const AlertsPage = () => {
                           onClick={() => void handleNotifyNow(rule)}
                           className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
                         >
-                          {notifyingId === rule.id ? "Sending..." : "Notify"}
+                          {notifyingId === rule.id ? t("alerts.sending") : t("alerts.notify")}
                         </button>
                       ) : null}
                       <button
@@ -564,21 +570,21 @@ const AlertsPage = () => {
                         onClick={() => void handleToggleRule(rule)}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
-                        {rule.enabled ? "Disable" : "Enable"}
+                        {rule.enabled ? t("common.disable") : t("common.enable")}
                       </button>
                       <button
                         type="button"
                         onClick={() => openEdit(rule)}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         type="button"
                         onClick={() => void handleDelete(rule)}
                         className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
                       >
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </div>
                   </td>
@@ -594,23 +600,23 @@ const AlertsPage = () => {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
-                {editing ? "Edit alert rule" : "Create alert rule"}
+                {editing ? t("alerts.editTitle") : t("alerts.createTitle")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                เลือก monitor, threshold และ channel ที่ต้องการให้แจ้งเตือน
+                {t("alerts.modalDesc")}
               </p>
             </div>
 
             <div className="grid gap-4 p-5">
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Monitor</span>
+                <span className="text-sm font-medium text-slate-700">{t("alerts.fieldMonitor")}</span>
                 <select
                   value={form.monitorId}
                   onChange={(event) => handleMonitorChange(event.target.value)}
                   disabled={Boolean(editing)}
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:bg-slate-100"
                 >
-                  {monitors.length === 0 ? <option value="">ยังไม่มี monitor</option> : null}
+                  {monitors.length === 0 ? <option value="">{t("alerts.noMonitors")}</option> : null}
                   {monitors.map((monitor) => (
                     <option key={monitor.id} value={monitor.id}>
                       {monitor.name} ({monitor.type})
@@ -621,7 +627,7 @@ const AlertsPage = () => {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Metric</span>
+                  <span className="text-sm font-medium text-slate-700">{t("alerts.fieldMetric")}</span>
                   <select
                     value={form.metric}
                     onChange={(event) => handleMetricChange(event.target.value)}
@@ -629,14 +635,14 @@ const AlertsPage = () => {
                   >
                     {metricOptions.map((metric) => (
                       <option key={metric.value} value={metric.value}>
-                        {metric.label}
+                        {t(metric.labelKey)}
                       </option>
                     ))}
                   </select>
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Severity</span>
+                  <span className="text-sm font-medium text-slate-700">{t("alerts.fieldSeverity")}</span>
                   <select
                     value={form.severity}
                     onChange={(event) =>
@@ -653,7 +659,7 @@ const AlertsPage = () => {
 
               <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Operator</span>
+                  <span className="text-sm font-medium text-slate-700">{t("alerts.fieldOperator")}</span>
                   <select
                     value={form.operator}
                     onChange={(event) =>
@@ -661,14 +667,14 @@ const AlertsPage = () => {
                     }
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   >
-                    <option value="GT">greater than</option>
-                    <option value="LT">less than</option>
-                    <option value="EQ">equals</option>
-                    <option value="NEQ">not equals</option>
+                    <option value="GT">{t("alerts.opGt")}</option>
+                    <option value="LT">{t("alerts.opLt")}</option>
+                    <option value="EQ">{t("alerts.opEq")}</option>
+                    <option value="NEQ">{t("alerts.opNeq")}</option>
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Threshold</span>
+                  <span className="text-sm font-medium text-slate-700">{t("alerts.fieldThreshold")}</span>
                   <input
                     type="number"
                     value={form.threshold}
@@ -687,15 +693,15 @@ const AlertsPage = () => {
 
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-slate-700">Notification channels</span>
+                  <span className="text-sm font-medium text-slate-700">{t("alerts.fieldChannels")}</span>
                   <Link className="text-xs font-semibold text-cyan-700 hover:text-cyan-800" to="/channels">
-                    Manage channels
+                    {t("alerts.manageChannels")}
                   </Link>
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {channels.length === 0 ? (
                     <div className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-500">
-                      ยังไม่มี channel ถ้าไม่เลือก rule จะส่งไปทุก enabled channel เมื่อมีการตั้งค่า channel แล้ว
+                      {t("alerts.noChannelsHint")}
                     </div>
                   ) : null}
                   {channels.map((channel) => (
@@ -713,7 +719,7 @@ const AlertsPage = () => {
                         {channel.name} · {channelTypeLabels[channel.type]}
                       </span>
                       <span className={`text-xs ${channel.enabled ? "text-emerald-600" : "text-slate-400"}`}>
-                        {channel.enabled ? "on" : "off"}
+                        {channel.enabled ? t("common.enabled") : t("common.disabled")}
                       </span>
                     </label>
                   ))}
@@ -727,7 +733,7 @@ const AlertsPage = () => {
                   onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                 />
-                Enable rule
+                {t("alerts.enableRule")}
               </label>
             </div>
 
@@ -737,7 +743,7 @@ const AlertsPage = () => {
                 onClick={closeModal}
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -745,7 +751,7 @@ const AlertsPage = () => {
                 onClick={() => void handleSave()}
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
-                {saving ? "Saving..." : editing ? "Save changes" : "Create rule"}
+                {saving ? t("alerts.saving") : editing ? t("common.save") : t("alerts.createRule")}
               </button>
             </div>
           </div>

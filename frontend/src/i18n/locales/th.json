@@ -83,6 +83,7 @@
     "enable": "เปิดใช้งาน",
     "disable": "ปิดใช้งาน",
     "enabled": "เปิดใช้งาน",
+    "disabled": "ปิดใช้งาน",
     "name": "ชื่อ",
     "type": "ประเภท",
     "status": "สถานะ",
@@ -253,7 +254,12 @@
     "validationStatusThreshold": "status threshold ต้องเป็น 1=DOWN, 2=DEGRADED, 3=UP",
     "validationPctThreshold": "percent threshold ต้องอยู่ระหว่าง 0-100",
     "validationResponseTime": "response time ต้องมากกว่าหรือเท่ากับ 0",
-    "validationDeviceMonitor": "CPU/RAM/Disk rule ต้องใช้ SYSTEM หรือ SNMP monitor"
+    "validationDeviceMonitor": "CPU/RAM/Disk rule ต้องใช้ SYSTEM หรือ SNMP monitor",
+    "metricStatus": "สถานะ",
+    "metricResponseTime": "เวลา response",
+    "metricCpu": "เกณฑ์ CPU",
+    "metricMemory": "เกณฑ์ RAM",
+    "metricDisk": "เกณฑ์ Disk"
   },
   "channels": {
     "title": "ช่องทางแจ้งเตือน",

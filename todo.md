@@ -176,10 +176,10 @@
 - [x] Monitors (`/monitors`)
 - [x] Incidents (`/incidents`)
 - [x] Results (`/results`)
+- [x] Alerts (`/alerts`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Alerts (`/alerts`) ← **ถัดไป** — JSON keys มีแล้วใน en/th.json, แค่ยังไม่แก้ไฟล์ .tsx
-- [ ] Channels (`/channels`) ← JSON keys มีแล้วเช่นกัน
+- [ ] Channels (`/channels`) ← **ถัดไป** — JSON keys มีแล้วเช่นกัน
 - [ ] Devices (`/devices`)
 - [ ] Interfaces (`/interfaces`)
 - [ ] Groups (`/groups` + `/groups/:id`)
