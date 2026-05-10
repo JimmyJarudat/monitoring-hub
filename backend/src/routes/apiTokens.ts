@@ -61,9 +61,9 @@ export const apiTokenRoutes = new Elysia({ prefix: "/api-tokens" })
       const existing = await prisma.apiToken.findFirst({
         where: { id: params.id, userId: currentUser.id },
       });
-      if (!existing) return fail("ไม่พบ API token", 404);
+      if (!existing) return fail("API token not found.");
       await prisma.apiToken.delete({ where: { id: params.id } });
-      return ok({ message: "ยกเลิก API token แล้ว" });
+      return ok({ message: "API token has been revoked." });
     },
     { params: t.Object({ id: t.String() }) },
   );

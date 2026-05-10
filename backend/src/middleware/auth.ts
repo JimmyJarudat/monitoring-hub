@@ -64,8 +64,8 @@ export const authMiddleware = new Elysia({ name: "authMiddleware" })
         where: { tokenHash: hash },
         include: { user: { select: { id: true, username: true, role: { select: { name: true } } } } },
       });
-      if (!apiToken) throw new AuthError("API token ไม่ถูกต้อง");
-      if (apiToken.expiresAt && apiToken.expiresAt < new Date()) throw new AuthError("API token หมดอายุแล้ว");
+      if (!apiToken) throw new AuthError("API token Invalid API token.");
+      if (apiToken.expiresAt && apiToken.expiresAt < new Date()) throw new AuthError("API token has expired.");
       void prisma.apiToken.update({ where: { id: apiToken.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
       return {
         currentUser: { id: apiToken.user.id, role: apiToken.user.role.name },
@@ -84,22 +84,22 @@ export const authMiddleware = new Elysia({ name: "authMiddleware" })
       const decoded = decodeJwt(token);
       userId = decoded.sub as string | undefined;
       if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-        throw new AuthError("Token หมดอายุแล้ว กรุณา refresh token");
+        throw new AuthError("Token has expired. Please refresh your token.");
       }
     } catch (e) {
       if (e instanceof AuthError) throw e;
-      throw new AuthError("Token ไม่ถูกต้อง");
+      throw new AuthError("Invalid API token.");
     }
 
     let payload: Awaited<ReturnType<typeof jwt.verify>>;
     try {
       payload = await jwt.verify(token);
     } catch {
-      throw new AuthError("Token ไม่ถูกต้อง (signature ผิดพลาด)");
+      throw new AuthError("Invalid token (signature verification failed).");
     }
 
     if (!payload) {
-      throw new AuthError("Token ไม่ถูกต้อง (signature ผิดพลาด)");
+      throw new AuthError("Invalid token (signature verification failed).");
     }
 
     const user = await prisma.user.findUnique({
@@ -107,7 +107,7 @@ export const authMiddleware = new Elysia({ name: "authMiddleware" })
       select: { id: true, username: true, role: { select: { name: true } } },
     });
 
-    if (!user) throw new AuthError("ไม่พบผู้ใช้");
+    if (!user) throw new AuthError("User not found.");
 
     return {
       currentUser: { id: user.id, role: user.role.name },

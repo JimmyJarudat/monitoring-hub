@@ -38,7 +38,7 @@ const resolveTarget = (config: TlsConfig) => {
     };
   }
 
-  throw new Error("TLS certificate monitor ต้องระบุ config.url หรือ config.host");
+  throw new Error("TLS certificate monitor requires either config.url or config.host to be specified.");
 };
 
 export async function tlsCheck(config: TlsConfig): Promise<CheckResult> {
@@ -88,7 +88,7 @@ export async function tlsCheck(config: TlsConfig): Promise<CheckResult> {
           resolve({
             status: "DOWN",
             responseTimeMs: Date.now() - start,
-            message: "ไม่พบ certificate จากปลายทาง",
+            message: "No certificate found from the target endpoint.",
           });
           return;
         }
@@ -102,10 +102,10 @@ export async function tlsCheck(config: TlsConfig): Promise<CheckResult> {
 
         if (daysRemaining <= 0) {
           status = "DOWN";
-          message = `certificate หมดอายุแล้ว ${Math.abs(daysRemaining)} วัน`;
+          message = `Certificate has expired ${Math.abs(daysRemaining)} days ago`;
         } else if (daysRemaining <= warningDays) {
           status = "DEGRADED";
-          message = `certificate จะหมดอายุใน ${daysRemaining} วัน`;
+          message = `Certificate will expire in ${daysRemaining} days.`;
         }
 
         cleanup();

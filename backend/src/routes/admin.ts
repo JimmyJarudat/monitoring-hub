@@ -198,7 +198,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     async ({ body, currentUser }) => {
       requireAdminRole(currentUser.role);
       await saveRetentionConfig(body);
-      return ok({ message: "บันทึกการตั้งค่าสำเร็จ" });
+      return ok({ message: "Settings saved successfully." });
     },
     {
       body: t.Object({
@@ -216,7 +216,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       const summary = await runRetentionCleanup();
       return ok(summary);
     } catch (error) {
-      return fail("Cleanup ล้มเหลว: " + String(error));
+      return fail("Cleanup failed.: " + String(error));
     }
   })
   .post(
@@ -229,7 +229,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
         const stats = await getRetentionStats();
         return ok({ summary, stats });
       } catch (error) {
-        return fail("ล้างข้อมูลไม่สำเร็จ: " + String(error));
+        return fail("Failed to clear data.: " + String(error));
       }
     },
     {
@@ -257,7 +257,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       } else {
         await saveSystemConfig(rest);
       }
-      return ok({ message: "บันทึกการตั้งค่าสำเร็จ" });
+      return ok({ message: "Settings saved successfully." });
     },
     {
       body: t.Partial(
@@ -319,7 +319,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       }
       if (file.size > 2 * 1024 * 1024) {
         set.status = 400;
-        return fail("ไฟล์ต้องไม่เกิน 2 MB");
+        return fail("File size must not exceed 2 MB.");
       }
 
       await mkdir("uploads", { recursive: true });
@@ -348,5 +348,5 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
       try { await unlink(`uploads/${filename}`); } catch {}
     }
     await saveSystemConfig({ general: { ...current.general, logoUrl: null } });
-    return ok({ message: "ลบโลโก้แล้ว" });
+    return ok({ message: "Logo removed successfully." });
   });

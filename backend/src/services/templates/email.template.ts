@@ -121,7 +121,7 @@ export const buildEmailTestMessage = (data: TestTemplateData): EmailTemplateOutp
 
   const bodyHtml = `
     <div style="font-size:14px;color:#334155;margin-bottom:16px;">
-      การทดสอบช่องทางแจ้งเตือนสำเร็จแล้ว
+      Notification channel test completed successfully.
     </div>
     <table width="100%" cellpadding="0" cellspacing="0">
       ${detailRow("Channel", data.channelName)}

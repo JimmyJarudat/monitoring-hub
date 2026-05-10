@@ -116,7 +116,7 @@ async function doCheck(config: DatabaseConfig): Promise<Omit<CheckResult, "respo
       const filename = config.filename ?? config.database;
 
       if (!filename) {
-        return { status: "DOWN", message: "sqlite ต้องระบุ filename หรือ database" };
+        return { status: "DOWN", message: "SQLite requires either a filename or a database to be specified." };
       }
 
       const db = new Database(filename, { readonly: true });
@@ -152,6 +152,6 @@ async function doCheck(config: DatabaseConfig): Promise<Omit<CheckResult, "respo
     }
 
     default:
-      return { status: "DOWN", message: `ไม่รองรับ DB type: ${(config as any).type}` };
+      return { status: "DOWN", message: `Database type is not supported.: ${(config as any).type}` };
   }
 }

@@ -135,7 +135,7 @@ export const notificationRoutes = new Elysia({ prefix: "/notifications" })
       },
       data: { readAt: new Date() },
     });
-    return ok({ message: "อ่านแล้ว" });
+    return ok({ message: "read" });
   })
   .patch("/read-all", async ({ currentUser }) => {
     const result = await prisma.appNotificationRecipient.updateMany({
@@ -157,5 +157,5 @@ export const notificationRoutes = new Elysia({ prefix: "/notifications" })
       },
       data: { dismissedAt: new Date(), readAt: new Date() },
     });
-    return ok({ message: "ซ่อนแล้ว" });
+    return ok({ message: "hidden" });
   });

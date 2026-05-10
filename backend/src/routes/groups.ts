@@ -275,7 +275,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
       if (existing) {
         set.status = 409;
-        return fail("ชื่อกลุ่มนี้ถูกใช้งานแล้ว");
+        return fail("This group name is already in use.");
       }
 
       const monitorIds = Array.from(new Set(body.monitorIds ?? []));
@@ -287,7 +287,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
         if (monitorCount !== monitorIds.length) {
           set.status = 400;
-          return fail("มี monitor บางรายการไม่ถูกต้อง");
+          return fail("Some monitor entries are invalid.");
         }
       }
 
@@ -349,7 +349,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบกลุ่ม");
+        return fail("Group not found.");
       }
 
       const name = body.name.trim();
@@ -361,7 +361,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
         if (duplicate) {
           set.status = 409;
-          return fail("ชื่อกลุ่มนี้ถูกใช้งานแล้ว");
+          return fail("This group name is already in use.");
         }
       }
 
@@ -373,7 +373,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
         if (monitorCount !== monitorIds.length) {
           set.status = 400;
-          return fail("มี monitor บางรายการไม่ถูกต้อง");
+          return fail("Some monitor entries are invalid.");
         }
       }
 
@@ -457,14 +457,14 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบกลุ่ม");
+        return fail("Group not found.");
       }
 
       await prisma.monitorGroup.delete({
         where: { id: params.id },
       });
 
-      return ok({ message: "ลบกลุ่มแล้ว" });
+      return ok({ message: "Group deleted successfully." });
     },
     {
       params: t.Object({ id: t.String() }),

@@ -132,7 +132,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ incident");
+        return fail("Incident not found.");
       }
 
       const data: Prisma.IncidentUpdateInput = {
@@ -192,14 +192,14 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ incident");
+        return fail("Incident not found.");
       }
 
       await prisma.incident.delete({
         where: { id: params.id },
       });
 
-      return ok({ message: "ลบ incident แล้ว" });
+      return ok({ message: "Incident deleted successfully." });
     },
     {
       params: t.Object({ id: t.String() }),

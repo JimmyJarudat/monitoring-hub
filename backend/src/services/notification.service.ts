@@ -144,7 +144,7 @@ export const toStoredChannelConfig = (
     const botToken = normalizeOptionalText(input.botToken);
     const chatId = normalizeOptionalText(input.chatId);
     if (!botToken || !chatId) {
-      throw new Error("Telegram channel ต้องมี botToken และ chatId");
+      throw new Error("Telegram channel requires botToken and chatId");
     }
     return {
       botToken: encryptCredentialSecret(botToken),
@@ -155,7 +155,7 @@ export const toStoredChannelConfig = (
     const channelAccessToken = normalizeOptionalText(input.lineChannelAccessToken);
     const to = normalizeOptionalText(input.lineTo);
     if (!channelAccessToken || !to) {
-      throw new Error("LINE channel ต้องมี channelAccessToken และ to");
+      throw new Error("LINE channel requires channelAccessToken and to");
     }
     return {
       channelAccessToken: encryptCredentialSecret(channelAccessToken),
@@ -171,7 +171,7 @@ export const toStoredChannelConfig = (
     const port = Number(input.emailPort);
     const secure = Boolean(input.emailSecure);
     if (!host || !username || !password || !from || !to || !Number.isFinite(port)) {
-      throw new Error("EMAIL channel ต้องมี host, port, username, password, from, to");
+      throw new Error("EMAIL channel requires host, port, username, password, from, to");
     }
     return {
       host,
@@ -757,7 +757,7 @@ const notifyDeliveryFailure = async (params: {
     type: "DELIVERY",
     severity: "CRITICAL",
     title: "Notification delivery failed",
-    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) ส่งไม่สำเร็จ: ${params.error}`,
+    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) delivery failed: ${params.error}`,
     href: "/audit-logs?action=INCIDENT_NOTIFICATION_RETRY_FAILED",
     entity: "Incident",
     entityId: params.incidentId,
@@ -779,7 +779,7 @@ const notifyDeliveryRecovered = async (params: {
     type: "DELIVERY",
     severity: "SUCCESS",
     title: "Notification retry sent",
-    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) ส่ง retry สำเร็จแล้ว`,
+    message: `${params.channelName ?? "Notification channel"} (${params.channelType ?? "unknown"}) retry delivered successfully`,
     href: "/audit-logs?action=INCIDENT_NOTIFICATION_RETRY_SENT",
     entity: "Incident",
     entityId: params.incidentId,
@@ -954,7 +954,7 @@ export const notifyIncidentNow = async (params: {
       });
 
   if (channels.length === 0) {
-    throw new Error("ไม่มี enabled notification channel ที่ผูกกับ rule นี้ และไม่มี global channel ที่เปิดใช้งาน");
+    throw new Error("No enabled notification channel is linked to this rule and no global channel is enabled");
   }
 
   const content = buildIncidentContent({
@@ -979,14 +979,14 @@ export const notifyIncidentNow = async (params: {
   );
 
   if (errors.length > 0) {
-    throw new Error(`ส่งไม่สำเร็จ: ${errors.join(" | ")}`);
+    throw new Error(`Delivery failed: ${errors.join(" | ")}`);
   }
 };
 
 export const testNotificationChannel = async (channelId: string) => {
   const channel = await prisma.notificationChannel.findUnique({ where: { id: channelId } });
   if (!channel) {
-    throw new Error("ไม่พบ notification channel");
+    throw new Error("Notification channel not found");
   }
 
   const content = buildTestContent({

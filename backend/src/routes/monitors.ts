@@ -75,19 +75,19 @@ const validateAlertRuleInput = (
   monitorType: MonitorType,
   body: { metric: string; threshold: number },
 ) => {
-  if (!allowedAlertMetrics.has(body.metric)) return "metric นี้ยังไม่รองรับ";
-  if (!Number.isFinite(body.threshold)) return "threshold ต้องเป็นตัวเลข";
+  if (!allowedAlertMetrics.has(body.metric)) return "metric This metric is not supported yet.";
+  if (!Number.isFinite(body.threshold)) return "Threshold must be a number.";
   if (body.metric === "status" && ![1, 2, 3].includes(body.threshold)) {
-    return "status threshold ต้องเป็น 1=DOWN, 2=DEGRADED, 3=UP";
+    return "Status threshold must be one of the following values: 1 = DOWN, 2 = DEGRADED, 3 = UP.";
   }
   if (body.metric === "response_time" && body.threshold < 0) {
-    return "response_time threshold ต้องมากกว่าหรือเท่ากับ 0";
+    return "Response time threshold must be greater than or equal to 0.";
   }
   if (body.metric.endsWith("_pct")) {
     if (monitorType !== "SYSTEM" && monitorType !== "SNMP") {
-      return "CPU/RAM/Disk rule ใช้ได้กับ SYSTEM หรือ SNMP monitor เท่านั้น";
+      return "CPU/RAM/Disk rules can only be used with SYSTEM or SNMP monitors.";
     }
-    if (body.threshold < 0 || body.threshold > 100) return "percent threshold ต้องอยู่ระหว่าง 0-100";
+    if (body.threshold < 0 || body.threshold > 100) return "percent threshold must be 0-100";
   }
   return null;
 };
@@ -105,7 +105,7 @@ const syncAlertRuleChannels = async (
   });
 
   if (existingChannels.length !== uniqueChannelIds.length) {
-    throw new Error("มี notification channel ที่ไม่พบในระบบ");
+    throw new Error("Some notification channels were not found in the system.");
   }
 
   await tx.alertRuleChannel.deleteMany({ where: { alertRuleId } });
@@ -151,12 +151,12 @@ const validateCredentialBinding = async (
   });
 
   if (!credential) {
-    return "ไม่พบ credential ที่เลือก";
+    return "The selected credential was not found.";
   }
 
   const compatibleTypes = getCompatibleCredentialTypes(type, config);
   if (!compatibleTypes.includes(credential.type as CredentialType)) {
-    return `credential "${credential.name}" ใช้กับ monitor ประเภทนี้ไม่ได้`;
+    return `Credential "${credential.name}" is not compatible with this monitor type`;
   }
 
   return null;
@@ -164,15 +164,15 @@ const validateCredentialBinding = async (
 
 const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
   if (type === "PING" && !config.host) {
-    return "PING monitor ต้องระบุ config.host";
+    return "PING monitor requires config.host";
   }
 
   if (type === "TCP" && (!config.host || !config.port)) {
-    return "TCP monitor ต้องระบุ config.host และ config.port";
+    return "TCP monitor requires config.host and config.port";
   }
 
   if (type === "HTTP" && !config.url) {
-    return "HTTP monitor ต้องระบุ config.url";
+    return "HTTP monitor requires config.url";
   }
 
   if (
@@ -180,37 +180,37 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
     !(typeof config.url === "string" && config.url.trim()) &&
     !(typeof config.host === "string" && config.host.trim())
   ) {
-    return "TLS certificate monitor ต้องระบุ config.url หรือ config.host";
+    return "TLS certificate monitor requires config.url or config.host";
   }
 
   if (type === "DNS" && !(typeof config.host === "string" && config.host.trim())) {
-    return "DNS monitor ต้องระบุ config.host";
+    return "DNS monitor requires config.host";
   }
 
   if (type === "SNMP" && !(typeof config.host === "string" && config.host.trim())) {
-    return "SNMP monitor ต้องระบุ config.host";
+    return "SNMP monitor requires config.host";
   }
 
   if (type === "SYSTEM" && !(typeof config.host === "string" && config.host.trim())) {
-    return "SYSTEM monitor ต้องระบุ config.host";
+    return "SYSTEM monitor requires config.host";
   }
 
   if (type === "DOCKER" && (!config.portainerUrl || !config.apiKey || !config.endpointId)) {
-    return "DOCKER monitor ต้องระบุ config.portainerUrl, config.apiKey และ config.endpointId";
+    return "DOCKER monitor requires config.portainerUrl, config.apiKey and config.endpointId";
   }
 
   if (type === "DATABASE") {
     if (typeof config.type !== "string") {
-      return "DATABASE monitor ต้องระบุ config.type";
+      return "DATABASE monitor requires config.type";
     }
 
     if (!databaseTypes.includes(config.type as (typeof databaseTypes)[number])) {
-      return `DATABASE monitor ไม่รองรับ config.type: ${config.type}`;
+      return `DATABASE monitor does not support config.type: ${config.type}`;
     }
 
     if (config.type === "sqlite") {
       if (!config.filename && !config.database) {
-        return "SQLite monitor ต้องระบุ config.filename หรือ config.database";
+        return "SQLite monitor requires config.filename or config.database";
       }
 
       return null;
@@ -221,7 +221,7 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
     }
 
     if (!config.host || !config.port) {
-      return "DATABASE monitor ต้องระบุ config.host และ config.port";
+      return "DATABASE monitor requires config.host and config.port";
     }
   }
 
@@ -457,7 +457,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       const requestedLimit = Number(query.limit ?? 5000);
@@ -579,7 +579,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!monitor) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       const hasMoreResults = monitor.results.length > resultsLimit;
@@ -606,7 +606,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!isMonitorConfig(body.config)) {
         set.status = 400;
-        return fail("config ต้องเป็น object");
+        return fail("config must be an object");
       }
 
       const configError = validateMonitorConfig(body.type, body.config);
@@ -639,7 +639,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         type: "MONITOR",
         severity: "INFO",
         title: "Monitor created",
-        message: `เพิ่ม monitor ใหม่: ${monitor.name} (${monitor.type})`,
+        message: `New monitor added: ${monitor.name} (${monitor.type})`,
         href: `/monitors/${monitor.id}`,
         entity: "Monitor",
         entityId: monitor.id,
@@ -668,12 +668,12 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       if (bodyConfig !== undefined && !isMonitorConfig(bodyConfig)) {
         set.status = 400;
-        return fail("config ต้องเป็น object");
+        return fail("config must be an object");
       }
 
       const type = (body.type ?? existing.type) as MonitorType;
@@ -681,7 +681,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!isMonitorConfig(config)) {
         set.status = 400;
-        return fail("config ต้องเป็น object");
+        return fail("config must be an object");
       }
 
       const configError = validateMonitorConfig(type, config);
@@ -723,7 +723,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           type: "MONITOR",
           severity: body.enabled ? "INFO" : "WARNING",
           title: body.enabled ? "Monitor enabled" : "Monitor disabled",
-          message: `"${monitor.name}" ถูก${body.enabled ? "เปิด" : "ปิด"}ใช้งาน`,
+          message: `"${monitor.name}" has been ${body.enabled ? "enabled" : "disabled"}`,
           entity: "Monitor",
           entityId: monitor.id,
           href: `/monitors/${monitor.id}`,
@@ -748,7 +748,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       });
       if (!monitor) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       const validationError = validateAlertRuleInput(monitor.type as MonitorType, body);
@@ -780,7 +780,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return ok(rule);
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "สร้าง alert rule ไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to create alert rule");
       }
     },
     {
@@ -799,7 +799,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ alert rule");
+        return fail("Alert rule not found");
       }
 
       const nextMetric = body.metric ?? existing.metric;
@@ -835,7 +835,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return ok(rule);
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "อัปเดต alert rule ไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to update alert rule");
       }
     },
     {
@@ -853,10 +853,10 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ alert rule");
+        return fail("Alert rule not found");
       }
       await prisma.alertRule.delete({ where: { id: existing.id } });
-      return ok({ message: "ลบ alert rule แล้ว" });
+      return ok({ message: "Alert rule deleted" });
     },
     {
       params: t.Object({ id: t.String(), ruleId: t.String() }),
@@ -873,7 +873,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       });
       if (!rule) {
         set.status = 404;
-        return fail("ไม่พบ alert rule");
+        return fail("Alert rule not found");
       }
 
       const openIncident = await prisma.incident.findFirst({
@@ -882,7 +882,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       });
       if (!openIncident) {
         set.status = 400;
-        return fail("ไม่มี open incident สำหรับ rule นี้");
+        return fail("No open incident found for this rule");
       }
 
       try {
@@ -894,10 +894,10 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         });
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "ส่งแจ้งเตือนไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to send notification");
       }
 
-      return ok({ message: "ส่งแจ้งเตือนแล้ว" });
+      return ok({ message: "Notification sent" });
     },
     {
       params: t.Object({ id: t.String(), ruleId: t.String() }),
@@ -912,7 +912,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!monitor) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       const result = await runMonitorCheck(monitor);
@@ -931,7 +931,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ monitor");
+        return fail("Monitor not found");
       }
 
       await prisma.monitor.delete({ where: { id: params.id } });
@@ -940,12 +940,12 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         type: "MONITOR",
         severity: "WARNING",
         title: "Monitor deleted",
-        message: `"${existing.name}" (${existing.type}) ถูกลบโดย admin`,
+        message: `"${existing.name}" (${existing.type}) was deleted by admin`,
         entity: "Monitor",
         entityId: existing.id,
       });
 
-      return ok({ message: "ลบ monitor แล้ว" });
+      return ok({ message: "Monitor deleted" });
     },
     {
       params: t.Object({ id: t.String() }),
