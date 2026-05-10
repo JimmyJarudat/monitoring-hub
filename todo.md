@@ -181,10 +181,10 @@
 - [x] Devices (`/devices`)
 - [x] Interfaces (`/interfaces`)
 - [x] Groups (`/groups` + `/groups/:id`)
+- [x] Credentials (`/credentials`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Credentials (`/credentials`) ← **ถัดไป**
-- [ ] Reports (`/reports`)
+- [ ] Reports (`/reports`) ← **ถัดไป**
 - [ ] Status Map (`/status-map`)
 - [ ] System Logs (`/system-logs`)
 - [ ] Scheduled Reports (`/scheduled-reports`)

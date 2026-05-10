@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/contexts/session.context";
 
@@ -56,23 +57,23 @@ type CredentialForm = {
   metadataText: string;
 };
 
-const credentialTypeLabels: Record<CredentialType, string> = {
-  SNMP_COMMUNITY: "SNMP Community",
-  USERNAME_PASSWORD: "Username / Password",
-  API_TOKEN: "API Token",
-  SSH_KEY: "SSH Key",
+const credentialTypeLabelKeys: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "credentials.typeSnmpCommunity",
+  USERNAME_PASSWORD: "credentials.typeUsernamePassword",
+  API_TOKEN: "credentials.typeApiToken",
+  SSH_KEY: "credentials.typeSshKey",
 };
 
-const monitorTypeLabels: Record<MonitorType, string> = {
-  PING: "PING",
-  TCP: "TCP",
-  HTTP: "HTTP",
-  TLS_CERT: "TLS Cert",
-  DNS: "DNS",
-  SNMP: "SNMP",
-  SYSTEM: "System",
-  DOCKER: "Docker",
-  DATABASE: "Database",
+const monitorTypeLabelKeys: Record<MonitorType, string> = {
+  PING: "credentials.monitorTypePing",
+  TCP: "credentials.monitorTypeTcp",
+  HTTP: "credentials.monitorTypeHttp",
+  TLS_CERT: "credentials.monitorTypeTlsCert",
+  DNS: "credentials.monitorTypeDns",
+  SNMP: "credentials.monitorTypeSnmp",
+  SYSTEM: "credentials.monitorTypeSystem",
+  DOCKER: "credentials.monitorTypeDocker",
+  DATABASE: "credentials.monitorTypeDatabase",
 };
 
 const typeBadgeStyles: Record<CredentialType, string> = {
@@ -92,28 +93,28 @@ const credentialTypeGuides: Record<
   }
 > = {
   SNMP_COMMUNITY: {
-    summary: "ใช้เก็บ SNMP community string สำหรับ SNMP และ SYSTEM monitor",
-    requiredFields: ["Name", "Secret (community string)"],
-    optionalFields: ["Notes", "Metadata JSON เช่น version, port, vendor"],
-    usedFor: ["SNMP monitor", "SYSTEM monitor"],
+    summary: "credentials.guideSnmpSummary",
+    requiredFields: ["credentials.guideFieldName", "credentials.guideFieldCommunity"],
+    optionalFields: ["credentials.guideFieldNotes", "credentials.guideFieldSnmpMetadata"],
+    usedFor: ["credentials.usedForSnmp", "credentials.usedForSystem"],
   },
   USERNAME_PASSWORD: {
-    summary: "ใช้เก็บชุด username/password สำหรับ database, HTTP basic auth และงานที่ต้อง login",
-    requiredFields: ["Name", "Username", "Secret (password)"],
-    optionalFields: ["Notes", "Metadata JSON เช่น authSource, databaseType"],
-    usedFor: ["Database monitor", "HTTP basic auth"],
+    summary: "credentials.guideUserPassSummary",
+    requiredFields: ["credentials.guideFieldName", "credentials.fieldUsername", "credentials.guideFieldPassword"],
+    optionalFields: ["credentials.guideFieldNotes", "credentials.guideFieldAuthMetadata"],
+    usedFor: ["credentials.usedForDatabase", "credentials.usedForHttpBasic"],
   },
   API_TOKEN: {
-    summary: "ใช้เก็บ token หรือ API key เช่น Bearer token หรือ Portainer API key",
-    requiredFields: ["Name", "Secret (token / api key)"],
-    optionalFields: ["Username", "Notes", "Metadata JSON เช่น header name, scope"],
-    usedFor: ["HTTP bearer auth", "Docker / Portainer monitor"],
+    summary: "credentials.guideApiTokenSummary",
+    requiredFields: ["credentials.guideFieldName", "credentials.guideFieldToken"],
+    optionalFields: ["credentials.fieldUsername", "credentials.guideFieldNotes", "credentials.guideFieldTokenMetadata"],
+    usedFor: ["credentials.usedForHttpBearer", "credentials.usedForDocker"],
   },
   SSH_KEY: {
-    summary: "ใช้เก็บ SSH private key เผื่อรอบถัดไปสำหรับ monitor หรือ agent flow ที่ต้องใช้ key",
-    requiredFields: ["Name", "Secret (private key)"],
-    optionalFields: ["Username", "Notes", "Metadata JSON เช่น port, passphrase hint"],
-    usedFor: ["Future SSH-based monitor", "Future agent/bootstrap flow"],
+    summary: "credentials.guideSshKeySummary",
+    requiredFields: ["credentials.guideFieldName", "credentials.guideFieldPrivateKey"],
+    optionalFields: ["credentials.fieldUsername", "credentials.guideFieldNotes", "credentials.guideFieldSshMetadata"],
+    usedFor: ["credentials.usedForSsh", "credentials.usedForAgent"],
   },
 };
 
@@ -127,32 +128,32 @@ const secretFieldLabels: Record<
   }
 > = {
   SNMP_COMMUNITY: {
-    label: "Community",
+    label: "credentials.fieldCommunity",
     placeholder: "public",
-    tableLabel: "Community",
-    requiredText: "กรุณากรอกชื่อและ community ให้ครบ",
+    tableLabel: "credentials.fieldCommunity",
+    requiredText: "credentials.validationCommunity",
   },
   USERNAME_PASSWORD: {
-    label: "Password",
-    tableLabel: "Password",
-    requiredText: "กรุณากรอกชื่อและ password ให้ครบ",
+    label: "credentials.fieldPassword",
+    tableLabel: "credentials.fieldPassword",
+    requiredText: "credentials.validationPassword",
   },
   API_TOKEN: {
-    label: "API Token",
+    label: "credentials.fieldApiToken",
     placeholder: "Paste token or API key",
-    tableLabel: "API Token",
-    requiredText: "กรุณากรอกชื่อและ API token ให้ครบ",
+    tableLabel: "credentials.fieldApiToken",
+    requiredText: "credentials.validationApiToken",
   },
   SSH_KEY: {
-    label: "Private Key",
+    label: "credentials.fieldPrivateKey",
     placeholder: "-----BEGIN OPENSSH PRIVATE KEY-----",
-    tableLabel: "Private Key",
-    requiredText: "กรุณากรอกชื่อและ private key ให้ครบ",
+    tableLabel: "credentials.fieldPrivateKey",
+    requiredText: "credentials.validationPrivateKey",
   },
 };
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(
+const formatDate = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
   );
 
@@ -186,6 +187,7 @@ const parseMetadataObject = (value: string) => {
 };
 
 const CredentialsPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
   const { user } = useSession();
   const isAdmin = (typeof user?.role === "string" ? user.role : user?.role?.name ?? "").toLowerCase() === "admin";
@@ -199,6 +201,7 @@ const CredentialsPage = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<CredentialForm>(() => emptyForm());
   const [guideType, setGuideType] = useState<CredentialType>("SNMP_COMMUNITY");
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
 
   const loadCredentials = useCallback(async () => {
     setIsLoading(true);
@@ -213,7 +216,7 @@ const CredentialsPage = () => {
 
       setCredentials(response.data.data);
     } catch {
-      toast.error("โหลด credentials ไม่สำเร็จ");
+      toast.error(t("credentials.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -290,21 +293,21 @@ const CredentialsPage = () => {
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
         metadata = parsed as Record<string, unknown>;
       } else {
-        toast.error("Metadata ต้องเป็น JSON object");
+        toast.error(t("credentials.validationMetadataObject"));
         return;
       }
     } catch {
-      toast.error("Metadata JSON ไม่ถูกต้อง");
+      toast.error(t("credentials.validationMetadataJson"));
       return;
     }
 
     if (!form.name.trim() || (!editingCredential && !form.secret.trim())) {
-      toast.error(secretFieldLabels[form.type].requiredText);
+      toast.error(t(secretFieldLabels[form.type].requiredText));
       return;
     }
 
     if (form.type === "USERNAME_PASSWORD" && !form.username.trim()) {
-      toast.error("Credential แบบ Username / Password ต้องกรอก username");
+      toast.error(t("credentials.validationUsername"));
       return;
     }
 
@@ -332,11 +335,11 @@ const CredentialsPage = () => {
         return;
       }
 
-      toast.success(editingCredential ? "อัปเดต credential แล้ว" : "สร้าง credential แล้ว");
+      toast.success(editingCredential ? t("credentials.updateSuccess") : t("credentials.createSuccess"));
       closeModal();
       await loadCredentials();
     } catch {
-      toast.error(editingCredential ? "อัปเดต credential ไม่สำเร็จ" : "สร้าง credential ไม่สำเร็จ");
+      toast.error(editingCredential ? t("credentials.updateError") : t("credentials.createError"));
     } finally {
       setBusyId(null);
     }
@@ -357,11 +360,11 @@ const CredentialsPage = () => {
         return;
       }
 
-      toast.success("ลบ credential แล้ว");
+      toast.success(t("credentials.deleteSuccess"));
       setDeletingCredential(null);
       await loadCredentials();
     } catch {
-      toast.error("ลบ credential ไม่สำเร็จ");
+      toast.error(t("credentials.deleteError"));
     } finally {
       setBusyId(null);
     }
@@ -397,7 +400,7 @@ const CredentialsPage = () => {
         [credential.id]: secret,
       }));
     } catch {
-      toast.error("เปิดดู secret ไม่สำเร็จ");
+      toast.error(t("credentials.revealError"));
     } finally {
       setRevealingId(null);
     }
@@ -407,11 +410,10 @@ const CredentialsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Inventory</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Credentials</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("credentials.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("credentials.title")}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            เก็บ credential inventory แบบรวมศูนย์สำหรับ SNMP, SSH, API และ username/password
-            เพื่อให้ monitor หลายตัว reuse ชุดเดียวกันได้ และดู usage ได้จากจุดเดียว
+            {t("credentials.description")}
           </p>
         </div>
 
@@ -421,24 +423,24 @@ const CredentialsPage = () => {
             type="button"
             onClick={() => void loadCredentials()}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <button
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             type="button"
             onClick={openCreate}
           >
-            New Credential
+            {t("credentials.newCredential")}
           </button>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Total", value: summary.total, tone: "text-slate-950" },
-          { label: "SNMP", value: summary.snmp, tone: "text-cyan-700" },
-          { label: "User / Pass", value: summary.auth, tone: "text-violet-700" },
-          { label: "Linked", value: summary.linked, tone: "text-emerald-700" },
+          { label: t("credentials.summaryTotal"), value: summary.total, tone: "text-slate-950" },
+          { label: t("credentials.summarySnmp"), value: summary.snmp, tone: "text-cyan-700" },
+          { label: t("credentials.summaryUserPass"), value: summary.auth, tone: "text-violet-700" },
+          { label: t("credentials.summaryLinked"), value: summary.linked, tone: "text-emerald-700" },
         ].map((item) => (
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={item.label}>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
@@ -450,13 +452,13 @@ const CredentialsPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Credential vault</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("credentials.vaultTitle")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              {isLoading ? "Loading..." : `${credentials.length} credentials loaded`}
+              {isLoading ? t("common.loading") : t("credentials.loadedCount", { count: credentials.length })}
             </p>
           </div>
           <p className="text-xs text-slate-400">
-            ใช้เป็น shared credential ได้แล้ว และจะแสดงว่าถูกผูกกับ monitor ไหนบ้าง
+            {t("credentials.vaultHint")}
           </p>
         </div>
 
@@ -464,21 +466,21 @@ const CredentialsPage = () => {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Username</th>
-                <th className="px-4 py-3">Value</th>
-                <th className="px-4 py-3">Used by</th>
-                <th className="px-4 py-3">Notes</th>
-                <th className="px-4 py-3">Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">{t("common.name")}</th>
+                <th className="px-4 py-3">{t("common.type")}</th>
+                <th className="px-4 py-3">{t("credentials.fieldUsername")}</th>
+                <th className="px-4 py-3">{t("credentials.colValue")}</th>
+                <th className="px-4 py-3">{t("credentials.colUsedBy")}</th>
+                <th className="px-4 py-3">{t("credentials.fieldNotes")}</th>
+                <th className="px-4 py-3">{t("credentials.colUpdated")}</th>
+                <th className="px-4 py-3 text-right">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {!isLoading && credentials.length === 0 ? (
                 <tr>
                   <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={8}>
-                    ยังไม่มี credential
+                    {t("credentials.noCredentials")}
                   </td>
                 </tr>
               ) : null}
@@ -504,7 +506,7 @@ const CredentialsPage = () => {
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${typeBadgeStyles[credential.type]}`}
                       >
-                        {credentialTypeLabels[credential.type]}
+                        {t(credentialTypeLabelKeys[credential.type])}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -521,7 +523,7 @@ const CredentialsPage = () => {
                           onClick={() => void handleToggleReveal(credential)}
                           disabled={!isAdmin || isRevealBusy}
                         >
-                          {isRevealBusy ? "..." : isRevealed ? "Hide" : "Show"}
+                          {isRevealBusy ? "..." : isRevealed ? t("credentials.hide") : t("credentials.show")}
                         </button>
                       </div>
                     </td>
@@ -529,7 +531,7 @@ const CredentialsPage = () => {
                       {credential.usageCount > 0 ? (
                         <div className="space-y-2">
                           <div className="text-xs font-semibold text-slate-700">
-                            Used by {credential.usageCount} monitor{credential.usageCount > 1 ? "s" : ""}
+                            {t("credentials.usedByCount", { count: credential.usageCount })}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {credential.monitors.slice(0, 4).map((monitor) => (
@@ -537,24 +539,24 @@ const CredentialsPage = () => {
                                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
                                 key={monitor.id}
                                 to={`/monitors/${monitor.id}`}
-                                title={`${monitor.name} · ${monitorTypeLabels[monitor.type]}${monitor.enabled ? "" : " · disabled"}`}
+                                title={`${monitor.name} · ${t(monitorTypeLabelKeys[monitor.type])}${monitor.enabled ? "" : ` · ${t("common.disabled")}`}`}
                               >
                                 <span className={monitor.enabled ? "text-emerald-600" : "text-slate-400"}>
                                   ●
                                 </span>
                                 <span>{monitor.name}</span>
-                                <span className="text-slate-400">{monitorTypeLabels[monitor.type]}</span>
+                                <span className="text-slate-400">{t(monitorTypeLabelKeys[monitor.type])}</span>
                               </Link>
                             ))}
                             {credential.usageCount > 4 ? (
                               <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
-                                +{credential.usageCount - 4} more
+                                {t("credentials.moreCount", { count: credential.usageCount - 4 })}
                               </span>
                             ) : null}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">ยังไม่ถูกผูกกับ monitor</span>
+                        <span className="text-xs text-slate-400">{t("credentials.notLinked")}</span>
                       )}
                     </td>
                     <td className="max-w-sm px-4 py-3 text-slate-500">
@@ -563,7 +565,7 @@ const CredentialsPage = () => {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      {formatDate(credential.updatedAt)}
+                      {formatDate(credential.updatedAt, locale)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
@@ -572,14 +574,14 @@ const CredentialsPage = () => {
                           type="button"
                           onClick={() => openEdit(credential)}
                         >
-                          Edit
+                          {t("common.edit")}
                         </button>
                         <button
                           className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
                           type="button"
                           onClick={() => setDeletingCredential(credential)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </div>
                     </td>
@@ -594,14 +596,14 @@ const CredentialsPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Credential type guide</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("credentials.guideTitle")}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              แต่ละประเภทใช้ไม่เหมือนกัน และตอนสร้าง monitor จะเลือกได้เฉพาะประเภทที่เกี่ยวข้อง
+              {t("credentials.guideDescription")}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {(
-              Object.keys(credentialTypeLabels) as CredentialType[]
+              Object.keys(credentialTypeLabelKeys) as CredentialType[]
             ).map((type) => {
               const active = guideType === type;
               return (
@@ -616,7 +618,7 @@ const CredentialsPage = () => {
                   ].join(" ")}
                   onClick={() => setGuideType(type)}
                 >
-                  {credentialTypeLabels[type]}
+                  {t(credentialTypeLabelKeys[type])}
                 </button>
               );
             })}
@@ -624,29 +626,29 @@ const CredentialsPage = () => {
         </div>
 
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-900">{selectedGuide.summary}</p>
+          <p className="text-sm font-medium text-slate-900">{t(selectedGuide.summary)}</p>
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Required</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("credentials.guideRequired")}</p>
               <ul className="mt-2 space-y-1 text-sm text-slate-700">
                 {selectedGuide.requiredFields.map((field) => (
-                  <li key={field}>- {field}</li>
+                  <li key={field}>- {t(field)}</li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("credentials.guideOptional")}</p>
               <ul className="mt-2 space-y-1 text-sm text-slate-700">
                 {selectedGuide.optionalFields.map((field) => (
-                  <li key={field}>- {field}</li>
+                  <li key={field}>- {t(field)}</li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used In</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("credentials.guideUsedIn")}</p>
               <ul className="mt-2 space-y-1 text-sm text-slate-700">
                 {selectedGuide.usedFor.map((field) => (
-                  <li key={field}>- {field}</li>
+                  <li key={field}>- {t(field)}</li>
                 ))}
               </ul>
             </div>
@@ -659,26 +661,30 @@ const CredentialsPage = () => {
           <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
-                {editingCredential ? "Edit credential" : "Create credential"}
+                {editingCredential ? t("credentials.editTitle") : t("credentials.createTitle")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                เก็บข้อมูลการเชื่อมต่อสำหรับใช้อ้างอิงซ้ำใน monitor หลายตัว
+                {t("credentials.modalDescription")}
               </p>
             </div>
 
             <div className="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2">
               <div className="rounded-lg border border-cyan-100 bg-cyan-50 p-4 text-sm sm:col-span-2">
-                <p className="font-medium text-cyan-900">{modalGuide.summary}</p>
+                <p className="font-medium text-cyan-900">{t(modalGuide.summary)}</p>
                 <p className="mt-2 text-cyan-800">
-                  Required: {modalGuide.requiredFields.join(", ")}
+                  {t("credentials.requiredList", {
+                    fields: modalGuide.requiredFields.map((field) => t(field)).join(", "),
+                  })}
                 </p>
                 <p className="mt-1 text-cyan-700">
-                  Used in: {modalGuide.usedFor.join(", ")}
+                  {t("credentials.usedInList", {
+                    fields: modalGuide.usedFor.map((field) => t(field)).join(", "),
+                  })}
                 </p>
               </div>
 
               <label className="block sm:col-span-2">
-                <span className="text-sm font-medium text-slate-700">Name</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.name")}</span>
                 <input
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   type="text"
@@ -688,7 +694,7 @@ const CredentialsPage = () => {
               </label>
 
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Type</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.type")}</span>
                 <select
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   value={form.type}
@@ -699,9 +705,9 @@ const CredentialsPage = () => {
                     }))
                   }
                 >
-                  {Object.entries(credentialTypeLabels).map(([value, label]) => (
+                  {Object.keys(credentialTypeLabelKeys).map((value) => (
                     <option key={value} value={value}>
-                      {label}
+                      {t(credentialTypeLabelKeys[value as CredentialType])}
                     </option>
                   ))}
                 </select>
@@ -710,11 +716,11 @@ const CredentialsPage = () => {
               {showUsernameField ? (
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    Username
+                    {t("credentials.fieldUsername")}
                     {form.type === "USERNAME_PASSWORD" ? (
                       <span className="ml-1 text-rose-500">*</span>
                     ) : (
-                      <span className="ml-1 font-normal text-slate-400">(optional)</span>
+                      <span className="ml-1 font-normal text-slate-400">{t("credentials.optionalSuffix")}</span>
                     )}
                   </span>
                   <input
@@ -731,7 +737,7 @@ const CredentialsPage = () => {
               {showSnmpSettings ? (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">SNMP Version</span>
+                    <span className="text-sm font-medium text-slate-700">{t("credentials.fieldSnmpVersion")}</span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={
@@ -748,7 +754,7 @@ const CredentialsPage = () => {
                   </label>
 
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">SNMP Port</span>
+                    <span className="text-sm font-medium text-slate-700">{t("credentials.fieldSnmpPort")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -767,23 +773,23 @@ const CredentialsPage = () => {
 
               <label className="block sm:col-span-2">
                 <span className="text-sm font-medium text-slate-700">
-                  {secretField.label}{" "}
+                  {t(secretField.label)}{" "}
                   {editingCredential ? (
-                    <span className="ml-1 font-normal text-slate-400">(เว้นว่างเพื่อคงค่าเดิม)</span>
+                    <span className="ml-1 font-normal text-slate-400">{t("credentials.keepExistingSuffix")}</span>
                   ) : (
                     <span className="ml-1 text-rose-500">*</span>
                   )}
                 </span>
                 <textarea
                   className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  placeholder={editingCredential ? "เว้นว่างเพื่อคงค่าเดิม" : secretField.placeholder}
+                  placeholder={editingCredential ? t("credentials.keepExistingPlaceholder") : secretField.placeholder}
                   value={form.secret}
                   onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
                 />
               </label>
 
               <label className="block sm:col-span-2">
-                <span className="text-sm font-medium text-slate-700">Notes</span>
+                <span className="text-sm font-medium text-slate-700">{t("credentials.fieldNotes")}</span>
                 <textarea
                   className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   value={form.notes}
@@ -792,7 +798,7 @@ const CredentialsPage = () => {
               </label>
 
               <label className="block sm:col-span-2">
-                <span className="text-sm font-medium text-slate-700">Metadata JSON</span>
+                <span className="text-sm font-medium text-slate-700">{t("credentials.fieldMetadataJson")}</span>
                 <textarea
                   className="mt-2 min-h-44 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   value={form.metadataText}
@@ -811,7 +817,7 @@ const CredentialsPage = () => {
                 onClick={closeModal}
                 disabled={busyId !== null}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -819,7 +825,7 @@ const CredentialsPage = () => {
                 onClick={() => void handleSubmit()}
                 disabled={busyId !== null}
               >
-                {editingCredential ? "Save changes" : "Create credential"}
+                {editingCredential ? t("common.save") : t("credentials.createCredential")}
               </button>
             </div>
           </div>
@@ -830,21 +836,22 @@ const CredentialsPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Delete credential</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{t("credentials.deleteTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                ถ้ารายการนี้ถูกใช้อยู่ monitor ที่ผูกอยู่จะถูกถอด credential ออกอัตโนมัติ
+                {t("credentials.deleteDescription")}
               </p>
             </div>
 
             <div className="p-5 text-sm text-slate-600">
               <p>
-                ต้องการลบ <span className="font-semibold text-slate-950">{deletingCredential.name}</span>{" "}
-                ใช่ไหม?
+                {t("credentials.deleteConfirmPrefix")}{" "}
+                <span className="font-semibold text-slate-950">{deletingCredential.name}</span>{" "}
+                {t("credentials.deleteConfirmSuffix")}
               </p>
               {deletingCredential.usageCount > 0 ? (
                 <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-amber-900">
                   <div className="font-semibold">
-                    กำลังถูกใช้โดย {deletingCredential.usageCount} monitor
+                    {t("credentials.deleteUsedBy", { count: deletingCredential.usageCount })}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {deletingCredential.monitors.map((monitor) => (
@@ -854,12 +861,12 @@ const CredentialsPage = () => {
                         to={`/monitors/${monitor.id}`}
                       >
                         <span>{monitor.name}</span>
-                        <span className="text-amber-700">{monitorTypeLabels[monitor.type]}</span>
+                        <span className="text-amber-700">{t(monitorTypeLabelKeys[monitor.type])}</span>
                       </Link>
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-amber-800">
-                    หลังลบแล้ว monitor เหล่านี้ยังอยู่ แต่จะไม่อ้าง credential นี้อีก
+                    {t("credentials.deleteUnlinkHint")}
                   </p>
                 </div>
               ) : null}
@@ -872,7 +879,7 @@ const CredentialsPage = () => {
                 onClick={() => setDeletingCredential(null)}
                 disabled={busyId === deletingCredential.id}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -880,7 +887,7 @@ const CredentialsPage = () => {
                 onClick={() => void handleDelete()}
                 disabled={busyId === deletingCredential.id}
               >
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
