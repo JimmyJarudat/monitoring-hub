@@ -92,7 +92,8 @@
     "description": "Description",
     "back": "Back",
     "createdAt": "Created",
-    "noData": "No data"
+    "noData": "No data",
+    "notAvailable": "N/A"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1007,5 +1008,134 @@
     "summaryUp": "Up",
     "summaryDegraded": "Degraded",
     "summaryDown": "Down"
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Configure branding, alerting, monitor defaults, security, and data retention.",
+    "sections": {
+      "general": {
+        "title": "General",
+        "description": "System name, tagline, logo text, and sidebar image logo."
+      },
+      "alerting": {
+        "title": "Alerting Defaults",
+        "description": "Reminder frequency while incidents remain open."
+      },
+      "monitorDefaults": {
+        "title": "Monitor Defaults",
+        "description": "Default values for new monitors."
+      },
+      "security": {
+        "title": "Security",
+        "description": "Password, session, and login attempt policies enforced by the backend."
+      },
+      "email": {
+        "title": "Email",
+        "description": "SMTP for password reset codes and system email."
+      },
+      "retention": {
+        "title": "Data retention",
+        "description": "Set data age by type and choose whether the scheduler cleans up automatically every 24 hours."
+      }
+    },
+    "logoAlt": "logo",
+    "logoImage": "Image logo",
+    "logoHint": "PNG, JPG, WEBP, GIF — up to 2 MB · Replaces sidebar logo text",
+    "uploading": "Uploading...",
+    "changeImage": "Change image",
+    "uploadImage": "Upload image",
+    "removing": "Removing...",
+    "removeImage": "Remove image",
+    "systemName": "System name",
+    "tagline": "Tagline",
+    "logoText": "Logo text (1-4 characters)",
+    "incidentReminderInterval": "Incident reminder interval",
+    "checkInterval": "Check interval",
+    "timeout": "Timeout",
+    "passwordMinLength": "Minimum password length",
+    "sessionDuration": "Session duration",
+    "maxLoginAttempts": "Max login attempts",
+    "passwordComplexity": "Password complexity",
+    "passwordComplexityHint": "Enable requirements for user creation, password reset, password changes, and forgot password.",
+    "requireLowercase": "Require lowercase",
+    "requireLowercaseHint": "Must include at least one a-z character",
+    "requireUppercase": "Require uppercase",
+    "requireUppercaseHint": "Must include at least one A-Z character",
+    "requireNumber": "Require number",
+    "requireNumberHint": "Must include at least one 0-9 digit",
+    "requireSpecial": "Require special character",
+    "requireSpecialHint": "Must include a symbol such as ! @ # $",
+    "emailConfigured": "Email configured",
+    "emailConfiguredHint": "The system will use this SMTP account to send password reset verification codes.",
+    "smtpHost": "SMTP host",
+    "smtpPort": "SMTP port",
+    "username": "Username",
+    "password": "Password",
+    "fromEmail": "From email",
+    "connectionSecurity": "Connection security",
+    "editSmtpHint": "Edit SMTP settings for sending password reset codes.",
+    "setupSmtpHint": "SMTP is not configured yet. Fill in the details below so the system can email password reset codes.",
+    "autoCleanupScheduler": "Auto cleanup scheduler",
+    "autoCleanupHint": "Enable this so the backend runs cleanup based on retention every 24 hours.",
+    "retentionResultsDescription": "Status check results and response messages.",
+    "retentionMetricsDescription": "CPU, RAM, disk, and network samples for historical charts.",
+    "retentionAuditDescription": "User change and activity history.",
+    "manualClearTitle": "Manual clear history",
+    "manualClearDescription": "Intentionally clear selected data types now, either all data or only old data.",
+    "clearMode": "Clear mode",
+    "expiredOnly": "Expired only",
+    "allHistory": "All history",
+    "olderThan": "Older than",
+    "whatWillHappen": "What will happen",
+    "clearSelectedHistory": "Clear selected history",
+    "latestCleanup": "Latest cleanup",
+    "ranAt": "Ran at",
+    "deletedResults": "Deleted results",
+    "deletedMetrics": "Deleted metrics",
+    "deletedAuditLogs": "Deleted audit logs",
+    "cleanupNoMatchedData": "Cleanup completed, but no matching data needed deletion.",
+    "noCleanupYet": "Cleanup has not run yet",
+    "oldest": "Oldest",
+    "runCleanupNow": "Run cleanup now",
+    "running": "Running...",
+    "saving": "Saving...",
+    "clearing": "Clearing...",
+    "unlimited": "Unlimited",
+    "hours": "{{count}} hours",
+    "seconds": "{{count}} seconds",
+    "minutes": "{{count}} minutes",
+    "days": "{{count}} days",
+    "characters": "{{count}} characters",
+    "attempts": "{{count}} attempts",
+    "logoUploadSuccess": "Logo uploaded",
+    "logoUploadError": "Upload failed",
+    "logoRemoveConfirm": "Remove the logo?",
+    "logoRemoveSuccess": "Logo removed",
+    "logoRemoveError": "Remove failed",
+    "saveSectionSuccess": "Saved {{label}}",
+    "saveError": "Save failed",
+    "cleanupConfirm": "Run cleanup using the current retention settings now?",
+    "cleanupDone": "Cleanup finished: deleted {{results}} results, {{metrics}} metrics, {{audit}} audit logs",
+    "cleanupNoExpiredSuffix": "(no data older than retention needed deletion)",
+    "clearSummaryAll": "Delete all history for the selected data types.",
+    "clearSummaryExpired": "Delete only data older than {{days}} days for the selected data types.",
+    "clearSelectWarning": "Select at least one data type before clearing.",
+    "clearConfirm": "{{summary}}\n\nClearing history permanently deletes data and cannot be undone. Continue?",
+    "clearDone": "History cleared: deleted {{results}} results, {{metrics}} metrics, {{audit}} audit logs",
+    "clearNoMatchSuffix": "(no matching data found)",
+    "clearTargets": {
+      "results": {
+        "label": "Monitor results",
+        "description": "UP / DOWN / DEGRADED check results."
+      },
+      "metrics": {
+        "label": "Device metrics",
+        "description": "CPU, RAM, disk, and network samples."
+      },
+      "audit": {
+        "label": "Audit logs",
+        "description": "User activity history."
+      }
+    }
   }
 }

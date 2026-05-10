@@ -92,7 +92,8 @@
     "description": "คำอธิบาย",
     "back": "ย้อนกลับ",
     "createdAt": "สร้างเมื่อ",
-    "noData": "ไม่มีข้อมูล"
+    "noData": "ไม่มีข้อมูล",
+    "notAvailable": "ไม่มีข้อมูล"
   },
   "dashboard": {
     "title": "แดชบอร์ด",
@@ -1007,5 +1008,134 @@
     "summaryUp": "ปกติ",
     "summaryDegraded": "ลดลง",
     "summaryDown": "หยุด"
+  },
+  "settings": {
+    "title": "ตั้งค่าระบบ",
+    "subtitle": "ตั้งค่า Branding, Alerting, ค่าเริ่มต้นของมอนิเตอร์, Security และ Data retention",
+    "sections": {
+      "general": {
+        "title": "ทั่วไป",
+        "description": "ชื่อระบบ, tagline, logo text และ logo รูปภาพที่แสดงใน sidebar"
+      },
+      "alerting": {
+        "title": "ค่าเริ่มต้นการแจ้งเตือน",
+        "description": "ความถี่การส่ง reminder เมื่อ incident ยังคงเปิดอยู่"
+      },
+      "monitorDefaults": {
+        "title": "ค่าเริ่มต้นมอนิเตอร์",
+        "description": "ค่าเริ่มต้นสำหรับ monitor ใหม่"
+      },
+      "security": {
+        "title": "ความปลอดภัย",
+        "description": "นโยบาย password, session และ login attempt ที่ backend ใช้ตรวจจริง"
+      },
+      "email": {
+        "title": "อีเมล",
+        "description": "SMTP สำหรับส่งรหัส reset password และอีเมลระบบ"
+      },
+      "retention": {
+        "title": "Data retention",
+        "description": "ตั้งอายุข้อมูลรายประเภท และเลือกว่าจะให้ scheduler cleanup อัตโนมัติทุก 24 ชั่วโมงหรือไม่"
+      }
+    },
+    "logoAlt": "โลโก้",
+    "logoImage": "Logo รูปภาพ",
+    "logoHint": "PNG, JPG, WEBP, GIF — ไม่เกิน 2 MB · แทนที่ logo text ใน sidebar",
+    "uploading": "กำลังอัปโหลด...",
+    "changeImage": "เปลี่ยนรูป",
+    "uploadImage": "อัปโหลดรูป",
+    "removing": "กำลังลบ...",
+    "removeImage": "ลบรูป",
+    "systemName": "ชื่อระบบ",
+    "tagline": "Tagline",
+    "logoText": "Logo text (1-4 ตัวอักษร)",
+    "incidentReminderInterval": "ช่วงเวลาส่ง reminder ของ incident",
+    "checkInterval": "ช่วงเวลาตรวจ",
+    "timeout": "Timeout",
+    "passwordMinLength": "Password ขั้นต่ำ",
+    "sessionDuration": "ระยะเวลา session",
+    "maxLoginAttempts": "จำนวนครั้งล็อกอินผิดสูงสุด",
+    "passwordComplexity": "Password complexity",
+    "passwordComplexityHint": "เปิดเงื่อนไขที่ต้องการบังคับใช้ตอนสร้างผู้ใช้, reset password, change password และ forgot password",
+    "requireLowercase": "บังคับตัวพิมพ์เล็ก",
+    "requireLowercaseHint": "ต้องมี a-z อย่างน้อย 1 ตัว",
+    "requireUppercase": "บังคับตัวพิมพ์ใหญ่",
+    "requireUppercaseHint": "ต้องมี A-Z อย่างน้อย 1 ตัว",
+    "requireNumber": "บังคับตัวเลข",
+    "requireNumberHint": "ต้องมี 0-9 อย่างน้อย 1 ตัว",
+    "requireSpecial": "บังคับอักขระพิเศษ",
+    "requireSpecialHint": "ต้องมีสัญลักษณ์ เช่น ! @ # $",
+    "emailConfigured": "ตั้งค่า Email แล้ว",
+    "emailConfiguredHint": "ระบบจะใช้ SMTP นี้สำหรับส่งรหัสยืนยัน reset password",
+    "smtpHost": "SMTP host",
+    "smtpPort": "SMTP port",
+    "username": "Username",
+    "password": "Password",
+    "fromEmail": "From email",
+    "connectionSecurity": "Connection security",
+    "editSmtpHint": "แก้ไขค่า SMTP สำหรับส่งรหัส reset password",
+    "setupSmtpHint": "ยังไม่ได้ตั้งค่า SMTP กรอกข้อมูลด้านล่างเพื่อให้ระบบส่งรหัส reset password ทางอีเมลได้",
+    "autoCleanupScheduler": "Auto cleanup scheduler",
+    "autoCleanupHint": "เปิดไว้เพื่อให้ backend รัน cleanup ตาม retention ทุก 24 ชั่วโมงโดยอัตโนมัติ",
+    "retentionResultsDescription": "ผลการตรวจสอบสถานะและข้อความตอบกลับ",
+    "retentionMetricsDescription": "ข้อมูล CPU, RAM, Disk, Network samples สำหรับกราฟย้อนหลัง",
+    "retentionAuditDescription": "ประวัติการแก้ไขและการกระทำของผู้ใช้",
+    "manualClearTitle": "Manual clear history",
+    "manualClearDescription": "ล้างข้อมูลบางประเภทแบบตั้งใจได้ทันที โดยเลือกว่าจะลบทั้งหมดหรือเฉพาะข้อมูลเก่า",
+    "clearMode": "โหมดการล้าง",
+    "expiredOnly": "เฉพาะข้อมูลหมดอายุ",
+    "allHistory": "ข้อมูลทั้งหมด",
+    "olderThan": "เก่ากว่า",
+    "whatWillHappen": "กำลังจะทำอะไร",
+    "clearSelectedHistory": "ล้างข้อมูลที่เลือก",
+    "latestCleanup": "Cleanup ล่าสุด",
+    "ranAt": "รันเมื่อ",
+    "deletedResults": "Results ที่ลบ",
+    "deletedMetrics": "Metrics ที่ลบ",
+    "deletedAuditLogs": "Audit logs ที่ลบ",
+    "cleanupNoMatchedData": "รันสำเร็จ แต่ไม่มีข้อมูลที่ตรงเงื่อนไขให้ลบ",
+    "noCleanupYet": "ยังไม่เคยรัน cleanup",
+    "oldest": "เก่าสุด",
+    "runCleanupNow": "Run cleanup now",
+    "running": "กำลังรัน...",
+    "saving": "กำลังบันทึก...",
+    "clearing": "กำลังล้าง...",
+    "unlimited": "ไม่จำกัด",
+    "hours": "{{count}} ชั่วโมง",
+    "seconds": "{{count}} วินาที",
+    "minutes": "{{count}} นาที",
+    "days": "{{count}} วัน",
+    "characters": "{{count}} ตัวอักษร",
+    "attempts": "{{count}} ครั้ง",
+    "logoUploadSuccess": "อัปโหลดโลโก้แล้ว",
+    "logoUploadError": "อัปโหลดไม่สำเร็จ",
+    "logoRemoveConfirm": "ต้องการลบโลโก้ใช่ไหม?",
+    "logoRemoveSuccess": "ลบโลโก้แล้ว",
+    "logoRemoveError": "ลบไม่สำเร็จ",
+    "saveSectionSuccess": "บันทึก {{label}} แล้ว",
+    "saveError": "บันทึกไม่สำเร็จ",
+    "cleanupConfirm": "ต้องการรัน cleanup ตาม retention ปัจจุบันทันทีใช่ไหม?",
+    "cleanupDone": "Cleanup เสร็จแล้ว: ลบ {{results}} results, {{metrics}} metrics, {{audit}} audit logs",
+    "cleanupNoExpiredSuffix": "(ไม่มีข้อมูลที่เก่ากว่า retention ให้ลบ)",
+    "clearSummaryAll": "ลบข้อมูลทุกช่วงเวลาของประเภทที่เลือก",
+    "clearSummaryExpired": "ลบเฉพาะข้อมูลที่เก่ากว่า {{days}} วัน ของประเภทที่เลือก",
+    "clearSelectWarning": "เลือกอย่างน้อย 1 ประเภทข้อมูลก่อนล้าง",
+    "clearConfirm": "{{summary}}\n\nการล้างข้อมูลเป็นการลบถาวรและย้อนกลับไม่ได้ ต้องการดำเนินการต่อหรือไม่?",
+    "clearDone": "ล้างข้อมูลแล้ว: ลบ {{results}} results, {{metrics}} metrics, {{audit}} audit logs",
+    "clearNoMatchSuffix": "(ไม่พบข้อมูลที่ตรงเงื่อนไข)",
+    "clearTargets": {
+      "results": {
+        "label": "Monitor results",
+        "description": "ผลตรวจ UP / DOWN / DEGRADED"
+      },
+      "metrics": {
+        "label": "Device metrics",
+        "description": "CPU, RAM, Disk, Network samples"
+      },
+      "audit": {
+        "label": "Audit logs",
+        "description": "ประวัติการกระทำของผู้ใช้"
+      }
+    }
   }
 }

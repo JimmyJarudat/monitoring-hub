@@ -193,7 +193,7 @@
 - [x] Change Password (`/change-password`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Settings (`/settings`) ← **ถัดไป**
+- [x] Settings (`/settings`)
 - [x] Notifications (`/notifications`)
 - [x] Domain (`/domain`)
 - [x] API Tokens (`/api-tokens`)
