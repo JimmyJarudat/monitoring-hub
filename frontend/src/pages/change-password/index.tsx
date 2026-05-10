@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/contexts/session.context";
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
 
 const ChangePasswordPage = () => {
+  const { t } = useTranslation();
   const { api } = useApi();
   const { logout } = useSession();
   const navigate = useNavigate();
@@ -21,10 +23,10 @@ const ChangePasswordPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.currentPassword) { toast.error("กรุณากรอกรหัสผ่านปัจจุบัน"); return; }
-    if (!form.newPassword) { toast.error("กรุณากรอกรหัสผ่านใหม่"); return; }
-    if (form.newPassword !== form.confirm) { toast.error("รหัสผ่านใหม่ไม่ตรงกัน"); return; }
-    if (form.newPassword === form.currentPassword) { toast.error("รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสเดิม"); return; }
+    if (!form.currentPassword) { toast.error(t("changePassword.validationCurrent")); return; }
+    if (!form.newPassword) { toast.error(t("changePassword.validationNew")); return; }
+    if (form.newPassword !== form.confirm) { toast.error(t("changePassword.validationMismatch")); return; }
+    if (form.newPassword === form.currentPassword) { toast.error(t("changePassword.validationSame")); return; }
 
     setSaving(true);
     try {
@@ -36,7 +38,7 @@ const ChangePasswordPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success("เปลี่ยนรหัสผ่านสำเร็จ กำลังออกจากระบบ...");
+      toast.success(t("changePassword.success"));
       setTimeout(() => {
         void logout().then(() => navigate("/login"));
       }, 1500);
@@ -45,7 +47,7 @@ const ChangePasswordPage = () => {
         error && typeof error === "object" && "response" in error
           ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
           : undefined;
-      toast.error(msg ?? "เปลี่ยนรหัสผ่านไม่สำเร็จ");
+      toast.error(msg ?? t("changePassword.error"));
     } finally {
       setSaving(false);
     }
@@ -60,33 +62,33 @@ const ChangePasswordPage = () => {
     if (/[A-Z]/.test(p)) score++;
     if (/[0-9]/.test(p)) score++;
     if (/[^A-Za-z0-9]/.test(p)) score++;
-    if (score <= 1) return { label: "อ่อน", color: "bg-rose-500", width: "w-1/5" };
-    if (score <= 2) return { label: "พอใช้", color: "bg-amber-400", width: "w-2/5" };
-    if (score <= 3) return { label: "ดี", color: "bg-yellow-400", width: "w-3/5" };
-    if (score <= 4) return { label: "แข็งแกร่ง", color: "bg-emerald-400", width: "w-4/5" };
-    return { label: "ยอดเยี่ยม", color: "bg-emerald-500", width: "w-full" };
+    if (score <= 1) return { label: t("changePassword.strengthWeak"), color: "bg-rose-500", width: "w-1/5" };
+    if (score <= 2) return { label: t("changePassword.strengthFair"), color: "bg-amber-400", width: "w-2/5" };
+    if (score <= 3) return { label: t("changePassword.strengthGood"), color: "bg-yellow-400", width: "w-3/5" };
+    if (score <= 4) return { label: t("changePassword.strengthStrong"), color: "bg-emerald-400", width: "w-4/5" };
+    return { label: t("changePassword.strengthExcellent"), color: "bg-emerald-500", width: "w-full" };
   })();
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="mb-6">
-        <p className="text-sm font-medium text-cyan-700">บัญชีของฉัน</p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-950">เปลี่ยนรหัสผ่าน</h1>
+        <p className="text-sm font-medium text-cyan-700">{t("user.myAccount")}</p>
+        <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("changePassword.title")}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          หลังเปลี่ยนรหัสผ่าน ระบบจะออกจากระบบทุก session และให้ล็อกอินใหม่
+          {t("changePassword.description")}
         </p>
       </div>
 
       <div className="mx-auto max-w-md">
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-sm font-semibold text-slate-950">กรอกรหัสผ่าน</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("changePassword.formTitle")}</h2>
           </div>
 
           <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-5 p-5">
             {/* Current password */}
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">รหัสผ่านปัจจุบัน</span>
+              <span className="text-sm font-medium text-slate-700">{t("changePassword.currentPassword")}</span>
               <div className="relative mt-2">
                 <input
                   type={showCurrent ? "text" : "password"}
@@ -118,7 +120,7 @@ const ChangePasswordPage = () => {
 
             {/* New password */}
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">รหัสผ่านใหม่</span>
+              <span className="text-sm font-medium text-slate-700">{t("changePassword.newPassword")}</span>
               <div className="relative mt-2">
                 <input
                   type={showNew ? "text" : "password"}
@@ -151,14 +153,14 @@ const ChangePasswordPage = () => {
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                     <div className={`h-full rounded-full transition-all ${strength.color} ${strength.width}`} />
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">ความแข็งแกร่ง: {strength.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{t("changePassword.strengthLabel", { label: strength.label })}</p>
                 </div>
               ) : null}
             </label>
 
             {/* Confirm */}
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">ยืนยันรหัสผ่านใหม่</span>
+              <span className="text-sm font-medium text-slate-700">{t("changePassword.confirmPassword")}</span>
               <input
                 type="password"
                 value={form.confirm}
@@ -171,12 +173,12 @@ const ChangePasswordPage = () => {
                 autoComplete="new-password"
               />
               {form.confirm && form.confirm !== form.newPassword ? (
-                <p className="mt-1 text-xs text-rose-500">รหัสผ่านไม่ตรงกัน</p>
+                <p className="mt-1 text-xs text-rose-500">{t("changePassword.validationMismatch")}</p>
               ) : null}
             </label>
 
             <div className="rounded-md bg-amber-50 px-4 py-3 text-xs text-amber-700">
-              การเปลี่ยนรหัสผ่านจะ revoke session ทั้งหมด รวมถึง session ปัจจุบัน และต้องล็อกอินใหม่
+              {t("changePassword.revokeHint")}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-2">
@@ -185,14 +187,14 @@ const ChangePasswordPage = () => {
                 onClick={() => window.history.back()}
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
-                {saving ? "Saving..." : "เปลี่ยนรหัสผ่าน"}
+                {saving ? t("alerts.saving") : t("changePassword.submit")}
               </button>
             </div>
           </form>
