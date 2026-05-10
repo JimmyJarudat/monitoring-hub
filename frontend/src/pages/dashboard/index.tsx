@@ -300,7 +300,7 @@ const DashboardPage = () => {
         if (isCurrent) applyDashboardData(data);
       })
       .catch(() => {
-        if (isCurrent) toast.error("โหลด Dashboard ไม่สำเร็จ");
+        if (isCurrent) toast.error("Failed to load Dashboard");
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false);

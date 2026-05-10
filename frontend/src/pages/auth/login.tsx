@@ -56,7 +56,7 @@ const Login = () => {
     const nextPassword = String(formData.get("password") ?? "");
 
     if (!nextIdentifier || !nextPassword) {
-      toast.error("กรุณากรอก username/email และ password");
+      toast.error("Please enter your username/email and password");
       return;
     }
 
@@ -85,7 +85,7 @@ const Login = () => {
       );
 
       if (response.data.success) {
-        toast.success("ส่งอีเมลสำเร็จ กรุณาตรวจสอบอีเมล");
+        toast.success("Email sent successfully, please check your inbox");
         setResetStep("code");
         window.setTimeout(() => codeInputRefs.current[0]?.focus(), 50);
       } else {
@@ -128,13 +128,13 @@ const Login = () => {
     event.preventDefault();
 
     if (!resetEmail.trim()) {
-      toast.error("กรุณากรอกอีเมล");
+      toast.error("Please enter your email");
       setResetStep("email");
       return;
     }
 
     if (!/^\d{6}$/.test(resetCodeValue)) {
-      toast.error("กรุณากรอกรหัสยืนยัน 6 หลัก");
+      toast.error("Please enter the 6-digit verification code");
       return;
     }
 
@@ -162,23 +162,23 @@ const Login = () => {
     event.preventDefault();
 
     if (!resetEmail.trim()) {
-      toast.error("กรุณากรอกอีเมล");
+      toast.error("Please enter your email");
       return;
     }
 
     if (!/^\d{6}$/.test(resetCodeValue)) {
-      toast.error("กรุณากรอกรหัสยืนยัน 6 หลัก");
+      toast.error("Please enter the 6-digit verification code");
       setResetStep("code");
       return;
     }
 
     if (!newPassword) {
-      toast.error("กรุณากรอกรหัสผ่านใหม่");
+      toast.error("Please enter a new password");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      toast.error("Password ไม่ตรงกัน");
+      toast.error("Passwords do not match");
       return;
     }
 
