@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
@@ -30,11 +31,6 @@ type NotificationResponse = {
 
 type FilterKey = "ALL" | "UNREAD" | AppNotification["type"];
 
-const dateTimeFormatter = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 const typeClass: Record<AppNotification["type"], string> = {
   INCIDENT: "bg-rose-50 text-rose-700",
   ALERT: "bg-amber-50 text-amber-700",
@@ -53,22 +49,27 @@ const severityClass: Record<AppNotification["severity"], string> = {
   SUCCESS: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
 
-const filterTabs: { key: FilterKey; label: string }[] = [
-  { key: "ALL", label: "ทั้งหมด" },
-  { key: "UNREAD", label: "ยังไม่ได้อ่าน" },
-  { key: "INCIDENT", label: "Incidents" },
-  { key: "DELIVERY", label: "Delivery" },
-  { key: "SYSTEM", label: "System" },
-  { key: "MONITOR", label: "Monitor" },
+const filterTabs: { key: FilterKey; labelKey: string }[] = [
+  { key: "ALL", labelKey: "notificationsPage.all" },
+  { key: "UNREAD", labelKey: "notificationsPage.unread" },
+  { key: "INCIDENT", labelKey: "notificationsPage.incidents" },
+  { key: "DELIVERY", labelKey: "notificationsPage.delivery" },
+  { key: "SYSTEM", labelKey: "notificationsPage.system" },
+  { key: "MONITOR", labelKey: "notificationsPage.monitor" },
 ];
 
-const formatDate = (value: string) => {
+const formatDate = (value: string, locale: string) => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : dateTimeFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 };
 
 const NotificationsPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [data, setData] = useState<NotificationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>("ALL");
@@ -91,7 +92,7 @@ const NotificationsPage = () => {
       }
       setData(res.data.data);
     } catch {
-      toast.error("โหลดการแจ้งเตือนไม่สำเร็จ");
+      toast.error(t("notificationsPage.loadError"));
     } finally {
       setLoading(false);
     }
@@ -131,7 +132,7 @@ const NotificationsPage = () => {
       : current);
     try {
       await api.patch("/notifications/read-all");
-      toast.success("อ่านการแจ้งเตือนทั้งหมดแล้ว");
+      toast.success(t("notificationsPage.markAllSuccess"));
     } catch {
       void loadNotifications();
     }
@@ -157,23 +158,23 @@ const NotificationsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">บัญชีของฉัน</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">การแจ้งเตือนทั้งหมด</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("user.myAccount")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("notificationsPage.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            ศูนย์รวมเหตุการณ์ที่เกี่ยวข้องกับคุณ: incident, delivery, system และ monitor activity
+            {t("notificationsPage.description")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
             <span className="font-semibold text-slate-950">{(data?.unreadCount ?? 0).toLocaleString()}</span>
-            <span className="ml-1 text-slate-500">ยังไม่ได้อ่าน</span>
+            <span className="ml-1 text-slate-500">{t("notificationsPage.unread")}</span>
           </div>
           <button
             type="button"
             onClick={() => void markAllRead()}
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            อ่านทั้งหมด
+            {t("notification.markAllRead")}
           </button>
         </div>
       </div>
@@ -191,7 +192,7 @@ const NotificationsPage = () => {
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -200,9 +201,9 @@ const NotificationsPage = () => {
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("notification.title")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              {loading ? "Loading..." : `${(data?.total ?? 0).toLocaleString()} records`}
+              {loading ? t("common.loading") : t("systemLogs.recordsCount", { count: (data?.total ?? 0).toLocaleString() })}
             </p>
           </div>
           <button
@@ -210,14 +211,14 @@ const NotificationsPage = () => {
             onClick={() => void loadNotifications()}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            Refresh
+            {t("common.refresh")}
           </button>
         </div>
 
         <div className="divide-y divide-slate-200">
           {!loading && (data?.items.length ?? 0) === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">
-              ยังไม่มีการแจ้งเตือนในหมวดนี้
+              {t("notificationsPage.noNotifications")}
             </div>
           ) : null}
 
@@ -244,13 +245,13 @@ const NotificationsPage = () => {
                 <p className="mt-2 text-sm leading-6 text-slate-600">{item.message ?? "-"}</p>
               </Link>
               <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <time className="text-xs text-slate-500">{formatDate(item.createdAt)}</time>
+                <time className="text-xs text-slate-500">{formatDate(item.createdAt, locale)}</time>
                 <button
                   type="button"
                   onClick={() => void dismissNotification(item.id)}
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
                 >
-                  ซ่อน
+                  {t("notificationsPage.dismiss")}
                 </button>
               </div>
             </div>
@@ -264,10 +265,10 @@ const NotificationsPage = () => {
             onClick={() => setPage((current) => Math.max(current - 1, 1))}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Previous
+            {t("systemLogs.previous")}
           </button>
           <span className="text-xs text-slate-500">
-            Page {data?.page ?? page}
+            {t("notificationsPage.page", { page: data?.page ?? page })}
           </span>
           <button
             type="button"
@@ -275,7 +276,7 @@ const NotificationsPage = () => {
             onClick={() => setPage((current) => current + 1)}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Next
+            {t("systemLogs.next")}
           </button>
         </div>
       </section>

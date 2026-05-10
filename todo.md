@@ -194,9 +194,9 @@
 
 ### เหลือ (ยังไม่ได้แปล)
 - [ ] Settings (`/settings`) ← **ถัดไป**
-- [ ] Notifications (`/notifications`)
+- [x] Notifications (`/notifications`)
 - [ ] Domain (`/domain`)
-- [ ] API Tokens (`/api-tokens`)
+- [x] API Tokens (`/api-tokens`)
 - [ ] Monitor Detail (`/monitors/:id`)
 - [ ] New Monitor (`/monitors/new`)
 

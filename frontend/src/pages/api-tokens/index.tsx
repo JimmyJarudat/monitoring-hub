@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
@@ -13,15 +14,13 @@ type ApiToken = {
   createdAt: string;
 };
 
-const dateFormatter = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-const formatDate = (value: string | null) => {
+const formatDate = (value: string | null, locale: string) => {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 };
 
 const isExpired = (expiresAt: string | null) => {
@@ -30,7 +29,9 @@ const isExpired = (expiresAt: string | null) => {
 };
 
 const ApiTokensPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -51,7 +52,7 @@ const ApiTokensPage = () => {
       }
       setTokens(res.data.data);
     } catch {
-      toast.error("โหลด API tokens ไม่สำเร็จ");
+      toast.error(t("apiTokens.loadError"));
     } finally {
       setLoading(false);
     }
@@ -82,14 +83,14 @@ const ApiTokensPage = () => {
       setShowForm(false);
       setCopied(false);
     } catch {
-      toast.error("สร้าง API token ไม่สำเร็จ");
+      toast.error(t("apiTokens.createError"));
     } finally {
       setCreating(false);
     }
   };
 
   const handleRevoke = async (id: string, name: string) => {
-    if (!confirm(`ยืนยันการยกเลิก token "${name}"?`)) return;
+    if (!confirm(t("apiTokens.revokeConfirm", { name }))) return;
     setRevoking(id);
     try {
       const res = await api.delete<ApiResponse<unknown>>(`/api-tokens/${id}`);
@@ -98,9 +99,9 @@ const ApiTokensPage = () => {
         return;
       }
       setTokens((prev) => prev.filter((t) => t.id !== id));
-      toast.success("ยกเลิก API token แล้ว");
+      toast.success(t("apiTokens.revokeSuccess"));
     } catch {
-      toast.error("ยกเลิก API token ไม่สำเร็จ");
+      toast.error(t("apiTokens.revokeError"));
     } finally {
       setRevoking(null);
     }
@@ -118,10 +119,10 @@ const ApiTokensPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">บัญชีของฉัน</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">API Tokens</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("user.myAccount")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("apiTokens.title")}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            สร้าง token สำหรับเรียก API โดยตรงโดยไม่ต้องใช้ session — ใช้ได้ใน script, integration หรือ automation
+            {t("apiTokens.description")}
           </p>
         </div>
         <button
@@ -132,22 +133,22 @@ const ApiTokensPage = () => {
           }}
           className="shrink-0 rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700"
         >
-          + สร้าง Token ใหม่
+          {t("apiTokens.newToken")}
         </button>
       </div>
 
       {/* Create form */}
       {showForm ? (
         <section className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-900">สร้าง API Token ใหม่</h2>
+          <h2 className="mb-4 text-sm font-semibold text-slate-900">{t("apiTokens.createTitle")}</h2>
           <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex flex-1 flex-col gap-1">
-              <label className="text-xs font-medium text-slate-700">ชื่อ Token</label>
+              <label className="text-xs font-medium text-slate-700">{t("apiTokens.tokenName")}</label>
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="เช่น Grafana Integration, Deploy Script"
+                placeholder={t("apiTokens.namePlaceholder")}
                 maxLength={100}
                 required
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none"
@@ -155,7 +156,7 @@ const ApiTokensPage = () => {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-700">
-                วันหมดอายุ <span className="text-slate-400">(ไม่บังคับ)</span>
+                {t("apiTokens.expiresAt")} <span className="text-slate-400">{t("credentials.optionalSuffix")}</span>
               </label>
               <input
                 type="date"
@@ -171,14 +172,14 @@ const ApiTokensPage = () => {
                 disabled={creating || !newName.trim()}
                 className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {creating ? "กำลังสร้าง..." : "สร้าง"}
+                {creating ? t("apiTokens.creating") : t("apiTokens.create")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
                 className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                ยกเลิก
+                {t("common.cancel")}
               </button>
             </div>
           </form>
@@ -193,7 +194,7 @@ const ApiTokensPage = () => {
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-amber-800">คัดลอก token นี้ไว้ทันที — จะไม่แสดงอีกครั้ง</p>
+              <p className="text-sm font-semibold text-amber-800">{t("apiTokens.copyNow")}</p>
               <div className="mt-3 flex items-center gap-2">
                 <code className="flex-1 break-all rounded-md bg-white px-3 py-2 text-xs font-mono text-slate-800 border border-amber-200 select-all">
                   {createdToken}
@@ -203,11 +204,11 @@ const ApiTokensPage = () => {
                   onClick={copyToken}
                   className="shrink-0 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-50"
                 >
-                  {copied ? "คัดลอกแล้ว ✓" : "คัดลอก"}
+                  {copied ? t("apiTokens.copied") : t("apiTokens.copy")}
                 </button>
               </div>
               <p className="mt-2 text-xs text-amber-700">
-                ใช้งานใน HTTP header:{" "}
+                {t("apiTokens.authHeader")}{" "}
                 <code className="font-mono">Authorization: Bearer {createdToken.slice(0, 14)}...</code>
               </p>
             </div>
@@ -217,7 +218,7 @@ const ApiTokensPage = () => {
             onClick={() => setCreatedToken(null)}
             className="mt-4 text-xs text-amber-700 underline hover:text-amber-900"
           >
-            ปิดข้อความนี้
+            {t("apiTokens.closeMessage")}
           </button>
         </section>
       ) : null}
@@ -225,9 +226,9 @@ const ApiTokensPage = () => {
       {/* Token list */}
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-950">Token ทั้งหมด</h2>
+          <h2 className="text-sm font-semibold text-slate-950">{t("apiTokens.allTokens")}</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            {loading ? "กำลังโหลด..." : `${tokens.length.toLocaleString()} token`}
+            {loading ? t("common.loading") : t("apiTokens.tokenCount", { count: tokens.length.toLocaleString() })}
           </p>
         </div>
 
@@ -235,11 +236,11 @@ const ApiTokensPage = () => {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">ชื่อ</th>
+                <th className="px-4 py-3">{t("common.name")}</th>
                 <th className="px-4 py-3">Prefix</th>
-                <th className="px-4 py-3">หมดอายุ</th>
-                <th className="px-4 py-3">ใช้ล่าสุด</th>
-                <th className="px-4 py-3">สร้างเมื่อ</th>
+                <th className="px-4 py-3">{t("apiTokens.expiresAt")}</th>
+                <th className="px-4 py-3">{t("apiTokens.lastUsed")}</th>
+                <th className="px-4 py-3">{t("common.createdAt")}</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -247,7 +248,7 @@ const ApiTokensPage = () => {
               {!loading && tokens.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
-                    ยังไม่มี API token — กดปุ่ม "สร้าง Token ใหม่" เพื่อเริ่มต้น
+                    {t("apiTokens.noTokens")}
                   </td>
                 </tr>
               ) : null}
@@ -260,7 +261,7 @@ const ApiTokensPage = () => {
                         {token.name}
                         {expired ? (
                           <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
-                            หมดอายุ
+                            {t("apiTokens.expired")}
                           </span>
                         ) : null}
                       </div>
@@ -271,17 +272,17 @@ const ApiTokensPage = () => {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {token.expiresAt ? (
                         <span className={expired ? "text-rose-600" : "text-slate-700"}>
-                          {formatDate(token.expiresAt)}
+                          {formatDate(token.expiresAt, locale)}
                         </span>
                       ) : (
-                        <span className="text-slate-400">ไม่มีวันหมดอายุ</span>
+                        <span className="text-slate-400">{t("apiTokens.neverExpires")}</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      {formatDate(token.lastUsedAt)}
+                      {formatDate(token.lastUsedAt, locale)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      {formatDate(token.createdAt)}
+                      {formatDate(token.createdAt, locale)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -290,7 +291,7 @@ const ApiTokensPage = () => {
                         onClick={() => void handleRevoke(token.id, token.name)}
                         className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {revoking === token.id ? "กำลังยกเลิก..." : "Revoke"}
+                        {revoking === token.id ? t("apiTokens.revoking") : t("apiTokens.revoke")}
                       </button>
                     </td>
                   </tr>
