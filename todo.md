@@ -177,10 +177,10 @@
 - [x] Incidents (`/incidents`)
 - [x] Results (`/results`)
 - [x] Alerts (`/alerts`)
+- [x] Channels (`/channels`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Channels (`/channels`) ← **ถัดไป** — JSON keys มีแล้วเช่นกัน
-- [ ] Devices (`/devices`)
+- [ ] Devices (`/devices`) ← **ถัดไป**
 - [ ] Interfaces (`/interfaces`)
 - [ ] Groups (`/groups` + `/groups/:id`)
 - [ ] Credentials (`/credentials`)
