@@ -179,10 +179,10 @@
 - [x] Alerts (`/alerts`)
 - [x] Channels (`/channels`)
 - [x] Devices (`/devices`)
+- [x] Interfaces (`/interfaces`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Interfaces (`/interfaces`) ← **ถัดไป**
-- [ ] Groups (`/groups` + `/groups/:id`)
+- [ ] Groups (`/groups` + `/groups/:id`) ← **ถัดไป**
 - [ ] Credentials (`/credentials`)
 - [ ] Reports (`/reports`)
 - [ ] Status Map (`/status-map`)
