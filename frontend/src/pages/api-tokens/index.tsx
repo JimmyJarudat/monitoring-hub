@@ -74,8 +74,9 @@ const ApiTokensPage = () => {
         toast.error(res.data.message);
         return;
       }
-      setCreatedToken(res.data.data.token);
-      setTokens((prev) => [res.data.data as ApiToken, ...prev]);
+      const createdApiToken = res.data.data;
+      setCreatedToken(createdApiToken.token);
+      setTokens((prev) => [createdApiToken, ...prev]);
       setNewName("");
       setNewExpiry("");
       setShowForm(false);
