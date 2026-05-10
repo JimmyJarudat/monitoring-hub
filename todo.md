@@ -197,7 +197,7 @@
 - [x] Notifications (`/notifications`)
 - [x] Domain (`/domain`)
 - [x] API Tokens (`/api-tokens`)
-- [ ] Monitor Detail (`/monitors/:id`)
+- [x] Monitor Detail (`/monitors/:id`)
 - [ ] New Monitor (`/monitors/new`)
 
 ---
