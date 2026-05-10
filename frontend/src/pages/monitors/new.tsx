@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
@@ -84,32 +85,32 @@ type ApiFailure = {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
-const monitorTypes: Array<{ label: string; value: MonitorType; description: string }> = [
-  { label: "Ping", value: "PING", description: "Basic host reachability check" },
-  { label: "TCP", value: "TCP", description: "Check if a host port is reachable" },
-  { label: "HTTP", value: "HTTP", description: "Validate URL response and status code" },
+const monitorTypes: Array<{ label: string; value: MonitorType; descriptionKey: string }> = [
+  { label: "Ping", value: "PING", descriptionKey: "newMonitor.typeDescriptions.PING" },
+  { label: "TCP", value: "TCP", descriptionKey: "newMonitor.typeDescriptions.TCP" },
+  { label: "HTTP", value: "HTTP", descriptionKey: "newMonitor.typeDescriptions.HTTP" },
   {
     label: "TLS Certificate",
     value: "TLS_CERT",
-    description: "Check certificate expiry and warn before expiration",
+    descriptionKey: "newMonitor.typeDescriptions.TLS_CERT",
   },
   {
     label: "DNS",
     value: "DNS",
-    description: "Resolve DNS records and optionally match an expected value",
+    descriptionKey: "newMonitor.typeDescriptions.DNS",
   },
   {
     label: "SNMP",
     value: "SNMP",
-    description: "Query SNMP agent on network devices — routers, switches, firewalls",
+    descriptionKey: "newMonitor.typeDescriptions.SNMP",
   },
   {
     label: "System",
     value: "SYSTEM",
-    description: "Monitor CPU, RAM and Disk usage via SNMP — Linux servers with snmpd",
+    descriptionKey: "newMonitor.typeDescriptions.SYSTEM",
   },
-  { label: "Docker", value: "DOCKER", description: "Check Portainer endpoint or container" },
-  { label: "Database", value: "DATABASE", description: "Check database connection health" },
+  { label: "Docker", value: "DOCKER", descriptionKey: "newMonitor.typeDescriptions.DOCKER" },
+  { label: "Database", value: "DATABASE", descriptionKey: "newMonitor.typeDescriptions.DATABASE" },
 ];
 
 const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [
@@ -315,112 +316,112 @@ type TypeGuide = { summary: string; fields: GuideField[]; tip?: string };
 
 const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
   HTTP: {
-    summary: "ส่ง HTTP request แล้วตรวจสอบ status code, body, header และความเร็ว",
+    summary: "Send an HTTP request and verify status code, body, headers, and latency.",
     fields: [
-      { name: "URL", desc: "ที่อยู่ที่ต้องการเช็ค เช่น https://example.com/health", required: true },
-      { name: "Method", desc: "GET สำหรับดึงข้อมูล · HEAD ถ้าไม่ต้องการ body · POST สำหรับ API ที่รับ request" },
-      { name: "Expected status", desc: "HTTP status ที่คาดว่าจะได้ เช่น 200 = OK · 201 = Created · 204 = No Content" },
-      { name: "Auth type", desc: "Basic = username/password · Bearer = API token หรือ JWT" },
-      { name: "Expected body text", desc: 'ข้อความที่ต้องมีใน response เช่น "ok" หรือ "healthy" — ถ้าไม่มีจะ DEGRADED' },
-      { name: "JSON path", desc: 'เช็คค่าใน JSON response เช่น $.status หรือ $.data.items[0].state' },
-      { name: "JSON expected value", desc: 'ค่าที่คาดว่าจะได้จาก JSON path เช่น "ok" หรือ "true"' },
-      { name: "Expected header", desc: "ชื่อ header เช่น content-type และค่าที่คาดว่าจะได้ เช่น application/json" },
-      { name: "Latency threshold ms", desc: "ถ้า response ช้ากว่านี้จะ DEGRADED เช่น 2000 = ช้ากว่า 2 วินาที" },
-      { name: "Follow redirects", desc: "เปิด = ตาม redirect อัตโนมัติ · ปิด = หยุดที่ 3xx แล้วเช็ค status นั้น" },
+      { name: "URL", desc: "Address to check, such as https://example.com/health", required: true },
+      { name: "Method", desc: "GET fetches data · HEAD skips body · POST works for APIs that accept requests" },
+      { name: "Expected status", desc: "Expected HTTP status, such as 200 = OK · 201 = Created · 204 = No Content" },
+      { name: "Auth type", desc: "Basic = username/password · Bearer = API token or JWT" },
+      { name: "Expected body text", desc: 'Text that must exist in the response, such as "ok" or "healthy"; otherwise DEGRADED' },
+      { name: "JSON path", desc: "Check a value in JSON response, such as $.status or $.data.items[0].state" },
+      { name: "JSON expected value", desc: 'Expected value from JSON path, such as "ok" or "true"' },
+      { name: "Expected header", desc: "Header name such as content-type and expected value such as application/json" },
+      { name: "Latency threshold ms", desc: "DEGRADED when response is slower than this, e.g. 2000 = slower than 2 seconds" },
+      { name: "Follow redirects", desc: "Enabled = follow redirects automatically · disabled = stop at 3xx and check that status" },
     ],
-    tip: "เหมาะกับ API health endpoint เช่น /health /ping /status และ web page ที่ต้องการเช็ค content",
+    tip: "Best for API health endpoints such as /health, /ping, /status, and pages where content must be checked.",
   },
   PING: {
-    summary: "ส่ง ICMP ping ไปยัง host แล้วดูว่าตอบกลับหรือไม่",
+    summary: "Send an ICMP ping to a host and check whether it responds.",
     fields: [
-      { name: "Host", desc: "IP address หรือ hostname เช่น 192.168.1.1 หรือ router.local", required: true },
-      { name: "Timeout ms", desc: "รอนานแค่ไหน ถ้าเกินจะ DOWN เช่น 5000 = 5 วินาที" },
+      { name: "Host", desc: "IP address or hostname, such as 192.168.1.1 or router.local", required: true },
+      { name: "Timeout ms", desc: "How long to wait before marking DOWN, e.g. 5000 = 5 seconds" },
     ],
-    tip: "ใช้เช็คว่าอุปกรณ์ยังเปิดอยู่ไหม ไม่ได้เช็คว่า service ทำงานได้ — ควรใช้คู่กับ TCP หรือ HTTP",
+    tip: "Use this to check whether a device is reachable. It does not prove a service works; pair it with TCP or HTTP.",
   },
   TCP: {
-    summary: "เปิด TCP connection ไปยัง host:port แล้วดูว่าเชื่อมต่อได้หรือไม่",
+    summary: "Open a TCP connection to host:port and verify it connects.",
     fields: [
-      { name: "Service preset", desc: "เลือก service สำเร็จรูป port จะ auto-fill เช่น SSH = 22 · RDP = 3389 · SMTP = 25" },
-      { name: "Host", desc: "IP address หรือ hostname ของ server", required: true },
-      { name: "Port", desc: "TCP port ที่ต้องการเช็ค", required: true },
-      { name: "Timeout ms", desc: "รอ connection นานแค่ไหน" },
+      { name: "Service preset", desc: "Choose a preset service to auto-fill the port, such as SSH = 22 · RDP = 3389 · SMTP = 25" },
+      { name: "Host", desc: "Server IP address or hostname", required: true },
+      { name: "Port", desc: "TCP port to check", required: true },
+      { name: "Timeout ms", desc: "How long to wait for the connection" },
     ],
-    tip: "เหมาะกับเช็คว่า SSH, RDP, database port เปิดอยู่ไหม — ไม่ได้เช็คว่า login ได้",
+    tip: "Best for checking whether SSH, RDP, or database ports are open. It does not verify login.",
   },
   TLS_CERT: {
-    summary: "เชื่อมต่อ HTTPS แล้วตรวจสอบ SSL/TLS certificate ว่าใกล้หมดอายุหรือไม่",
+    summary: "Connect with HTTPS and check whether the SSL/TLS certificate is near expiry.",
     fields: [
-      { name: "URL", desc: "ที่อยู่ https เช่น https://example.com — ต้องขึ้นต้นด้วย https://", required: true },
-      { name: "Warning days", desc: "เตือนล่วงหน้ากี่วันก่อน cert หมดอายุ เช่น 30 = เตือนก่อน 1 เดือน" },
+      { name: "URL", desc: "HTTPS address such as https://example.com; it must start with https://", required: true },
+      { name: "Warning days", desc: "How many days before expiry to warn, e.g. 30 = one month early" },
     ],
-    tip: "ถ้า cert หมดอายุแล้วจะ DOWN · ถ้าใกล้หมดตาม warning days จะ DEGRADED · ถ้ายังเหลือนานจะ UP",
+    tip: "Expired certificates are DOWN. Certificates inside warning days are DEGRADED. Healthy certificates are UP.",
   },
   DNS: {
-    summary: "ส่ง DNS query แล้วตรวจสอบว่า domain resolve ได้และได้ค่าที่ถูกต้อง",
+    summary: "Send a DNS query and verify that the domain resolves to the expected value.",
     fields: [
-      { name: "Host", desc: "domain ที่ต้องการ resolve เช่น n8n.example.com — ต้องเป็นชื่อเต็ม ไม่ใช่ root domain ที่ไม่มี record", required: true },
+      { name: "Host", desc: "Domain to resolve, such as n8n.example.com; use a full record name", required: true },
       { name: "Record type", desc: "A = IPv4 · AAAA = IPv6 · CNAME = alias · MX = email server · NS = nameserver · TXT = text" },
-      { name: "Expected value", desc: "ค่าที่คาดว่าจะ resolve ได้ เช่น IP address — ถ้าไม่ตรงจะ DEGRADED" },
-      { name: "DNS server", desc: "ระบุ DNS server เฉพาะ เช่น 1.1.1.1 — ถ้าว่างจะใช้ system default" },
+      { name: "Expected value", desc: "Expected resolved value, such as an IP address; mismatch becomes DEGRADED" },
+      { name: "DNS server", desc: "Specific DNS server such as 1.1.1.1; blank uses system default" },
     ],
-    tip: "ถ้า domain ไม่มี record จะ DOWN ทันที — ต้องใช้ subdomain เช่น api.example.com ไม่ใช่ example.com",
+    tip: "A domain without the requested record becomes DOWN. Use a subdomain such as api.example.com when needed.",
   },
   SNMP: {
-    summary: "ส่ง SNMP GET query ไปยัง network device แล้วดึงข้อมูล sysName, sysDescr, sysUpTime และ interface counters",
+    summary: "Send SNMP GET queries to a network device and collect sysName, sysDescr, sysUpTime, and interface counters.",
     fields: [
-      { name: "Host", desc: "IP address ของ device เช่น 192.168.1.1", required: true },
-      { name: "Community", desc: 'SNMP community string เช่น "public" (read-only) หรือที่กำหนดเอง' },
-      { name: "Version", desc: "SNMP version — 2c รองรับได้ดีที่สุด · 1 ใช้กับ device เก่า" },
-      { name: "Port", desc: "UDP port ของ SNMP agent — default 161" },
-      { name: "Custom OIDs", desc: "OID ที่ต้องการ GET คั่นด้วย comma เช่น 1.3.6.1.2.1.1.5.0,1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime" },
+      { name: "Host", desc: "Device IP address, such as 192.168.1.1", required: true },
+      { name: "Community", desc: 'SNMP community string such as "public" (read-only) or a custom value' },
+      { name: "Version", desc: "SNMP version; 2c is best supported, 1 is for older devices" },
+      { name: "Port", desc: "SNMP agent UDP port; default is 161" },
+      { name: "Custom OIDs", desc: "Comma-separated OIDs to GET; blank uses sysName, sysDescr, and sysUpTime" },
     ],
-    tip: "ตอนนี้ SNMP monitor จะเก็บ traffic/error counters ต่อ interface แบบ time-series ด้วย เหมาะกับ router, switch, firewall",
+    tip: "SNMP monitors also collect per-interface traffic and error counters as time-series data.",
   },
   SYSTEM: {
-    summary: "ดึงข้อมูล CPU, RAM, Disk และ Network จาก Linux server ผ่าน SNMP — ต้องติดตั้ง snmpd ก่อน",
+    summary: "Collect CPU, RAM, disk, and network data from Linux servers through SNMP. snmpd must be installed first.",
     fields: [
-      { name: "Host", desc: "IP address ของ server เช่น 10.8.0.1", required: true },
-      { name: "Community", desc: 'SNMP community string เช่น "public" หรือที่กำหนดเอง' },
-      { name: "Version", desc: "SNMP version — 2c รองรับดีที่สุด" },
-      { name: "Port", desc: "UDP port ของ SNMP — default 161" },
+      { name: "Host", desc: "Server IP address, such as 10.8.0.1", required: true },
+      { name: "Community", desc: 'SNMP community string such as "public" or a custom value' },
+      { name: "Version", desc: "SNMP version; 2c is best supported" },
+      { name: "Port", desc: "SNMP UDP port; default is 161" },
     ],
-    tip: "SYSTEM monitor จะเก็บ metric samples แยกไว้สำหรับทำกราฟ CPU/RAM/Disk/Net ต่อภายหลัง",
+    tip: "SYSTEM monitors store metric samples separately for CPU/RAM/disk/network charts.",
   },
   DOCKER: {
-    summary: "เชื่อมต่อ Portainer แล้วตรวจสอบสถานะ Stack, Container หรือ Endpoint",
+    summary: "Connect to Portainer and check Stack, Container, or Endpoint status.",
     fields: [
-      { name: "Portainer URL", desc: "ที่อยู่ Portainer เช่น https://portainer.example.com หรือ http://192.168.1.1:9000", required: true },
-      { name: "API key", desc: "สร้างได้ที่ Portainer → User settings → Access tokens", required: true },
-      { name: "Endpoint ID", desc: "ID ของ environment ใน Portainer ดูได้จาก URL เช่น /#!/1/docker → ID = 1", required: true },
-      { name: "Stack ID (แนะนำ)", desc: "ตัวเลข ID ของ Stack ใน Portainer เช่น 12 · ดูได้จาก Portainer → Stacks → URL เช่น /#!/stacks/12" },
-      { name: "Container ID / Name", desc: "ใช้เมื่อไม่ได้เช็ค Stack · ใส่ชื่อ container หรือ short ID เช่น nginx หรือ abc123def" },
+      { name: "Portainer URL", desc: "Portainer address such as https://portainer.example.com or http://192.168.1.1:9000", required: true },
+      { name: "API key", desc: "Create it in Portainer → User settings → Access tokens", required: true },
+      { name: "Endpoint ID", desc: "Environment ID in Portainer, visible in URLs such as /#!/1/docker → ID = 1", required: true },
+      { name: "Stack ID (recommended)", desc: "Numeric Stack ID in Portainer, such as 12" },
+      { name: "Container ID / Name", desc: "Use when not checking a Stack; enter container name or short ID such as nginx or abc123def" },
     ],
-    tip: "ลำดับ: Stack ID → Container ID/Name → Endpoint overview (ถ้าว่างทั้งคู่)",
+    tip: "Priority: Stack ID → Container ID/Name → Endpoint overview when both are blank.",
   },
   DATABASE: {
-    summary: "เปิด connection ไปยัง database แล้วรัน query ง่ายๆ เพื่อเช็คว่า database ตอบสนอง",
+    summary: "Open a database connection and run a simple query to verify responsiveness.",
     fields: [
-      { name: "Database type", desc: "เลือกประเภท database ที่ต้องการเช็ค", required: true },
-      { name: "Host / Port", desc: "ที่อยู่ database server เช่น 192.168.1.1 port 5432", required: true },
-      { name: "User / Password", desc: "แนะนำสร้าง read-only user เฉพาะสำหรับ monitor — ไม่ควรใช้ admin" },
-      { name: "Database name", desc: "ชื่อ database ที่ต้องการ connect" },
-      { name: "MongoDB URI", desc: "ถ้าระบุ URI จะใช้แทน host/port/user/password ทั้งหมด เช่น mongodb://user:pass@host:27017/db" },
+      { name: "Database type", desc: "Database engine to check", required: true },
+      { name: "Host / Port", desc: "Database server address such as 192.168.1.1 port 5432", required: true },
+      { name: "User / Password", desc: "Use a dedicated read-only monitor user; avoid admin credentials" },
+      { name: "Database name", desc: "Database name to connect to" },
+      { name: "MongoDB URI", desc: "When URI is set, it replaces host/port/user/password, e.g. mongodb://user:pass@host:27017/db" },
     ],
-    tip: "แนะนำใช้ read-only user ที่มีสิทธิ์น้อยที่สุด เช่น SELECT เท่านั้น ไม่ควรใช้ admin credential",
+    tip: "Use the least-privileged read-only user possible, such as SELECT-only. Avoid admin credentials.",
   },
 };
 
-const getRequiredHint = (type: MonitorType) => {
-  if (type === "PING") return "Required: host";
-  if (type === "TCP") return "Required: host, port";
-  if (type === "HTTP") return "Required: url. Optional: auth, body/header check, latency threshold";
-  if (type === "TLS_CERT") return "Required: url. Optional: warning days";
-  if (type === "DNS") return "Required: host. Optional: record type, expected value, DNS server";
-  if (type === "SNMP") return "Required: host. Optional: community, version, port, custom OIDs";
-  if (type === "SYSTEM") return "Required: host. Optional: community, version, port";
-  if (type === "DOCKER") return "Required: portainerUrl, apiKey, endpointId";
-  return "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource.";
+const getRequiredHintKey = (type: MonitorType) => {
+  if (type === "PING") return "newMonitor.requiredHints.PING";
+  if (type === "TCP") return "newMonitor.requiredHints.TCP";
+  if (type === "HTTP") return "newMonitor.requiredHints.HTTP";
+  if (type === "TLS_CERT") return "newMonitor.requiredHints.TLS_CERT";
+  if (type === "DNS") return "newMonitor.requiredHints.DNS";
+  if (type === "SNMP") return "newMonitor.requiredHints.SNMP";
+  if (type === "SYSTEM") return "newMonitor.requiredHints.SYSTEM";
+  if (type === "DOCKER") return "newMonitor.requiredHints.DOCKER";
+  return "newMonitor.requiredHints.DATABASE";
 };
 
 const credentialTypeLabels: Record<CredentialType, string> = {
@@ -444,6 +445,7 @@ const getCompatibleCredentialTypes = (
 const AddMonitorPage = () => {
   const navigate = useNavigate();
   const { api, post } = useApi();
+  const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -556,10 +558,10 @@ const AddMonitorPage = () => {
 
     try {
       await post("/monitors", payload);
-      toast.success("เพิ่ม monitor สำเร็จ");
+      toast.success(t("newMonitor.createSuccess"));
       navigate("/monitors", { replace: true });
     } catch {
-      toast.error("เพิ่ม monitor ไม่สำเร็จ");
+      toast.error(t("newMonitor.createError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -569,10 +571,10 @@ const AddMonitorPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Monitoring</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Add Monitor</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("newMonitor.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("newMonitor.title")}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Create a new check target. The configuration is stored as JSON and sent directly to the API.
+            {t("newMonitor.description")}
           </p>
         </div>
 
@@ -580,18 +582,18 @@ const AddMonitorPage = () => {
           className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           to="/monitors"
         >
-          Back to Monitors
+          {t("newMonitor.backToMonitors")}
         </Link>
       </div>
 
       <form className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]" onSubmit={handleSubmit}>
         <section className="space-y-6">
           <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-950">Monitor details</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("newMonitor.monitorDetails")}</h2>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="block md:col-span-2">
-                <span className="text-sm font-medium text-slate-700">Name</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.name")}</span>
                 <input
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   value={form.name}
@@ -602,7 +604,7 @@ const AddMonitorPage = () => {
               </label>
 
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Type</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.type")}</span>
                 <select
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   value={form.type}
@@ -617,7 +619,7 @@ const AddMonitorPage = () => {
               </label>
 
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Interval seconds</span>
+                <span className="text-sm font-medium text-slate-700">{t("newMonitor.intervalSeconds")}</span>
                 <input
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   min={10}
@@ -635,7 +637,7 @@ const AddMonitorPage = () => {
                   type="checkbox"
                   onChange={(event) => updateField("enabled", event.target.checked)}
                 />
-                <span className="text-sm font-medium text-slate-700">Enable monitor after create</span>
+                <span className="text-sm font-medium text-slate-700">{t("newMonitor.enableAfterCreate")}</span>
               </label>
             </div>
           </div>
@@ -643,8 +645,8 @@ const AddMonitorPage = () => {
           <div className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">{selectedType.label} config</h2>
-                <p className="mt-0.5 text-sm text-slate-500">{selectedType.description}</p>
+                <h2 className="text-sm font-semibold text-slate-950">{t("newMonitor.typeConfig", { type: selectedType.label })}</h2>
+                <p className="mt-0.5 text-sm text-slate-500">{t(selectedType.descriptionKey)}</p>
               </div>
               <button
                 type="button"
@@ -652,7 +654,7 @@ const AddMonitorPage = () => {
                 onClick={() => setShowGuide((v) => !v)}
               >
                 <span>{showGuide ? "▲" : "▼"}</span>
-                คำแนะนำการใช้งาน
+                {t("newMonitor.usageGuide")}
               </button>
             </div>
 
@@ -664,9 +666,9 @@ const AddMonitorPage = () => {
                     <li key={field.name} className="flex gap-2">
                       <span className="mt-0.5 shrink-0">
                         {field.required ? (
-                          <span className="rounded bg-cyan-200 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800">required</span>
+                          <span className="rounded bg-cyan-200 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800">{t("newMonitor.required")}</span>
                         ) : (
-                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">optional</span>
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">{t("newMonitor.optional")}</span>
                         )}
                       </span>
                       <span className="text-slate-700"><span className="font-medium text-slate-900">{field.name}</span> — {field.desc}</span>
@@ -685,29 +687,30 @@ const AddMonitorPage = () => {
               <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-violet-950">Credential link</h3>
+                    <h3 className="text-sm font-semibold text-violet-950">{t("newMonitor.credentialLink")}</h3>
                     <p className="mt-1 text-sm text-violet-800">
-                      ประเภทนี้เลือกใช้ได้เฉพาะ{" "}
-                      {compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")}
+                      {t("newMonitor.compatibleCredentialOnly", {
+                        types: compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", "),
+                      })}
                     </p>
                   </div>
                   <Link
                     className="shrink-0 rounded-md border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
                     to="/credentials"
                   >
-                    Manage credentials
+                    {t("newMonitor.manageCredentials")}
                   </Link>
                 </div>
 
                 <div className="mt-3 grid gap-3 md:grid-cols-[1fr,auto]">
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Choose credential</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.chooseCredential")}</span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={selectedCredentialId}
                       onChange={(event) => applyCredential(event.target.value)}
                     >
-                      <option value="">Don't use preset</option>
+                      <option value="">{t("newMonitor.dontUsePreset")}</option>
                       {availableCredentials.map((credential) => (
                         <option key={credential.id} value={credential.id}>
                           {credential.name} · {credentialTypeLabels[credential.type]}
@@ -719,18 +722,18 @@ const AddMonitorPage = () => {
                   {selectedCredential ? (
                     <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-xs text-slate-600">
                       <div className="font-semibold text-slate-900">{selectedCredential.name}</div>
-                      <div className="mt-1">{selectedCredential.notes || "ไม่มี notes"}</div>
+                      <div className="mt-1">{selectedCredential.notes || t("newMonitor.noNotes")}</div>
                     </div>
                   ) : null}
                 </div>
 
                 {availableCredentials.length === 0 ? (
                   <p className="mt-3 text-xs text-violet-700">
-                    ยังไม่มี credential ที่ตรงประเภทนี้ ไปสร้างที่หน้า /credentials ก่อนแล้วค่อยกลับมาเลือกได้
+                    {t("newMonitor.noCompatibleCredentials")}
                   </p>
                 ) : (
                   <p className="mt-3 text-xs text-violet-700">
-                    เมื่อเลือกแล้ว ระบบจะเติม field ที่เกี่ยวข้องให้อัตโนมัติ และ monitor จะผูกกับ credential นี้ไว้ด้วย
+                    {t("newMonitor.credentialAutofillHint")}
                   </p>
                 )}
               </div>
@@ -762,7 +765,7 @@ const AddMonitorPage = () => {
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Expected status</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.expectedStatus")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -772,7 +775,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Auth type <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.authType")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpAuthType}
@@ -790,12 +793,12 @@ const AddMonitorPage = () => {
                       type="checkbox"
                       onChange={(event) => updateField("httpFollowRedirect", event.target.checked)}
                     />
-                    <span className="text-sm font-medium text-slate-700">Follow redirects</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.followRedirects")}</span>
                   </label>
                   {form.httpAuthType === "basic" ? (
                     <>
                       <label className="block">
-                        <span className="text-sm font-medium text-slate-700">Username</span>
+                        <span className="text-sm font-medium text-slate-700">{t("newMonitor.username")}</span>
                         <input
                           className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                           value={form.httpAuthUsername}
@@ -803,7 +806,7 @@ const AddMonitorPage = () => {
                         />
                       </label>
                       <label className="block">
-                        <span className="text-sm font-medium text-slate-700">Password</span>
+                        <span className="text-sm font-medium text-slate-700">{t("newMonitor.password")}</span>
                         <input
                           className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                           type="password"
@@ -824,16 +827,16 @@ const AddMonitorPage = () => {
                     </label>
                   ) : null}
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">Expected body text <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.expectedBodyText")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedBodyText}
                       onChange={(event) => updateField("httpExpectedBodyText", event.target.value)}
-                      placeholder="ข้อความที่ต้องมีใน response body เช่น ok, healthy"
+                      placeholder={t("newMonitor.expectedBodyPlaceholder")}
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Expected header name <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.expectedHeaderName")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedHeaderKey}
@@ -842,7 +845,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Expected header value <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.expectedHeaderValue")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpExpectedHeaderValue}
@@ -851,17 +854,17 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Latency threshold ms <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.latencyThresholdMs")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
                       value={form.httpLatencyThresholdMs}
                       onChange={(event) => updateField("httpLatencyThresholdMs", event.target.value)}
-                      placeholder="DEGRADED ถ้า response ช้ากว่านี้ เช่น 2000"
+                      placeholder={t("newMonitor.latencyPlaceholder")}
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">JSON path <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.jsonPath")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpJsonPath}
@@ -870,7 +873,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">JSON expected value <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.jsonExpectedValue")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.httpJsonExpected}
@@ -894,7 +897,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Warning days</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.warningDays")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -919,7 +922,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Community <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.community")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.snmpCommunity}
@@ -928,18 +931,18 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Version <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.version")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.snmpVersion}
                       onChange={(event) => updateField("snmpVersion", event.target.value as "1" | "2c")}
                     >
-                      <option value="2c">2c (recommended)</option>
-                      <option value="1">1 (legacy)</option>
+                      <option value="2c">{t("newMonitor.snmp2c")}</option>
+                      <option value="1">{t("newMonitor.snmp1")}</option>
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Port <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.port")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -949,12 +952,12 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">Custom OIDs <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.customOids")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.snmpOids}
                       onChange={(event) => updateField("snmpOids", event.target.value)}
-                      placeholder="1.3.6.1.2.1.1.5.0, 1.3.6.1.2.1.1.3.0 — ถ้าว่างจะใช้ sysName, sysDescr, sysUpTime"
+                      placeholder={t("newMonitor.customOidsPlaceholder")}
                     />
                   </label>
                 </>
@@ -973,7 +976,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Community <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.community")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.snmpCommunity}
@@ -982,18 +985,18 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Version <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.version")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.snmpVersion}
                       onChange={(event) => updateField("snmpVersion", event.target.value as "1" | "2c")}
                     >
-                      <option value="2c">2c (recommended)</option>
-                      <option value="1">1 (legacy)</option>
+                      <option value="2c">{t("newMonitor.snmp2c")}</option>
+                      <option value="1">{t("newMonitor.snmp1")}</option>
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Port <span className="font-normal text-slate-400">(optional)</span></span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.port")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -1018,7 +1021,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Record type</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.recordType")}</span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.dnsRecordType}
@@ -1033,7 +1036,7 @@ const AddMonitorPage = () => {
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">DNS server</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.dnsServer")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.dnsServer}
@@ -1042,7 +1045,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">Expected value</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.expectedValue")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.dnsExpectedValue}
@@ -1059,7 +1062,7 @@ const AddMonitorPage = () => {
                 <>
                   {form.type === "TCP" ? (
                     <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-700">Service preset</span>
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.servicePreset")}</span>
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                         value={form.tcpPreset}
@@ -1071,7 +1074,7 @@ const AddMonitorPage = () => {
                       >
                         {TCP_PRESETS.map((p) => (
                           <option key={p.value} value={p.value}>
-                            {p.port ? `${p.label} — port ${p.port}` : p.label}
+                            {p.port ? t("newMonitor.tcpPresetWithPort", { label: p.label, port: p.port }) : p.label}
                           </option>
                         ))}
                       </select>
@@ -1090,7 +1093,7 @@ const AddMonitorPage = () => {
 
                   {form.type !== "PING" ? (
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Port</span>
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.port")}</span>
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                         type="number"
@@ -1107,7 +1110,7 @@ const AddMonitorPage = () => {
               {form.type === "DATABASE" ? (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Database type</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.databaseType")}</span>
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.databaseType}
@@ -1124,7 +1127,7 @@ const AddMonitorPage = () => {
                   </label>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">
-                      {form.databaseType === "sqlite" ? "SQLite file path" : "Database name"}
+                      {form.databaseType === "sqlite" ? t("newMonitor.sqliteFilePath") : t("newMonitor.databaseName")}
                     </span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -1135,7 +1138,7 @@ const AddMonitorPage = () => {
                   </label>
                   {usesMongoDb ? (
                     <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-700">MongoDB URI</span>
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.mongoUri")}</span>
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                         value={form.mongoUri}
@@ -1145,7 +1148,7 @@ const AddMonitorPage = () => {
                     </label>
                   ) : null}
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">User</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.user")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.user}
@@ -1154,7 +1157,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Password</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.password")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="password"
@@ -1164,7 +1167,7 @@ const AddMonitorPage = () => {
                   </label>
                   {usesMongoDb ? (
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Auth source</span>
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.authSource")}</span>
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                         value={form.authSource}
@@ -1182,7 +1185,7 @@ const AddMonitorPage = () => {
                           type="checkbox"
                           onChange={(event) => updateField("encrypt", event.target.checked)}
                         />
-                        <span className="text-sm font-medium text-slate-700">Encrypt connection</span>
+                        <span className="text-sm font-medium text-slate-700">{t("newMonitor.encryptConnection")}</span>
                       </label>
                       <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                         <input
@@ -1194,7 +1197,7 @@ const AddMonitorPage = () => {
                           }
                         />
                         <span className="text-sm font-medium text-slate-700">
-                          Trust server certificate
+                          {t("newMonitor.trustServerCertificate")}
                         </span>
                       </label>
                     </>
@@ -1215,7 +1218,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">API key</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.apiKey")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.apiKey}
@@ -1224,7 +1227,7 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Endpoint ID</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.endpointId")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
@@ -1235,30 +1238,30 @@ const AddMonitorPage = () => {
                   </label>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">
-                      Stack ID <span className="text-xs font-normal text-cyan-600">(แนะนำ)</span>
+                      Stack ID <span className="text-xs font-normal text-cyan-600">({t("newMonitor.recommended")})</span>
                     </span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       type="number"
                       value={form.stackId}
                       onChange={(event) => updateField("stackId", event.target.value)}
-                      placeholder="เช่น 12 — ดูจาก Portainer → Stacks → URL"
+                      placeholder={t("newMonitor.stackIdPlaceholder")}
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Container ID / Name</span>
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.containerIdName")}</span>
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.containerId}
                       onChange={(event) => updateField("containerId", event.target.value)}
-                      placeholder="เช่น nginx หรือ abc123def — ถ้าว่างและไม่มี Stack ID จะเช็ค endpoint ภาพรวม"
+                      placeholder={t("newMonitor.containerPlaceholder")}
                     />
                   </label>
                 </>
               ) : null}
 
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Timeout ms</span>
+                <span className="text-sm font-medium text-slate-700">{t("newMonitor.timeoutMs")}</span>
                 <input
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   type="number"
@@ -1272,13 +1275,13 @@ const AddMonitorPage = () => {
 
         <aside className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-950">API payload</h2>
-            <p className="mt-1 text-sm text-slate-500">{getRequiredHint(form.type)}</p>
+            <h2 className="text-sm font-semibold text-slate-950">{t("newMonitor.apiPayload")}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t(getRequiredHintKey(form.type))}</p>
 
             <pre className="mt-4 max-h-96 overflow-auto rounded-md bg-slate-950 p-4 text-xs text-slate-100">
               {JSON.stringify(
                 {
-                  name: form.name || "Untitled monitor",
+                  name: form.name || t("newMonitor.untitledMonitor"),
                   type: form.type,
                   interval: Number(form.interval),
                   enabled: form.enabled,
@@ -1296,7 +1299,7 @@ const AddMonitorPage = () => {
             disabled={isSubmitting}
             type="submit"
           >
-            {isSubmitting ? "Creating monitor..." : "Create Monitor"}
+            {isSubmitting ? t("newMonitor.creating") : t("newMonitor.createMonitor")}
           </button>
         </aside>
       </form>
