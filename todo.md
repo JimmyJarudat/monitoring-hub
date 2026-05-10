@@ -180,10 +180,10 @@
 - [x] Channels (`/channels`)
 - [x] Devices (`/devices`)
 - [x] Interfaces (`/interfaces`)
+- [x] Groups (`/groups` + `/groups/:id`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Groups (`/groups` + `/groups/:id`) ← **ถัดไป**
-- [ ] Credentials (`/credentials`)
+- [ ] Credentials (`/credentials`) ← **ถัดไป**
 - [ ] Reports (`/reports`)
 - [ ] Status Map (`/status-map`)
 - [ ] System Logs (`/system-logs`)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
@@ -72,12 +73,13 @@ const typeLabel = (type: MonitorType) => {
   return type;
 };
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(
+const formatDate = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
   );
 
 const GroupsPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
   const { user } = useSession();
   const isAdmin = isAdminUser(user);
@@ -126,11 +128,11 @@ const GroupsPage = () => {
       setGroups(groupsResponse.data.data);
       setMonitors(monitorsResponse.data.data);
     } catch {
-      toast.error("โหลด groups ไม่สำเร็จ");
+      toast.error(t("groups.loadError"));
     } finally {
       setIsLoading(false);
     }
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     void loadData();
@@ -217,7 +219,7 @@ const GroupsPage = () => {
     };
 
     if (!payload.name) {
-      toast.error("กรุณาระบุชื่อกลุ่ม");
+      toast.error(t("groups.validationName"));
       return;
     }
 
@@ -233,11 +235,11 @@ const GroupsPage = () => {
         return;
       }
 
-      toast.success(editingGroup ? "อัปเดตกลุ่มแล้ว" : "สร้างกลุ่มแล้ว");
+      toast.success(editingGroup ? t("groups.updateSuccess") : t("groups.createSuccess"));
       closeModal();
       await loadData();
     } catch {
-      toast.error(editingGroup ? "อัปเดตกลุ่มไม่สำเร็จ" : "สร้างกลุ่มไม่สำเร็จ");
+      toast.error(editingGroup ? t("groups.updateError") : t("groups.createError"));
     } finally {
       setBusyId(null);
     }
@@ -258,11 +260,11 @@ const GroupsPage = () => {
         return;
       }
 
-      toast.success("ลบกลุ่มแล้ว");
+      toast.success(t("groups.deleteSuccess"));
       setDeletingGroup(null);
       await loadData();
     } catch {
-      toast.error("ลบกลุ่มไม่สำเร็จ");
+      toast.error(t("groups.deleteError"));
     } finally {
       setBusyId(null);
     }
@@ -272,11 +274,10 @@ const GroupsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Inventory</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Groups</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("groups.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("groups.title")}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            รวม monitor และ device เป็นชุดตามสาขา, ลูกค้า, environment หรือทีมดูแล ช่วยให้เรา
-            มอง inventory เป็นกลุ่มงานจริง ๆ แทนการไล่ทีละตัว
+            {t("groups.description")}
           </p>
         </div>
 
@@ -286,7 +287,7 @@ const GroupsPage = () => {
             type="button"
             onClick={() => void loadData()}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           {isAdmin ? (
             <button
@@ -294,7 +295,7 @@ const GroupsPage = () => {
               type="button"
               onClick={openCreate}
             >
-              New Group
+              {t("groups.newGroup")}
             </button>
           ) : null}
         </div>
@@ -302,10 +303,10 @@ const GroupsPage = () => {
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Groups", value: summary.groups, tone: "text-slate-950" },
-          { label: "Assigned monitors", value: summary.assigned, tone: "text-cyan-700" },
-          { label: "Ungrouped", value: summary.unassigned, tone: "text-amber-700" },
-          { label: "Device groups", value: summary.devices, tone: "text-emerald-700" },
+          { label: t("groups.summaryGroups"), value: summary.groups, tone: "text-slate-950" },
+          { label: t("groups.summaryAssigned"), value: summary.assigned, tone: "text-cyan-700" },
+          { label: t("groups.summaryUngrouped"), value: summary.unassigned, tone: "text-amber-700" },
+          { label: t("groups.summaryDeviceGroups"), value: summary.devices, tone: "text-emerald-700" },
         ].map((item) => (
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={item.label}>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
@@ -314,21 +315,20 @@ const GroupsPage = () => {
         ))}
       </section>
 
-      {/* ── Health Overview ── */}
       {!isLoading && groupHealth.length > 0 && (
         <section className="mt-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-950">Health Overview</h2>
-            <p className="text-xs text-slate-400">Snapshot จาก latest result ของแต่ละกลุ่ม</p>
+            <h2 className="text-sm font-semibold text-slate-950">{t("groups.healthOverview")}</h2>
+            <p className="text-xs text-slate-400">{t("groups.healthSnapshot")}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {groupHealth.map(({ group, total, up, down, degraded, pending, overallStatus, uptimePct }) => {
               const statusConfig = {
-                UP: { bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: "Healthy" },
-                DEGRADED: { bar: "bg-amber-400", badge: "bg-amber-100 text-amber-700", label: "Degraded" },
-                DOWN: { bar: "bg-red-500", badge: "bg-red-100 text-red-700", label: "Down" },
-                PENDING: { bar: "bg-slate-300", badge: "bg-slate-100 text-slate-500", label: "Pending" },
-                EMPTY: { bar: "bg-slate-200", badge: "bg-slate-100 text-slate-400", label: "Empty" },
+                UP: { bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: t("groups.statusHealthy") },
+                DEGRADED: { bar: "bg-amber-400", badge: "bg-amber-100 text-amber-700", label: t("groups.statusDegraded") },
+                DOWN: { bar: "bg-red-500", badge: "bg-red-100 text-red-700", label: t("groups.statusDown") },
+                PENDING: { bar: "bg-slate-300", badge: "bg-slate-100 text-slate-500", label: t("groups.statusPending") },
+                EMPTY: { bar: "bg-slate-200", badge: "bg-slate-100 text-slate-400", label: t("groups.statusEmpty") },
               }[overallStatus];
 
               const upPct = total > 0 ? (up / total) * 100 : 0;
@@ -356,7 +356,7 @@ const GroupsPage = () => {
                     <span className="text-2xl font-bold text-slate-950">
                       {uptimePct !== null ? `${uptimePct}%` : "—"}
                     </span>
-                    <span className="text-xs text-slate-400">uptime</span>
+                    <span className="text-xs text-slate-400">{t("groups.uptime")}</span>
                   </div>
 
                   {/* Stacked progress bar */}
@@ -369,14 +369,14 @@ const GroupsPage = () => {
                   {/* Count pills */}
                   <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-medium">
                     {total === 0 ? (
-                      <span className="text-slate-400">ยังไม่มี monitor</span>
+                      <span className="text-slate-400">{t("groups.noMonitorsShort")}</span>
                     ) : (
                       <>
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{up} UP</span>
                         {degraded > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">{degraded} DEGRADED</span>}
                         {down > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">{down} DOWN</span>}
-                        {pending > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{pending} pending</span>}
-                        <span className="ml-auto text-slate-400">{total} total</span>
+                        {pending > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{t("groups.pendingCount", { count: pending })}</span>}
+                        <span className="ml-auto text-slate-400">{t("groups.totalCount", { count: total })}</span>
                       </>
                     )}
                   </div>
@@ -387,18 +387,17 @@ const GroupsPage = () => {
         </section>
       )}
 
-      {/* ── Group inventory (management) ── */}
       <section className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-950">Group inventory</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("groups.inventoryTitle")}</h2>
             <p className="mt-1 text-xs text-slate-500">
-              {isLoading ? "Loading..." : `${groups.length} groups loaded`}
+              {isLoading ? t("common.loading") : t("groups.loadedCount", { count: groups.length })}
             </p>
           </div>
           {monitorsWithoutGroup.length > 0 ? (
             <p className="text-xs text-amber-700">
-              {monitorsWithoutGroup.length} monitors ยังไม่ได้เข้ากลุ่ม
+              {t("groups.ungroupedWarning", { count: monitorsWithoutGroup.length })}
             </p>
           ) : null}
         </div>
@@ -406,9 +405,9 @@ const GroupsPage = () => {
         <div className="grid gap-4 p-4 lg:grid-cols-2 2xl:grid-cols-3">
           {!isLoading && groups.length === 0 ? (
             <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
-              <p className="font-medium text-slate-700">ยังไม่มีกลุ่ม</p>
+              <p className="font-medium text-slate-700">{t("groups.noGroups")}</p>
               <p className="mt-1 text-sm text-slate-400">
-                เริ่มจากสร้างกลุ่มตาม site, customer หรือ production environment ก่อนก็ได้
+                {t("groups.emptyHint")}
               </p>
               {isAdmin ? (
                 <button
@@ -416,7 +415,7 @@ const GroupsPage = () => {
                   type="button"
                   onClick={openCreate}
                 >
-                  New Group
+                  {t("groups.newGroup")}
                 </button>
               ) : null}
             </div>
@@ -434,12 +433,12 @@ const GroupsPage = () => {
                     <h3 className="truncate text-base font-semibold text-slate-950">{group.name}</h3>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
-                    {group.description || "ยังไม่ได้ใส่คำอธิบายกลุ่ม"}
+                    {group.description || t("groups.noDescription")}
                   </p>
                 </div>
 
                 <div className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                  {group.monitorCount} monitors
+                  {t("groups.monitorCount", { count: group.monitorCount })}
                 </div>
               </div>
 
@@ -462,19 +461,19 @@ const GroupsPage = () => {
                 ))}
                 {group.monitorCount > 6 ? (
                   <span className="inline-flex items-center rounded-full bg-white px-3 py-1.5 text-xs text-slate-500 ring-1 ring-slate-200">
-                    +{group.monitorCount - 6} more
+                    {t("groups.moreCount", { count: group.monitorCount - 6 })}
                   </span>
                 ) : null}
               </div>
 
               <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                <span>Updated {formatDate(group.updatedAt)}</span>
+                <span>{t("groups.updatedAt", { time: formatDate(group.updatedAt, i18n.language === "th" ? "th-TH" : "en-US") })}</span>
                 <div className="flex gap-2">
                   <Link
                     className="rounded-md border border-cyan-200 px-3 py-1.5 font-semibold text-cyan-700 transition hover:bg-cyan-50"
                     to={`/groups/${group.id}`}
                   >
-                    Summary
+                    {t("groups.summary")}
                   </Link>
                   {isAdmin ? (
                     <>
@@ -483,14 +482,14 @@ const GroupsPage = () => {
                         type="button"
                         onClick={() => openEdit(group)}
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         className="rounded-md border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-50"
                         type="button"
                         onClick={() => setDeletingGroup(group)}
                       >
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </>
                   ) : null}
@@ -505,9 +504,9 @@ const GroupsPage = () => {
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-slate-950">Ungrouped monitors</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("groups.ungroupedTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                ตัวที่ยังไม่ได้เข้ากลุ่ม เหมาะกับการเก็บงาน inventory ต่อให้เรียบร้อย
+                {t("groups.ungroupedDesc")}
               </p>
             </div>
             {isAdmin ? (
@@ -516,7 +515,7 @@ const GroupsPage = () => {
                 type="button"
                 onClick={openCreate}
               >
-                Assign via new group
+                {t("groups.assignViaNewGroup")}
               </button>
             ) : null}
           </div>
@@ -541,17 +540,17 @@ const GroupsPage = () => {
           <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
-                {editingGroup ? "Edit group" : "Create group"}
+                {editingGroup ? t("groups.editTitle") : t("groups.createTitle")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                จัด monitor และ device ให้อยู่เป็นชุดเดียวกันตามบริบทงานจริง
+                {t("groups.modalDesc")}
               </p>
             </div>
 
             <div className="grid gap-5 overflow-y-auto p-5 lg:grid-cols-[1.1fr,1.4fr]">
               <div className="space-y-4">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Group name</span>
+                  <span className="text-sm font-medium text-slate-700">{t("groups.fieldName")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="text"
@@ -563,7 +562,7 @@ const GroupsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Description</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.description")}</span>
                   <textarea
                     className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={form.description}
@@ -574,7 +573,7 @@ const GroupsPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Color</span>
+                  <span className="text-sm font-medium text-slate-700">{t("groups.fieldColor")}</span>
                   <div className="mt-2 flex items-center gap-3">
                     <input
                       className="h-11 w-16 rounded-md border border-slate-300 bg-white p-1"
@@ -599,13 +598,13 @@ const GroupsPage = () => {
               <div>
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-950">Assign monitors</h3>
+                    <h3 className="text-sm font-semibold text-slate-950">{t("groups.assignMonitors")}</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      เลือก monitor หรือ device ที่อยากให้รวมอยู่ในกลุ่มนี้
+                      {t("groups.assignMonitorsDesc")}
                     </p>
                   </div>
                   <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
-                    {form.monitorIds.length} selected
+                    {t("groups.selectedCount", { count: form.monitorIds.length })}
                   </span>
                 </div>
 
@@ -642,7 +641,10 @@ const GroupsPage = () => {
                             ) : null}
                           </div>
                           <p className="mt-1 text-xs text-slate-500">
-                            every {monitor.interval}s {monitor.enabled ? "· enabled" : "· disabled"}
+                            {t("groups.monitorInterval", {
+                              interval: monitor.interval,
+                              state: monitor.enabled ? t("common.enabled") : t("common.disabled"),
+                            })}
                           </p>
                         </div>
                       </label>
@@ -659,7 +661,7 @@ const GroupsPage = () => {
                 onClick={closeModal}
                 disabled={busyId !== null}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -667,7 +669,7 @@ const GroupsPage = () => {
                 onClick={() => void handleSubmit()}
                 disabled={busyId !== null}
               >
-                {editingGroup ? "Save changes" : "Create group"}
+                {editingGroup ? t("common.save") : t("groups.createGroup")}
               </button>
             </div>
           </div>
@@ -678,15 +680,15 @@ const GroupsPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Delete group</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{t("groups.deleteTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                การลบกลุ่มจะไม่ลบ monitor แต่จะยกเลิกการจัดกลุ่มของสมาชิกทั้งหมด
+                {t("groups.deleteDesc")}
               </p>
             </div>
 
             <div className="p-5 text-sm text-slate-600">
-              ต้องการลบ <span className="font-semibold text-slate-950">{deletingGroup.name}</span>{" "}
-              ใช่ไหม?
+              {t("groups.deleteConfirmPrefix")} <span className="font-semibold text-slate-950">{deletingGroup.name}</span>{" "}
+              {t("groups.deleteConfirmSuffix")}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
@@ -696,7 +698,7 @@ const GroupsPage = () => {
                 onClick={() => setDeletingGroup(null)}
                 disabled={busyId === deletingGroup.id}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -704,7 +706,7 @@ const GroupsPage = () => {
                 onClick={() => void handleDelete()}
                 disabled={busyId === deletingGroup.id}
               >
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
