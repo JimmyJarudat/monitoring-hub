@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
@@ -163,10 +164,10 @@ const nodeBorderStyles: Record<MapStatus, string> = {
   DISABLED: "border-slate-200 opacity-70 hover:border-slate-300",
 };
 
-const focusOptions: Array<{ label: string; value: FocusFilter }> = [
-  { label: "All", value: "ALL" },
-  { label: "Issues", value: "ISSUES" },
-  { label: "Devices", value: "DEVICES" },
+const focusOptions: Array<{ labelKey: string; value: FocusFilter }> = [
+  { labelKey: "statusMap.focusAll", value: "ALL" },
+  { labelKey: "statusMap.focusIssues", value: "ISSUES" },
+  { labelKey: "statusMap.focusDevices", value: "DEVICES" },
 ];
 
 const getMonitorStatus = (monitor: { enabled: boolean; latestResult: MonitorResult | null }): MapStatus => {
@@ -189,10 +190,10 @@ const getTarget = (config: Record<string, unknown>) => {
   return "-";
 };
 
-const formatDateTime = (value: string | null | undefined) => {
+const formatDateTime = (value: string | null | undefined, locale: string) => {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("th-TH", {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -254,7 +255,9 @@ const isDeviceType = (type: MonitorType) => type === "SNMP" || type === "SYSTEM"
 const isIssueStatus = (status: MapStatus) => status === "DOWN" || status === "DEGRADED";
 
 const StatusMapPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [summary, setSummary] = useState<MonitorSummary | null>(null);
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
@@ -298,7 +301,7 @@ const StatusMapPage = () => {
     try {
       applyStatusMapData(await fetchStatusMapData());
     } catch {
-      toast.error("โหลด Status Map ไม่สำเร็จ");
+      toast.error(t("statusMap.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -312,7 +315,7 @@ const StatusMapPage = () => {
         if (isCurrent) applyStatusMapData(data);
       })
       .catch(() => {
-        if (isCurrent) toast.error("โหลด Status Map ไม่สำเร็จ");
+        if (isCurrent) toast.error(t("statusMap.loadError"));
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false);
@@ -364,8 +367,8 @@ const StatusMapPage = () => {
     if (ungroupedNodes.length > 0) {
       lanes.push({
         id: "UNGROUPED",
-        name: "Ungrouped",
-        description: "Monitors not assigned to a group",
+        name: t("statusMap.ungrouped"),
+        description: t("statusMap.ungroupedDescription"),
         color: null,
         nodes: ungroupedNodes,
         health: getGroupHealth(ungroupedNodes),
@@ -428,10 +431,10 @@ const StatusMapPage = () => {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-medium text-cyan-700">Overview</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">Status Map</h1>
+            <p className="text-sm font-medium text-cyan-700">{t("statusMap.subtitle")}</p>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("statusMap.title")}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              แผนที่สถานะของ monitors ตามกลุ่ม ช่วยดูว่าจุดไหนล่ม กระทบ service ไหน และควรไล่ตรวจจุดใดก่อน
+              {t("statusMap.description")}
             </p>
           </div>
 
@@ -442,42 +445,42 @@ const StatusMapPage = () => {
               onClick={() => void loadStatusMap()}
               disabled={isLoading}
             >
-              {isLoading ? "Refreshing..." : "Refresh"}
+              {isLoading ? t("dashboard.refreshing") : t("common.refresh")}
             </button>
             <Link
               className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
               to="/monitors"
             >
-              Monitor inventory
+              {t("statusMap.monitorInventory")}
             </Link>
           </div>
         </div>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SummaryCard label="Map health" value={formatPercent(totals.health)} detail={`${totals.counts.UP} healthy nodes`} tone="emerald" />
-          <SummaryCard label="Issues" value={totals.issues} detail={`${totals.counts.DOWN} down, ${totals.counts.DEGRADED} degraded`} tone={totals.issues > 0 ? "rose" : "emerald"} />
-          <SummaryCard label="Open incidents" value={summary?.openIncidents ?? incidents.length} detail={`${incidents.length} loaded in queue`} tone={(summary?.openIncidents ?? incidents.length) > 0 ? "rose" : "slate"} />
-          <SummaryCard label="Devices" value={totals.devices} detail="SNMP and SYSTEM monitors" tone="cyan" />
-          <SummaryCard label="24h uptime" value={formatPercent(summary?.uptime24h)} detail={`Avg ${formatResponseTime(summary?.avgResponseTimeMs)}`} tone="slate" />
+          <SummaryCard label={t("statusMap.mapHealth")} value={formatPercent(totals.health)} detail={t("statusMap.healthyNodes", { count: totals.counts.UP })} tone="emerald" />
+          <SummaryCard label={t("statusMap.issues")} value={totals.issues} detail={t("statusMap.issueDetail", { down: totals.counts.DOWN, degraded: totals.counts.DEGRADED })} tone={totals.issues > 0 ? "rose" : "emerald"} />
+          <SummaryCard label={t("statusMap.openIncidents")} value={summary?.openIncidents ?? incidents.length} detail={t("statusMap.loadedQueue", { count: incidents.length })} tone={(summary?.openIncidents ?? incidents.length) > 0 ? "rose" : "slate"} />
+          <SummaryCard label={t("statusMap.devices")} value={totals.devices} detail={t("statusMap.devicesDetail")} tone="cyan" />
+          <SummaryCard label={t("statusMap.uptime24h")} value={formatPercent(summary?.uptime24h)} detail={t("statusMap.avgResponse", { value: formatResponseTime(summary?.avgResponseTimeMs) })} tone="slate" />
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 xl:grid-cols-[1fr_260px_340px] xl:items-end">
             <div>
-              <h2 className="text-sm font-semibold text-slate-950">Map controls</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("statusMap.controlsTitle")}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Filter map nodes by scope, issue state, or device monitor type.
+                {t("statusMap.controlsDescription")}
               </p>
             </div>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Group</span>
+              <span className="text-sm font-medium text-slate-700">{t("devices.group")}</span>
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 value={selectedGroupId}
                 onChange={(event) => setSelectedGroupId(event.target.value)}
               >
-                <option value="ALL">All groups</option>
+                <option value="ALL">{t("devices.allGroups")}</option>
                 {mapGroups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -487,7 +490,7 @@ const StatusMapPage = () => {
             </label>
 
             <div>
-              <span className="text-sm font-medium text-slate-700">Focus</span>
+              <span className="text-sm font-medium text-slate-700">{t("statusMap.focus")}</span>
               <div className="mt-2 grid grid-cols-3 overflow-hidden rounded-md border border-slate-300 bg-white">
                 {focusOptions.map((option) => {
                   const isActive = focus === option.value;
@@ -502,7 +505,7 @@ const StatusMapPage = () => {
                       type="button"
                       onClick={() => setFocus(option.value)}
                     >
-                      {option.label}
+                      {t(option.labelKey)}
                     </button>
                   );
                 })}
@@ -519,20 +522,20 @@ const StatusMapPage = () => {
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-950">Topology lanes</h2>
+                    <h2 className="text-sm font-semibold text-slate-950">{t("statusMap.topologyLanes")}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      Showing {filteredGroups.reduce((total, group) => total + group.nodes.length, 0)} nodes across {filteredGroups.length} lanes
+                      {t("statusMap.showingNodes", { nodes: filteredGroups.reduce((total, group) => total + group.nodes.length, 0), lanes: filteredGroups.length })}
                     </p>
                   </div>
                   <StatusLegend />
                 </div>
 
                 {filteredGroups.length === 0 ? (
-                  <EmptyState title="No nodes match this view" message="Change the group or focus filter to show more monitors." />
+                  <EmptyState title={t("statusMap.noNodes")} message={t("statusMap.noNodesMessage")} />
                 ) : (
                   <div className="space-y-5 p-5">
                     {filteredGroups.map((group) => (
-                      <MapLane key={group.id} group={group} />
+                      <MapLane key={group.id} group={group} locale={locale} />
                     ))}
                   </div>
                 )}
@@ -540,9 +543,9 @@ const StatusMapPage = () => {
             </div>
 
             <aside className="space-y-4">
-              <Panel title="Priority queue" description="Nodes that need attention first">
+              <Panel title={t("statusMap.priorityQueue")} description={t("statusMap.priorityDescription")}>
                 {criticalNodes.length === 0 ? (
-                  <EmptyState title="No priority nodes" message="No down, degraded, or incident-backed monitors right now." />
+                  <EmptyState title={t("statusMap.noPriority")} message={t("statusMap.noPriorityMessage")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {criticalNodes.map((node) => (
@@ -559,7 +562,7 @@ const StatusMapPage = () => {
                           {node.type} · {node.target}
                         </p>
                         <p className="mt-2 text-xs text-slate-500">
-                          {node.downCount24h} down / {node.checkCount24h} checks · uptime {formatPercent(node.uptime24h)}
+                          {t("statusMap.nodeHealthLine", { down: node.downCount24h, checks: node.checkCount24h, uptime: formatPercent(node.uptime24h) })}
                         </p>
                       </Link>
                     ))}
@@ -567,9 +570,9 @@ const StatusMapPage = () => {
                 )}
               </Panel>
 
-              <Panel title="Open incidents" description="Active incidents in the map">
+              <Panel title={t("statusMap.openIncidents")} description={t("statusMap.openIncidentsDescription")}>
                 {incidents.length === 0 ? (
-                  <EmptyState title="No open incidents" message="Incident queue is currently clear." />
+                  <EmptyState title={t("dashboard.noOpenIncidentsTitle")} message={t("statusMap.incidentQueueClear")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {incidents.slice(0, 8).map((incident) => (
@@ -585,7 +588,7 @@ const StatusMapPage = () => {
                           </span>
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                          {incident.message ?? "Incident is open"}
+                          {incident.message ?? t("dashboard.incidentIsOpen")}
                         </p>
                       </Link>
                     ))}
@@ -600,7 +603,8 @@ const StatusMapPage = () => {
   );
 };
 
-function MapLane({ group }: { group: MapGroup }) {
+function MapLane({ group, locale }: { group: MapGroup; locale: string }) {
+  const { t } = useTranslation();
   const issueCount = group.counts.DOWN + group.counts.DEGRADED;
   const laneTone =
     group.counts.DOWN > 0
@@ -626,11 +630,11 @@ function MapLane({ group }: { group: MapGroup }) {
             </Link>
             {issueCount > 0 ? (
               <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                {issueCount} issues
+                {t("statusMap.issueCount", { count: issueCount })}
               </span>
             ) : null}
           </div>
-          <p className="mt-1 truncate text-xs text-slate-500">{group.description ?? "Monitor lane"}</p>
+          <p className="mt-1 truncate text-xs text-slate-500">{group.description ?? t("statusMap.monitorLane")}</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
@@ -645,14 +649,15 @@ function MapLane({ group }: { group: MapGroup }) {
 
       <div className="grid gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-3">
         {group.nodes.map((node) => (
-          <MapNodeCard key={node.id} node={node} />
+          <MapNodeCard key={node.id} node={node} locale={locale} />
         ))}
       </div>
     </div>
   );
 }
 
-function MapNodeCard({ node }: { node: MapNode }) {
+function MapNodeCard({ node, locale }: { node: MapNode; locale: string }) {
+  const { t } = useTranslation();
   return (
     <Link
       className={[
@@ -665,7 +670,7 @@ function MapNodeCard({ node }: { node: MapNode }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-950">{node.name}</p>
           <p className="mt-1 truncate text-xs text-slate-500">
-            {node.type} · every {node.enabled ? "active" : "disabled"}
+            {node.type} · {node.enabled ? t("statusMap.active") : t("common.disabled")}
           </p>
         </div>
         <StatusBadge status={node.status} />
@@ -674,17 +679,17 @@ function MapNodeCard({ node }: { node: MapNode }) {
       <p className="mt-3 truncate text-xs text-slate-500">{node.target}</p>
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-        <NodeMetric label="Response" value={formatResponseTime(node.responseTimeMs)} />
-        <NodeMetric label="Uptime" value={formatPercent(node.uptime24h)} />
-        <NodeMetric label="Down 24h" value={node.downCount24h} />
+        <NodeMetric label={t("statusMap.response")} value={formatResponseTime(node.responseTimeMs)} />
+        <NodeMetric label={t("statusMap.uptime")} value={formatPercent(node.uptime24h)} />
+        <NodeMetric label={t("statusMap.down24h")} value={node.downCount24h} />
       </div>
 
       {node.activeIncident ? (
         <p className="mt-3 rounded-md bg-rose-50 px-2.5 py-2 text-xs font-medium text-rose-700">
-          Incident open for {formatDuration(node.activeIncident.startedAt)}
+          {t("statusMap.incidentOpenFor", { duration: formatDuration(node.activeIncident.startedAt) })}
         </p>
       ) : (
-        <p className="mt-3 text-xs text-slate-400">Last check {formatDateTime(node.checkedAt)}</p>
+        <p className="mt-3 text-xs text-slate-400">{t("statusMap.lastCheck", { time: formatDateTime(node.checkedAt, locale) })}</p>
       )}
     </Link>
   );
@@ -758,6 +763,7 @@ function SummaryCard({
   detail: string;
   tone: "cyan" | "emerald" | "rose" | "slate";
 }) {
+  const { t } = useTranslation();
   const toneClasses = {
     cyan: "bg-cyan-50 text-cyan-700",
     emerald: "bg-emerald-50 text-emerald-700",
@@ -773,7 +779,7 @@ function SummaryCard({
           <p className="mt-3 truncate text-2xl font-semibold text-slate-950">{value}</p>
         </div>
         <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${toneClasses[tone]}`}>
-          Live
+          {t("dashboard.live")}
         </span>
       </div>
       <p className="mt-2 truncate text-sm text-slate-500">{detail}</p>

@@ -182,13 +182,13 @@
 - [x] Interfaces (`/interfaces`)
 - [x] Groups (`/groups` + `/groups/:id`)
 - [x] Credentials (`/credentials`)
+- [x] Reports (`/reports`)
+- [x] Status Map (`/status-map`)
+- [x] System Logs (`/system-logs`)
+- [x] Scheduled Reports (`/scheduled-reports`)
 
 ### เหลือ (ยังไม่ได้แปล)
-- [ ] Reports (`/reports`) ← **ถัดไป**
-- [ ] Status Map (`/status-map`)
-- [ ] System Logs (`/system-logs`)
-- [ ] Scheduled Reports (`/scheduled-reports`)
-- [ ] Settings (`/settings`)
+- [ ] Settings (`/settings`) ← **ถัดไป**
 - [ ] Users (`/users`)
 - [ ] Audit Logs (`/audit-logs`)
 - [ ] Profile (`/profile`)

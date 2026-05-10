@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import {
   Bar,
   BarChart,
@@ -204,11 +205,11 @@ const presetDurationsMs: Record<Exclude<TimeRangePreset, "custom">, number> = {
   month: 30 * 24 * 60 * 60 * 1000,
 };
 
-const timeRangeOptions: Array<{ label: string; value: TimeRangePreset }> = [
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-  { label: "Custom", value: "custom" },
+const timeRangeOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
+  { labelKey: "incidents.rangeDay", value: "day" },
+  { labelKey: "incidents.rangeWeek", value: "week" },
+  { labelKey: "incidents.rangeMonth", value: "month" },
+  { labelKey: "incidents.rangeCustom", value: "custom" },
 ];
 
 const statusColors: Record<MonitorStatus | "UNKNOWN", string> = {
@@ -238,17 +239,17 @@ const toIsoFromLocalValue = (value: string) => {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
-const formatDateTime = (value: string | null | undefined) => {
+const formatDateTime = (value: string | null | undefined, locale = "en-US") => {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("th-TH", {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
 };
 
-const formatChartTime = (value: string) => {
-  return new Intl.DateTimeFormat("th-TH", {
+const formatChartTime = (value: string, locale: string) => {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -291,9 +292,9 @@ const downloadBlob = (filename: string, blob: Blob) => {
   URL.revokeObjectURL(url);
 };
 
-const downloadCsv = (filename: string, rows: Array<Record<string, unknown>>) => {
+const downloadCsv = (filename: string, rows: Array<Record<string, unknown>>, emptyMessage: string) => {
   if (rows.length === 0) {
-    toast.info("ไม่มีข้อมูลสำหรับ export");
+    toast.info(emptyMessage);
     return;
   }
 
@@ -468,7 +469,9 @@ const downloadExcel = (filename: string, payload: ReportExportPayload) => {
 };
 
 const ReportsPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("week");
   const [customFrom, setCustomFrom] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() - presetDurationsMs.week)),
@@ -521,7 +524,7 @@ const ReportsPage = () => {
     try {
       applyReportsData(await fetchReportsData());
     } catch {
-      toast.error("โหลด reports ไม่สำเร็จ");
+      toast.error(t("reportsPage.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -535,7 +538,7 @@ const ReportsPage = () => {
         if (isCurrent) applyReportsData(data);
       })
       .catch(() => {
-        if (isCurrent) toast.error("โหลด reports ไม่สำเร็จ");
+        if (isCurrent) toast.error(t("reportsPage.loadError"));
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false);
@@ -564,12 +567,12 @@ const ReportsPage = () => {
     const to = toIsoFromLocalValue(customTo);
 
     if (!from || !to) {
-      toast.error("กรุณาเลือกช่วงเวลาให้ครบ");
+      toast.error(t("incidents.validationRange"));
       return;
     }
 
     if (new Date(from).getTime() > new Date(to).getTime()) {
-      toast.error("เวลาเริ่มต้นต้องไม่มากกว่าเวลาสิ้นสุด");
+      toast.error(t("incidents.validationRangeOrder"));
       return;
     }
 
@@ -614,11 +617,11 @@ const ReportsPage = () => {
       .reverse()
       .slice(-20)
       .map((result) => ({
-        name: formatChartTime(result.checkedAt),
+        name: formatChartTime(result.checkedAt, locale),
         response: result.responseTimeMs ?? 0,
         status: result.status,
       }));
-  }, [results]);
+  }, [locale, results]);
 
   const monitorRanking = useMemo(() => {
     const grouped = new Map<
@@ -711,9 +714,10 @@ const ReportsPage = () => {
   }, [groups, incidents, results]);
 
   const activeRangeLabel = useMemo(() => {
-    if (timeRange === "custom") return `${formatDateTime(appliedFrom)} - ${formatDateTime(appliedTo)}`;
-    return timeRangeOptions.find((option) => option.value === timeRange)?.label ?? "Week";
-  }, [appliedFrom, appliedTo, timeRange]);
+    if (timeRange === "custom") return `${formatDateTime(appliedFrom, locale)} - ${formatDateTime(appliedTo, locale)}`;
+    const option = timeRangeOptions.find((item) => item.value === timeRange);
+    return option ? t(option.labelKey) : t("incidents.rangeWeek");
+  }, [appliedFrom, appliedTo, locale, t, timeRange]);
 
   const exportPayload = useMemo<ReportExportPayload>(() => {
     return {
@@ -791,10 +795,10 @@ const ReportsPage = () => {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-medium text-cyan-700">Overview</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">Reports</h1>
+            <p className="text-sm font-medium text-cyan-700">{t("reportsPage.subtitle")}</p>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("reportsPage.title")}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              สรุป uptime, incident, response time และ monitor ที่มีความเสี่ยงตามช่วงเวลาที่เลือก
+              {t("reportsPage.description")}
             </p>
           </div>
 
@@ -805,15 +809,15 @@ const ReportsPage = () => {
               onClick={() => void loadReports()}
               disabled={isLoading}
             >
-              {isLoading ? "Refreshing..." : "Refresh"}
+              {isLoading ? t("dashboard.refreshing") : t("common.refresh")}
             </button>
             <button
               className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
-              onClick={() => downloadCsv(`monitor-report-${exportDate}.csv`, exportRows)}
+              onClick={() => downloadCsv(`monitor-report-${exportDate}.csv`, exportRows, t("reportsPage.noExportData"))}
               disabled={exportRows.length === 0}
             >
-              Export CSV
+              {t("reportsPage.exportCsv")}
             </button>
             <button
               className="inline-flex items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -821,7 +825,7 @@ const ReportsPage = () => {
               onClick={() => downloadJson(`monitor-report-${exportDate}.json`, exportPayload)}
               disabled={results.length === 0 && incidents.length === 0}
             >
-              Export JSON
+              {t("reportsPage.exportJson")}
             </button>
             <button
               className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -829,7 +833,7 @@ const ReportsPage = () => {
               onClick={() => downloadExcel(`monitor-report-${exportDate}.xls`, exportPayload)}
               disabled={results.length === 0 && incidents.length === 0}
             >
-              Export Excel
+              {t("reportsPage.exportExcel")}
             </button>
           </div>
         </div>
@@ -838,9 +842,9 @@ const ReportsPage = () => {
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">Report window</h2>
+                <h2 className="text-sm font-semibold text-slate-950">{t("reportsPage.windowTitle")}</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Current range: <span className="font-medium text-slate-700">{activeRangeLabel}</span>
+                  {t("reportsPage.currentRange")} <span className="font-medium text-slate-700">{activeRangeLabel}</span>
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -859,7 +863,7 @@ const ReportsPage = () => {
                       type="button"
                       onClick={() => handleTimeRangeChange(option.value)}
                     >
-                      {option.label}
+                      {t(option.labelKey)}
                     </button>
                   );
                 })}
@@ -869,7 +873,7 @@ const ReportsPage = () => {
             {timeRange === "custom" ? (
               <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">From</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterFrom")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="datetime-local"
@@ -878,7 +882,7 @@ const ReportsPage = () => {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">To</span>
+                  <span className="text-sm font-medium text-slate-700">{t("incidents.filterTo")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     type="datetime-local"
@@ -891,7 +895,7 @@ const ReportsPage = () => {
                   type="button"
                   onClick={handleApplyCustomRange}
                 >
-                  Apply
+                  {t("incidents.apply")}
                 </button>
               </div>
             ) : null}
@@ -903,15 +907,15 @@ const ReportsPage = () => {
         ) : (
           <>
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <SummaryCard label="Report uptime" value={formatPercent(reportSummary.uptime)} detail={`${reportSummary.checks} checks in range`} tone="emerald" />
-              <SummaryCard label="Down checks" value={reportSummary.down} detail={`${reportSummary.degraded} degraded checks`} tone={reportSummary.down > 0 ? "rose" : "slate"} />
-              <SummaryCard label="Incidents" value={incidents.length} detail={`${reportSummary.openIncidents} open, ${reportSummary.resolvedIncidents} resolved`} tone={reportSummary.openIncidents > 0 ? "rose" : "cyan"} />
-              <SummaryCard label="Avg response" value={formatResponseTime(reportSummary.avgResponse)} detail={`24h fleet avg ${formatResponseTime(summary?.avgResponseTimeMs)}`} tone="cyan" />
-              <SummaryCard label="Fleet uptime 24h" value={formatPercent(summary?.uptime24h)} detail={`${summary?.total ?? 0} enabled monitors`} tone="slate" />
+              <SummaryCard label={t("reportsPage.reportUptime")} value={formatPercent(reportSummary.uptime)} detail={t("reportsPage.checksInRange", { count: reportSummary.checks })} tone="emerald" />
+              <SummaryCard label={t("reportsPage.downChecks")} value={reportSummary.down} detail={t("reportsPage.degradedChecks", { count: reportSummary.degraded })} tone={reportSummary.down > 0 ? "rose" : "slate"} />
+              <SummaryCard label={t("reportsPage.incidents")} value={incidents.length} detail={t("reportsPage.incidentCounts", { open: reportSummary.openIncidents, resolved: reportSummary.resolvedIncidents })} tone={reportSummary.openIncidents > 0 ? "rose" : "cyan"} />
+              <SummaryCard label={t("reportsPage.avgResponse")} value={formatResponseTime(reportSummary.avgResponse)} detail={t("reportsPage.fleetAvg", { value: formatResponseTime(summary?.avgResponseTimeMs) })} tone="cyan" />
+              <SummaryCard label={t("reportsPage.fleetUptime")} value={formatPercent(summary?.uptime24h)} detail={t("reportsPage.enabledMonitors", { count: summary?.total ?? 0 })} tone="slate" />
             </section>
 
             <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-              <Panel title="Status mix" description="Result distribution in the selected window">
+              <Panel title={t("reportsPage.statusMix")} description={t("reportsPage.statusMixDescription")}>
                 <div className="grid gap-4 p-5 sm:grid-cols-[180px_1fr] sm:items-center">
                   <div className="h-44">
                     {statusChartData.length > 0 ? (
@@ -926,7 +930,7 @@ const ReportsPage = () => {
                         </PieChart>
                       </ResponsiveContainer>
                     ) : (
-                      <EmptyState compact title="No checks" message="No results found in this report window." />
+                      <EmptyState compact title={t("reportsPage.noChecks")} message={t("reportsPage.noChecksMessage")} />
                     )}
                   </div>
                   <div className="space-y-3">
@@ -947,7 +951,7 @@ const ReportsPage = () => {
                 </div>
               </Panel>
 
-              <Panel title="Response trend" description="Latest response samples in the report window">
+              <Panel title={t("reportsPage.responseTrend")} description={t("reportsPage.responseTrendDescription")}>
                 <div className="h-64 p-5">
                   {responseTrendData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -964,7 +968,7 @@ const ReportsPage = () => {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <EmptyState compact title="No response data" message="Response time will appear once checks exist." />
+                    <EmptyState compact title={t("reportsPage.noResponseData")} message={t("reportsPage.noResponseMessage")} />
                   )}
                 </div>
               </Panel>
@@ -972,22 +976,22 @@ const ReportsPage = () => {
 
             <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
               <Panel
-                title="Monitor reliability ranking"
-                description="Sorted by down checks, degraded checks, and uptime"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/results">View results</Link>}
+                title={t("reportsPage.monitorRanking")}
+                description={t("reportsPage.monitorRankingDescription")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/results">{t("dashboard.viewResults")}</Link>}
               >
                 {monitorRanking.length === 0 ? (
-                  <EmptyState title="No monitor data" message="No monitor checks found in this report window." />
+                  <EmptyState title={t("reportsPage.noMonitorData")} message={t("reportsPage.noMonitorMessage")} />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
-                          <th className="px-4 py-3">Monitor</th>
-                          <th className="px-4 py-3">Status</th>
-                          <th className="px-4 py-3">Uptime</th>
-                          <th className="px-4 py-3">Down</th>
-                          <th className="px-4 py-3">Avg response</th>
+                          <th className="px-4 py-3">{t("reportsPage.colMonitor")}</th>
+                          <th className="px-4 py-3">{t("common.status")}</th>
+                          <th className="px-4 py-3">{t("reportsPage.uptime")}</th>
+                          <th className="px-4 py-3">{t("reportsPage.down")}</th>
+                          <th className="px-4 py-3">{t("reportsPage.avgResponse")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -997,7 +1001,7 @@ const ReportsPage = () => {
                               <Link className="font-medium text-cyan-700 underline-offset-2 hover:text-cyan-900 hover:underline" to={`/monitors/${item.id}`}>
                                 {item.monitor}
                               </Link>
-                              <p className="text-xs text-slate-500">{item.type} · {item.checks} checks</p>
+                              <p className="text-xs text-slate-500">{item.type} · {t("groups.checksCount", { count: item.checks })}</p>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
                               {item.lastStatus ? <StatusBadge status={item.lastStatus} /> : "-"}
@@ -1014,12 +1018,12 @@ const ReportsPage = () => {
               </Panel>
 
               <Panel
-                title="Incident report"
-                description="Recent incidents within the report window"
-                action={<Link className="text-sm font-semibold text-cyan-700" to="/incidents">View incidents</Link>}
+                title={t("reportsPage.incidentReport")}
+                description={t("reportsPage.incidentReportDescription")}
+                action={<Link className="text-sm font-semibold text-cyan-700" to="/incidents">{t("dashboard.viewAll")}</Link>}
               >
                 {incidents.length === 0 ? (
-                  <EmptyState title="No incidents" message="No incidents were found in this report window." />
+                  <EmptyState title={t("reportsPage.noIncidents")} message={t("reportsPage.noIncidentsMessage")} />
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {incidents.slice(0, 8).map((incident) => (
@@ -1029,9 +1033,9 @@ const ReportsPage = () => {
                           <StatusBadge status={incident.status} />
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          {formatDateTime(incident.startedAt)} · {formatDuration(incident.startedAt, incident.resolvedAt)}
+                          {formatDateTime(incident.startedAt, locale)} · {formatDuration(incident.startedAt, incident.resolvedAt)}
                         </p>
-                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">{incident.message ?? "Incident recorded"}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">{incident.message ?? t("reportsPage.incidentRecorded")}</p>
                       </Link>
                     ))}
                   </div>
@@ -1039,9 +1043,9 @@ const ReportsPage = () => {
               </Panel>
             </section>
 
-            <Panel title="Group summary" description="Report metrics grouped by monitor group">
+            <Panel title={t("reportsPage.groupSummary")} description={t("reportsPage.groupSummaryDescription")}>
               {groupReports.length === 0 ? (
-                <EmptyState title="No group report" message="Create monitor groups or run checks to populate this section." />
+                <EmptyState title={t("reportsPage.noGroupReport")} message={t("reportsPage.noGroupMessage")} />
               ) : (
                 <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
                   {groupReports.map((group) => (
@@ -1049,7 +1053,7 @@ const ReportsPage = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-950">{group.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{group.monitorCount} monitors · {group.checks} checks</p>
+                          <p className="mt-1 text-xs text-slate-500">{t("groups.monitorCount", { count: group.monitorCount })} · {t("groups.checksCount", { count: group.checks })}</p>
                         </div>
                         <span className="text-lg font-semibold text-slate-950">{formatPercent(group.uptime)}</span>
                       </div>
@@ -1057,7 +1061,7 @@ const ReportsPage = () => {
                         <div className="h-full rounded-full bg-emerald-500" style={{ width: `${group.uptime ?? 0}%` }} />
                       </div>
                       <p className="mt-2 text-xs text-slate-500">
-                        {group.down} down · {group.degraded} degraded · {group.incidents} incidents
+                        {t("reportsPage.groupDetail", { down: group.down, degraded: group.degraded, incidents: group.incidents })}
                       </p>
                     </Link>
                   ))}
@@ -1082,6 +1086,7 @@ function SummaryCard({
   detail: string;
   tone: "cyan" | "emerald" | "rose" | "slate";
 }) {
+  const { t } = useTranslation();
   const toneClasses = {
     cyan: "bg-cyan-50 text-cyan-700",
     emerald: "bg-emerald-50 text-emerald-700",
@@ -1097,7 +1102,7 @@ function SummaryCard({
           <p className="mt-3 truncate text-2xl font-semibold text-slate-950">{value}</p>
         </div>
         <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${toneClasses[tone]}`}>
-          Live
+          {t("dashboard.live")}
         </span>
       </div>
       <p className="mt-2 truncate text-sm text-slate-500">{detail}</p>
