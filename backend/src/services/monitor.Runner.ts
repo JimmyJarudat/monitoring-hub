@@ -1,5 +1,5 @@
 import type { AlertRule, Credential, Monitor } from "../generated/prisma/client";
-import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
+import type { IncidentStatus, MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import { decryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
@@ -107,6 +107,7 @@ const isInsideActiveWindow = (monitor: Monitor, now = new Date()) => {
 const STATUS_INCIDENT_PREFIX = "[STATUS]";
 const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
 const RULE_INCIDENT_PREFIX = "[RULE]";
+const ACTIVE_INCIDENT_STATUSES: IncidentStatus[] = ["OPEN", "ACKNOWLEDGED"];
 const INCIDENT_ESCALATION_ACTION = "INCIDENT_ESCALATION_SENT";
 const INCIDENT_REMINDER_ACTION = "INCIDENT_REMINDER_SENT";
 const ESCALATION_LEVELS = [
@@ -465,7 +466,7 @@ const reconcileIncident = async (
   const openStatusIncident = await prisma.incident.findFirst({
     where: {
       monitorId: monitor.id,
-      status: "OPEN",
+      status: { in: ACTIVE_INCIDENT_STATUSES },
       message: {
         startsWith: STATUS_INCIDENT_PREFIX,
       },
@@ -550,7 +551,7 @@ const reconcileAlertRuleIncidents = async (monitor: Monitor, result: RuleEvaluat
         where: {
           monitorId: monitor.id,
           alertRuleId: rule.id,
-          status: "OPEN",
+          status: { in: ACTIVE_INCIDENT_STATUSES },
         },
         orderBy: { startedAt: "desc" },
       });
@@ -680,7 +681,7 @@ const reconcileThresholdIncident = async (
   const openThresholdIncident = await prisma.incident.findFirst({
     where: {
       monitorId: monitor.id,
-      status: "OPEN",
+      status: { in: ACTIVE_INCIDENT_STATUSES },
       message: {
         startsWith: THRESHOLD_INCIDENT_PREFIX,
       },

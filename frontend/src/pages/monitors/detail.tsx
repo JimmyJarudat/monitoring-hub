@@ -31,7 +31,7 @@ type MonitorType =
   | "DOCKER"
   | "DATABASE";
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
-type IncidentStatus = "OPEN" | "RESOLVED";
+type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
 type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
 type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM";
@@ -80,6 +80,8 @@ type Incident = {
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: { id: string; username: string; email: string } | null;
 };
 
 type MonitorDetail = {
@@ -269,6 +271,7 @@ const statusStyles: Record<MonitorStatus | "PENDING" | "DISABLED", string> = {
 
 const incidentStyles: Record<IncidentStatus, string> = {
   OPEN: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  ACKNOWLEDGED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 
@@ -1220,6 +1223,32 @@ const MonitorDetailPage = () => {
       await fetchMonitor();
     } catch {
       toast.error(t("monitorDetail.toggleError"));
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleSetIncidentStatus = async (incident: Incident, status: IncidentStatus) => {
+    setIsBusy(true);
+
+    try {
+      const response = await api.patch<ApiResponse<Incident>>(`/incidents/${incident.id}`, { status });
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      toast.success(
+        status === "RESOLVED"
+          ? "Incident resolved"
+          : status === "ACKNOWLEDGED"
+            ? "Incident acknowledged"
+            : "Incident reopened",
+      );
+      await fetchMonitor();
+    } catch {
+      toast.error("Failed to update incident");
     } finally {
       setIsBusy(false);
     }
@@ -2247,17 +2276,60 @@ const MonitorDetailPage = () => {
                 <div className="px-4 py-8 text-center text-sm text-slate-500">{t("monitorDetail.noIncidents")}</div>
               ) : null}
               {monitor.incidents.map((incident) => (
-                <div className="grid gap-2 px-4 py-3 md:grid-cols-[120px_1fr_180px]" key={incident.id}>
+                <div className="grid gap-2 px-4 py-3 md:grid-cols-[120px_1fr_180px_auto]" key={incident.id}>
                   <span
                     className={`w-fit rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${incidentStyles[incident.status]}`}
                   >
-                    {incident.status}
+                    {t(`incidents.statusLabels.${incident.status}`)}
                   </span>
-                  <div className="text-sm text-slate-700">{incident.message ?? "-"}</div>
+                  <div className="text-sm text-slate-700">
+                    {incident.message ?? "-"}
+                    {incident.status === "ACKNOWLEDGED" ? (
+                      <div className="mt-1 text-xs text-amber-700">
+                        {t("incidents.acknowledgedBy", {
+                          user: incident.acknowledgedBy?.username ?? "-",
+                          time: formatDateTime(incident.acknowledgedAt, locale),
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="text-xs text-slate-500">
                     {formatDateTime(incident.startedAt, locale)}
                     {incident.resolvedAt ? ` - ${formatDateTime(incident.resolvedAt, locale)}` : ""}
                   </div>
+                  {isAdmin ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {incident.status === "OPEN" ? (
+                        <button
+                          className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "ACKNOWLEDGED")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.acknowledge")}
+                        </button>
+                      ) : null}
+                      {incident.status !== "RESOLVED" ? (
+                        <button
+                          className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.resolve")}
+                        </button>
+                      ) : (
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.reopen")}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

@@ -3,7 +3,7 @@ export type IncidentKind = "transition" | "reminder" | "escalation";
 export type IncidentTemplateData = {
   monitorName: string;
   monitorType: string;
-  status: "OPEN" | "RESOLVED";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
   message: string | null;
   kind: IncidentKind;
   incidentId: string;

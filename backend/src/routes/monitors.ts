@@ -360,7 +360,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           take: 1,
         },
         incidents: {
-          where: { status: "OPEN" },
+          where: { status: { in: ["OPEN", "ACKNOWLEDGED"] } },
           orderBy: { startedAt: "desc" },
           take: 1,
         },
@@ -429,7 +429,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       (monitor) => monitor.results[0]?.status ?? "UNKNOWN",
     );
     const [openIncidents, results24h] = await Promise.all([
-      prisma.incident.count({ where: { status: "OPEN" } }),
+      prisma.incident.count({ where: { status: { in: ["OPEN", "ACKNOWLEDGED"] } } }),
       prisma.monitorResult.findMany({
         where: { checkedAt: { gte: since24h } },
         select: { status: true, responseTimeMs: true },
@@ -674,6 +674,15 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
           incidents: {
             orderBy: { startedAt: "desc" },
             take: 20,
+            include: {
+              acknowledgedBy: {
+                select: {
+                  id: true,
+                  username: true,
+                  email: true,
+                },
+              },
+            },
           },
           credential: {
             select: {

@@ -27,7 +27,7 @@ type MonitorType =
   | "SYSTEM"
   | "DOCKER"
   | "DATABASE";
-type IncidentStatus = "OPEN" | "RESOLVED";
+type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type TimeRangePreset = "day" | "week" | "month" | "custom";
 
 type ApiSuccess<T> = { success: true; data: T };
@@ -224,6 +224,7 @@ const statusBadgeStyles: Record<MonitorStatus | IncidentStatus, string> = {
   DEGRADED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   DOWN: "bg-rose-50 text-rose-700 ring-rose-600/20",
   OPEN: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  ACKNOWLEDGED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 

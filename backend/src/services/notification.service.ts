@@ -602,6 +602,26 @@ const notifyIncident = async (params: {
 }) => {
   const now = new Date();
   const fingerprint = buildIncidentNotificationFingerprint(params);
+  if (params.kind !== "transition") {
+    const incident = await prisma.incident.findUnique({
+      where: { id: params.incidentId },
+      select: { status: true },
+    });
+    if (incident?.status === "ACKNOWLEDGED") {
+      await recordIncidentNotificationAudit({
+        action: INCIDENT_NOTIFICATION_SUPPRESSED_ACTION,
+        monitorId: params.monitor.id,
+        incidentId: params.incidentId,
+        alertRuleId: params.alertRuleId,
+        status: params.status,
+        message: params.message,
+        kind: params.kind,
+        fingerprint,
+        reason: "acknowledged",
+      });
+      return;
+    }
+  }
   const shouldSend = await shouldSendIncidentNotification({
     incidentId: params.incidentId,
     fingerprint,
@@ -799,10 +819,26 @@ const retryIncidentNotification = async (retryLog: {
   if (!payload) return;
   if (new Date(payload.nextRetryAt).getTime() > Date.now()) return;
 
-  const [monitor, channel] = await Promise.all([
+  const [monitor, channel, incident] = await Promise.all([
     prisma.monitor.findUnique({ where: { id: payload.monitorId } }),
     prisma.notificationChannel.findUnique({ where: { id: payload.channelId } }),
+    prisma.incident.findUnique({ where: { id: payload.incidentId }, select: { status: true } }),
   ]);
+
+  if (payload.kind !== "transition" && incident?.status === "ACKNOWLEDGED") {
+    await prisma.auditLog.update({
+      where: { id: retryLog.id },
+      data: {
+        newValue: {
+          ...payload,
+          status: "SUPPRESSED",
+          suppressedAt: new Date().toISOString(),
+          suppressReason: "acknowledged",
+        },
+      },
+    });
+    return;
+  }
 
   if (!monitor || !channel || !channel.enabled) {
     const lastError = !monitor ? "Monitor not found" : !channel ? "Channel not found" : "Channel disabled";

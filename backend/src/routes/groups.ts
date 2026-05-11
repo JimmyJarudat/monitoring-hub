@@ -99,7 +99,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
                     },
                   },
                   incidents: {
-                    where: { status: "OPEN" },
+                    where: { status: { in: ["OPEN", "ACKNOWLEDGED"] } },
                     orderBy: { startedAt: "desc" },
                     take: 1,
                     select: {
@@ -165,7 +165,7 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
           ? prisma.incident.count({
               where: {
                 monitorId: { in: monitorIds },
-                status: "OPEN",
+                status: { in: ["OPEN", "ACKNOWLEDGED"] },
               },
             })
           : Promise.resolve(0),

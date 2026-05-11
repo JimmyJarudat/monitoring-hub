@@ -44,7 +44,7 @@ type MonitorResult = {
 
 type ActiveIncident = {
   id: string;
-  status: "OPEN" | "RESOLVED";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
@@ -78,7 +78,7 @@ type MonitorSummary = {
 
 type IncidentRow = {
   id: string;
-  status: "OPEN" | "RESOLVED";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
@@ -96,7 +96,7 @@ type IncidentsResponse = {
   page: number;
   limit: number;
   hasMore: boolean;
-  statusCounts: Record<"OPEN" | "RESOLVED", number>;
+  statusCounts: Record<"OPEN" | "ACKNOWLEDGED" | "RESOLVED", number>;
 };
 
 type ResultRow = {
