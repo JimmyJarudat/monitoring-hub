@@ -110,7 +110,7 @@ async function checkContainer(cfg: DockerConfig, containerId: string): Promise<C
       return {
         status: "DOWN",
         responseTimeMs: Date.now() - start,
-        message: `ไม่พบ container "${containerId}" — ตรวจสอบ container ID หรือชื่อ`,
+        message: `Container "${containerId}" not found — please check the container ID or name.`,
       };
     }
     const running = data.State.Running === true;

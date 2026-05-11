@@ -158,12 +158,12 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
-      toast.error("Session หมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      toast.error("Session expired, please log in again");
       window.location.replace("/login");
     }
 
     if (status === 403) {
-      toast.error("คุณไม่มีสิทธิ์เข้าถึงข้อมูลนี้");
+      toast.error("You don't have permission to access this resource");
     } else if (status === 429) {
       const message =
         typeof error.response?.data === "object" &&
@@ -171,12 +171,12 @@ api.interceptors.response.use(
         "message" in error.response.data &&
         typeof error.response.data.message === "string"
           ? error.response.data.message
-          : "คำขอมากเกินไป กรุณารอสักครู่";
+          : "Too many requests, please wait a moment";
       toast.error(message);
     } else if (status && status >= 500) {
-      toast.error("เกิดข้อผิดพลาดจากฝั่งเซิร์ฟเวอร์");
+      toast.error("A server error occurred");
     } else if (!error.response) {
-      toast.error("ไม่สามารถเชื่อมต่อกับระบบได้");
+      toast.error("Unable to connect to the server");
     }
 
     return Promise.reject(error);

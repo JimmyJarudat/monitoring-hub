@@ -36,7 +36,7 @@ export const domainRoutes = new Elysia({ prefix: "/domain" })
     rateLimit({
       max: 30,
       duration: config.rateLimit.global.windowMs,
-      errorResponse: JSON.stringify(fail("สแกน domain บ่อยเกินไป กรุณารอสักครู่")),
+      errorResponse: JSON.stringify(fail("Domain scan too frequent. Please wait a moment before trying again.")),
       generator: clientIp,
     }),
   )

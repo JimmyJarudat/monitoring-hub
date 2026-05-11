@@ -31,7 +31,7 @@ export const securityMiddleware = new Elysia({ name: "securityMiddleware" })
     rateLimit({
       max: config.rateLimit.global.max,
       duration: config.rateLimit.global.windowMs,
-      errorResponse: JSON.stringify(fail("คำขอมากเกินไป กรุณารอสักครู่")),
+      errorResponse: JSON.stringify(fail("Too many requests. Please try again later.")),
       generator: (req, server) =>
         req.headers.get("x-forwarded-for") ??
         req.headers.get("cf-connecting-ip") ??

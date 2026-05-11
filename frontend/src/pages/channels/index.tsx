@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM" | "WEBHOOK";
@@ -45,13 +46,13 @@ type ChannelForm = {
   enabled: boolean;
 };
 
-const channelTypeLabels: Record<ChannelType, string> = {
-  LINE: "LINE Messaging API",
-  SLACK: "Slack Webhook",
-  DISCORD: "Discord Webhook",
-  EMAIL: "Email SMTP",
-  TELEGRAM: "Telegram Bot",
-  WEBHOOK: "Custom Webhook",
+const channelTypeLabelKeys: Record<ChannelType, string> = {
+  LINE: "channels.typeLine",
+  SLACK: "channels.typeSlack",
+  DISCORD: "channels.typeDiscord",
+  EMAIL: "channels.typeEmail",
+  TELEGRAM: "channels.typeTelegram",
+  WEBHOOK: "channels.typeWebhook",
 };
 
 const emptyForm = (): ChannelForm => ({
@@ -73,6 +74,7 @@ const emptyForm = (): ChannelForm => ({
 });
 
 const ChannelsPage = () => {
+  const { t } = useTranslation();
   const { api } = useApi();
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,11 +95,11 @@ const ChannelsPage = () => {
       }
       setChannels(res.data.data);
     } catch {
-      toast.error("โหลด notification channels ไม่สำเร็จ");
+      toast.error(t("channels.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, t]);
 
   useEffect(() => {
     void loadChannels();
@@ -139,27 +141,27 @@ const ChannelsPage = () => {
 
   const validateForm = () => {
     if (!form.name.trim()) {
-      toast.error("กรุณากรอกชื่อ channel");
+      toast.error(t("channels.validationName"));
       return false;
     }
     if (form.type === "TELEGRAM") {
       if (!form.botToken.trim() && !editing) {
-        toast.error("กรุณากรอก Telegram bot token");
+        toast.error(t("channels.validationBotToken"));
         return false;
       }
       if (!form.chatId.trim()) {
-        toast.error("กรุณากรอก Telegram chat id");
+        toast.error(t("channels.validationChatId"));
         return false;
       }
       return true;
     }
     if (form.type === "LINE") {
       if (!form.lineChannelAccessToken.trim() && !editing) {
-        toast.error("กรุณากรอก LINE channel access token");
+        toast.error(t("channels.validationLineToken"));
         return false;
       }
       if (!form.lineTo.trim()) {
-        toast.error("กรุณากรอก LINE userId/groupId");
+        toast.error(t("channels.validationLineTarget"));
         return false;
       }
       return true;
@@ -173,13 +175,13 @@ const ChannelsPage = () => {
         !form.emailFrom.trim() ||
         !form.emailTo.trim()
       ) {
-        toast.error("กรุณากรอกข้อมูล SMTP ให้ครบ");
+        toast.error(t("channels.validationEmailFull"));
         return false;
       }
       return true;
     }
     if (!form.webhookUrl.trim()) {
-      toast.error("กรุณากรอก webhook URL");
+      toast.error(t("channels.validationWebhookUrl"));
       return false;
     }
     return true;
@@ -214,11 +216,11 @@ const ChannelsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success(editing ? "อัปเดต channel แล้ว" : "สร้าง channel แล้ว");
+      toast.success(editing ? t("channels.updateSuccess") : t("channels.createSuccess"));
       closeModal();
       await loadChannels();
     } catch {
-      toast.error("บันทึก channel ไม่สำเร็จ");
+      toast.error(t("channels.saveError"));
     } finally {
       setSaving(false);
     }
@@ -250,26 +252,26 @@ const ChannelsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success("ส่ง test จากฟอร์มแล้ว");
+      toast.success(t("channels.testDraftSuccess"));
     } catch {
-      toast.error("ส่ง test จากฟอร์มไม่สำเร็จ");
+      toast.error(t("channels.testDraftError"));
     } finally {
       setTestingDraft(false);
     }
   };
 
   const handleDelete = async (channel: ChannelRow) => {
-    if (!window.confirm(`ต้องการลบ channel "${channel.name}" ใช่ไหม`)) return;
+    if (!window.confirm(t("channels.deleteConfirm", { name: channel.name }))) return;
     try {
       const res = await api.delete<ApiResponse<{ message: string }>>(`/channels/${channel.id}`);
       if (!res.data.success) {
         toast.error(res.data.message);
         return;
       }
-      toast.success("ลบ channel แล้ว");
+      toast.success(t("channels.deleteSuccess"));
       await loadChannels();
     } catch {
-      toast.error("ลบ channel ไม่สำเร็จ");
+      toast.error(t("channels.deleteError"));
     }
   };
 
@@ -281,9 +283,9 @@ const ChannelsPage = () => {
         toast.error(res.data.message);
         return;
       }
-      toast.success("ส่ง test message แล้ว");
+      toast.success(t("channels.testSuccess"));
     } catch {
-      toast.error("ส่ง test message ไม่สำเร็จ");
+      toast.error(t("channels.testError"));
     } finally {
       setTestingId(null);
     }
@@ -302,11 +304,10 @@ const ChannelsPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Alerting</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Notification Channels</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("channels.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("channels.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            ตั้งค่าช่องทางแจ้งเตือนสำหรับ incident open/resolved โดยรองรับ Telegram และ webhook
-            channel อื่น ๆ
+            {t("channels.description")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -315,29 +316,29 @@ const ChannelsPage = () => {
             onClick={() => void loadChannels()}
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <button
             type="button"
             onClick={openCreate}
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
-            New Channel
+            {t("channels.newChannel")}
           </button>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-3">
-        <SummaryCard label="Total channels" value={summary.total} tone="text-slate-950" />
-        <SummaryCard label="Enabled" value={summary.enabled} tone="text-emerald-700" />
-        <SummaryCard label="Telegram" value={summary.telegram} tone="text-cyan-700" />
+        <SummaryCard label={t("channels.summaryTotal")} value={summary.total} tone="text-slate-950" />
+        <SummaryCard label={t("channels.summaryEnabled")} value={summary.enabled} tone="text-emerald-700" />
+        <SummaryCard label={t("channels.summaryTelegram")} value={summary.telegram} tone="text-cyan-700" />
       </section>
 
       <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-950">Configured channels</h2>
+          <h2 className="text-sm font-semibold text-slate-950">{t("channels.tableTitle")}</h2>
           <p className="mt-1 text-xs text-slate-500">
-            {loading ? "Loading..." : `${channels.length} channels`}
+            {loading ? t("common.loading") : t("channels.channelsCount", { count: channels.length })}
           </p>
         </div>
 
@@ -345,25 +346,25 @@ const ChannelsPage = () => {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Destination</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3">{t("channels.colName")}</th>
+                <th className="px-4 py-3">{t("channels.colType")}</th>
+                <th className="px-4 py-3">{t("channels.colDestination")}</th>
+                <th className="px-4 py-3">{t("channels.colStatus")}</th>
+                <th className="px-4 py-3 text-right">{t("channels.colAction")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {!loading && channels.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
-                    ยังไม่มี notification channel
+                    {t("channels.noChannels")}
                   </td>
                 </tr>
               ) : null}
               {channels.map((channel) => (
                 <tr key={channel.id} className="transition hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{channel.name}</td>
-                  <td className="px-4 py-3 text-slate-700">{channelTypeLabels[channel.type]}</td>
+                  <td className="px-4 py-3 text-slate-700">{t(channelTypeLabelKeys[channel.type])}</td>
                   <td className="max-w-md px-4 py-3 text-slate-600">
                     {channel.type === "TELEGRAM" ? (
                       <div className="max-w-md">
@@ -416,7 +417,7 @@ const ChannelsPage = () => {
                         channel.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
                       }`}
                     >
-                      {channel.enabled ? "Enabled" : "Disabled"}
+                      {channel.enabled ? t("channels.enabled") : t("channels.disabled")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -427,21 +428,21 @@ const ChannelsPage = () => {
                         disabled={testingId === channel.id}
                         className="rounded-md border border-cyan-200 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50 disabled:opacity-60"
                       >
-                        {testingId === channel.id ? "Testing..." : "Test"}
+                        {testingId === channel.id ? t("channels.testing") : t("channels.test")}
                       </button>
                       <button
                         type="button"
                         onClick={() => openEdit(channel)}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         type="button"
                         onClick={() => void handleDelete(channel)}
                         className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
                       >
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </div>
                   </td>
@@ -457,13 +458,13 @@ const ChannelsPage = () => {
           <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="shrink-0 border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
-                {editing ? "Edit channel" : "Create channel"}
+                {editing ? t("channels.editTitle") : t("channels.createTitle")}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">เมื่อมี incident จะส่งแจ้งเตือนผ่าน channel นี้</p>
+              <p className="mt-1 text-sm text-slate-500">{t("channels.modalDesc")}</p>
             </div>
             <div className="grid gap-4 overflow-y-auto p-5">
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Name</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.name")}</span>
                 <input
                   type="text"
                   value={form.name}
@@ -472,7 +473,7 @@ const ChannelsPage = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Type</span>
+                <span className="text-sm font-medium text-slate-700">{t("common.type")}</span>
                 <select
                   value={form.type}
                   onChange={(event) =>
@@ -480,9 +481,9 @@ const ChannelsPage = () => {
                   }
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                 >
-                  {(Object.keys(channelTypeLabels) as ChannelType[]).map((type) => (
+                  {(Object.keys(channelTypeLabelKeys) as ChannelType[]).map((type) => (
                     <option key={type} value={type}>
-                      {channelTypeLabels[type]}
+                      {t(channelTypeLabelKeys[type])}
                     </option>
                   ))}
                 </select>
@@ -490,10 +491,10 @@ const ChannelsPage = () => {
               {form.type === "TELEGRAM" ? (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Telegram Bot Token</span>
+                    <span className="text-sm font-medium text-slate-700">{t("channels.fieldTelegramBotToken")}</span>
                     <input
                       type="text"
-                      placeholder={editing ? "เว้นว่างถ้าไม่เปลี่ยน token" : "123456:ABC..."}
+                      placeholder={editing ? t("channels.tokenPlaceholder") : "123456:ABC..."}
                       value={form.botToken}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, botToken: event.target.value }))
@@ -502,7 +503,7 @@ const ChannelsPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Chat ID</span>
+                    <span className="text-sm font-medium text-slate-700">{t("channels.fieldChatId")}</span>
                     <input
                       type="text"
                       placeholder="-1001234567890"
@@ -515,10 +516,10 @@ const ChannelsPage = () => {
               ) : form.type === "LINE" ? (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Channel Access Token</span>
+                    <span className="text-sm font-medium text-slate-700">{t("channels.fieldLineToken")}</span>
                     <input
                       type="text"
-                      placeholder={editing ? "เว้นว่างถ้าไม่เปลี่ยน token" : "LINE channel access token"}
+                      placeholder={editing ? t("channels.tokenPlaceholder") : "LINE channel access token"}
                       value={form.lineChannelAccessToken}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, lineChannelAccessToken: event.target.value }))
@@ -527,7 +528,7 @@ const ChannelsPage = () => {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Target userId/groupId</span>
+                    <span className="text-sm font-medium text-slate-700">{t("channels.fieldLineTarget")}</span>
                     <input
                       type="text"
                       placeholder="Uxxxxxxxx / Cxxxxxxxx / Gxxxxxxxx"
@@ -541,7 +542,7 @@ const ChannelsPage = () => {
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">SMTP Host</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldSmtpHost")}</span>
                       <input
                         type="text"
                         placeholder="smtp.gmail.com"
@@ -551,7 +552,7 @@ const ChannelsPage = () => {
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">SMTP Port</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldSmtpPort")}</span>
                       <input
                         type="number"
                         min={1}
@@ -564,7 +565,7 @@ const ChannelsPage = () => {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Username</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldUsername")}</span>
                       <input
                         type="text"
                         value={form.emailUsername}
@@ -575,10 +576,10 @@ const ChannelsPage = () => {
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Password / App Password</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldPassword")}</span>
                       <input
                         type="password"
-                        placeholder={editing ? "เว้นว่างถ้าไม่เปลี่ยน password" : ""}
+                        placeholder={editing ? t("channels.passwordPlaceholder") : ""}
                         value={form.emailPassword}
                         onChange={(event) =>
                           setForm((current) => ({ ...current, emailPassword: event.target.value }))
@@ -589,7 +590,7 @@ const ChannelsPage = () => {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">From</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldFrom")}</span>
                       <input
                         type="email"
                         placeholder="monitoring@example.com"
@@ -599,7 +600,7 @@ const ChannelsPage = () => {
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-medium text-slate-700">To</span>
+                      <span className="text-sm font-medium text-slate-700">{t("channels.fieldTo")}</span>
                       <input
                         type="text"
                         placeholder="oncall@example.com,team@example.com"
@@ -618,13 +619,13 @@ const ChannelsPage = () => {
                       }
                       className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                     />
-                    Use SSL/TLS (`secure`)
+                    {t("channels.fieldSecure")}
                   </label>
                 </>
               ) : (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Webhook URL</span>
+                    <span className="text-sm font-medium text-slate-700">{t("channels.fieldWebhookUrl")}</span>
                     <input
                       type="url"
                       placeholder="https://..."
@@ -638,7 +639,7 @@ const ChannelsPage = () => {
                   {form.type === "WEBHOOK" ? (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        ตัวอย่าง payload ที่จะส่ง
+                        {t("channels.webhookPayloadExample")}
                       </p>
                       <pre className="max-h-40 overflow-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
                         {
@@ -654,7 +655,7 @@ const ChannelsPage = () => {
                         2,
                       )}</pre>
                       <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        ตัวอย่าง test payload
+                        {t("channels.webhookTestExample")}
                       </p>
                       <pre className="mt-1 overflow-x-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100">{JSON.stringify(
                         {
@@ -676,7 +677,7 @@ const ChannelsPage = () => {
                   onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                 />
-                Enable channel
+                {t("channels.enableChannel")}
               </label>
             </div>
             <div className="shrink-0 flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
@@ -686,14 +687,14 @@ const ChannelsPage = () => {
                 onClick={() => void handleTestDraft()}
                 className="rounded-md border border-cyan-200 px-4 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50 disabled:opacity-60"
               >
-                {testingDraft ? "Testing..." : "Test config"}
+                {testingDraft ? t("channels.testing") : t("channels.testConfig")}
               </button>
               <button
                 type="button"
                 onClick={closeModal}
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -701,7 +702,7 @@ const ChannelsPage = () => {
                 onClick={() => void handleSave()}
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
-                {saving ? "Saving..." : editing ? "Save changes" : "Create channel"}
+                {saving ? t("channels.saving") : editing ? t("common.save") : t("channels.createChannel")}
               </button>
             </div>
           </div>

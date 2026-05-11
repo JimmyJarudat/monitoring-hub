@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 import { useSystemConfig } from "@/contexts/systemConfig.context";
 import type { ScheduledReportConfig } from "@/contexts/systemConfig.context";
@@ -16,6 +17,7 @@ type ApiResponse<T> = { success: true; data: T } | { success: false; message: st
 const DEFAULTS: ScheduledReportConfig = { enabled: false, time: "08:00", channelIds: [] };
 
 const ScheduledReportsPage = () => {
+  const { t } = useTranslation();
   const { api } = useApi();
   const { config: sysConfig, reload: reloadSysConfig } = useSystemConfig();
 
@@ -55,9 +57,9 @@ const ScheduledReportsPage = () => {
         scheduledReport: cfg,
       });
       if (!res.data.success) { toast.error(res.data.message); return; }
-      toast.success("บันทึก Scheduled Reports แล้ว");
+      toast.success(t("scheduledReports.saveSuccess"));
       await reloadSysConfig();
-    } catch { toast.error("บันทึกไม่สำเร็จ"); }
+    } catch { toast.error(t("scheduledReports.saveError")); }
     finally { setSaving(false); }
   };
 
@@ -72,7 +74,7 @@ const ScheduledReportsPage = () => {
       if (!res.data.success) { toast.error(res.data.message); return; }
       toast.success(res.data.data.message);
       await reloadSysConfig();
-    } catch { toast.error("ส่งรายงานไม่สำเร็จ"); }
+    } catch { toast.error(t("scheduledReports.sendError")); }
     finally { setSending(false); }
   };
 
@@ -81,18 +83,18 @@ const ScheduledReportsPage = () => {
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Scheduled Reports</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{t("scheduledReports.title")}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          ส่งรายงานสรุปสถานะ monitor อัตโนมัติตามเวลาที่กำหนด ผ่าน notification channels
+          {t("scheduledReports.description")}
         </p>
       </div>
 
       {/* ── Enable toggle ──────────────────────────── */}
       <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-cyan-900">Daily availability report</p>
+          <p className="text-sm font-semibold text-cyan-900">{t("scheduledReports.dailyTitle")}</p>
           <p className="mt-1 text-xs text-cyan-700">
-            รายงานสรุปสถานะทุก monitor พร้อมช่วงเวลาที่หยุด (downtime) ในช่วง 24 ชั่วโมงที่ผ่านมา
+            {t("scheduledReports.dailyDescription")}
           </p>
         </div>
         <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-cyan-800 ring-1 ring-cyan-200 shrink-0">
@@ -102,14 +104,14 @@ const ScheduledReportsPage = () => {
             checked={cfg.enabled}
             onChange={(e) => setCfg((prev) => ({ ...prev, enabled: e.target.checked }))}
           />
-          เปิดใช้งาน
+          {t("common.enabled")}
         </label>
       </div>
 
       {/* ── Time + Format info ────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-slate-700">เวลาที่ส่งรายงาน</label>
+          <label className="block text-sm font-medium text-slate-700">{t("scheduledReports.sendTime")}</label>
           <input
             type="time"
             value={cfg.time}
@@ -117,18 +119,18 @@ const ScheduledReportsPage = () => {
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
           />
           <p className="text-xs text-slate-400">
-            รายงานจะครอบคลุม 24 ชั่วโมงย้อนหลังจากเวลานี้
+            {t("scheduledReports.timeHint")}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1">
-          <p className="text-sm font-semibold text-slate-700">รูปแบบรายงาน</p>
+          <p className="text-sm font-semibold text-slate-700">{t("scheduledReports.formatTitle")}</p>
           <ul className="text-xs text-slate-500 space-y-1 mt-1.5">
-            <li>✅ web1 - ออนไลน์ปกติ</li>
-            <li>✅ web2 - ออนไลน์อยู่ แต่มีหยุดในช่วงนี้</li>
-            <li className="text-slate-400">&nbsp;&nbsp;&nbsp;└ หลุด: 02:15 → 03:45</li>
-            <li>❌ db1 - ออฟไลน์อยู่ตอนนี้</li>
-            <li className="text-slate-400">&nbsp;&nbsp;&nbsp;└ หลุด: 06:30 → ยังไม่กลับมา</li>
-            <li>⚠️ api - ไม่สมบูรณ์ตอนนี้</li>
+            <li>{t("scheduledReports.sampleHealthy")}</li>
+            <li>{t("scheduledReports.sampleRecovered")}</li>
+            <li className="text-slate-400">&nbsp;&nbsp;&nbsp;{t("scheduledReports.sampleDowntime")}</li>
+            <li>{t("scheduledReports.sampleOffline")}</li>
+            <li className="text-slate-400">&nbsp;&nbsp;&nbsp;{t("scheduledReports.sampleOngoing")}</li>
+            <li>{t("scheduledReports.sampleDegraded")}</li>
           </ul>
         </div>
       </div>
@@ -137,11 +139,11 @@ const ScheduledReportsPage = () => {
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-800">Notification channels</p>
+            <p className="text-sm font-semibold text-slate-800">{t("scheduledReports.channelsTitle")}</p>
             <p className="mt-0.5 text-xs text-slate-500">
               {cfg.channelIds.length === 0
-                ? `ไม่ได้เลือก → ส่งไปทุก enabled channel (${enabledChannelCount} ช่องทาง)`
-                : `เลือกไว้ ${cfg.channelIds.length} ช่องทาง`}
+                ? t("scheduledReports.allEnabledChannels", { count: enabledChannelCount })
+                : t("scheduledReports.selectedChannels", { count: cfg.channelIds.length })}
             </p>
           </div>
           {cfg.channelIds.length > 0 && (
@@ -150,14 +152,14 @@ const ScheduledReportsPage = () => {
               onClick={() => setCfg((prev) => ({ ...prev, channelIds: [] }))}
               className="text-xs font-semibold text-cyan-700 hover:text-cyan-900 shrink-0"
             >
-              ใช้ทุก enabled channel
+              {t("scheduledReports.useAllEnabled")}
             </button>
           )}
         </div>
 
         {channels.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-400 text-center">
-            ยังไม่มี notification channel — ไปสร้างที่เมนู Channels ก่อนนะครับ
+            {t("scheduledReports.noChannels")}
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
@@ -176,7 +178,7 @@ const ScheduledReportsPage = () => {
                 <span className="min-w-0">
                   <span className="block truncate font-medium text-slate-800">{channel.name}</span>
                   <span className="text-xs text-slate-400">
-                    {channel.type} · {channel.enabled ? "Enabled" : "Disabled"}
+                    {channel.type} · {channel.enabled ? t("common.enabled") : t("common.disabled")}
                   </span>
                 </span>
                 <input
@@ -200,7 +202,7 @@ const ScheduledReportsPage = () => {
           onClick={() => void handleSendNow()}
           className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
         >
-          {sending ? "กำลังส่ง..." : "ส่งรายงานตอนนี้"}
+          {sending ? t("scheduledReports.sending") : t("scheduledReports.sendNow")}
         </button>
         <button
           type="button"
@@ -208,7 +210,7 @@ const ScheduledReportsPage = () => {
           onClick={() => void handleSave()}
           className="rounded-lg bg-cyan-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600 disabled:opacity-50"
         >
-          {saving ? "กำลังบันทึก..." : "บันทึก"}
+          {saving ? t("alerts.saving") : t("common.save")}
         </button>
       </div>
     </div>

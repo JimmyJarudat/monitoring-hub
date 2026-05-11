@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type IfaceSnapshot = {
@@ -76,6 +77,7 @@ const initialStringParam = (searchParams: URLSearchParams, key: string, fallback
 };
 
 const InterfaceInventoryPage = () => {
+  const { t, i18n } = useTranslation();
   const { api } = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -250,15 +252,17 @@ const InterfaceInventoryPage = () => {
   const totalWithIssues = rows.filter((row) => row.hasIssues).length;
   const totalDevices = new Set(rows.map((row) => row.deviceId)).size;
   const topNoisy = filtered.slice(0, 5);
+  const statusLabel = (status: number) =>
+    status === 1 ? "UP" : status > 1 ? "DOWN" : t("interfaces.statusUnknown");
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Inventory</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Interfaces</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("interfaces.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("interfaces.title")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            มอง interface ทั้งระบบในมุม inventory, error hotspots และลิงก์ที่น่าจับตา
+            {t("interfaces.description")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -266,30 +270,30 @@ const InterfaceInventoryPage = () => {
             to="/devices"
             className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            ← Devices
+            {t("interfaces.backToDevices")}
           </Link>
           <Link
             to="/monitors/new"
             className="inline-flex items-center rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
           >
-            + Add Device
+            {t("interfaces.addDevice")}
           </Link>
         </div>
       </div>
 
       {!loading && rows.length > 0 ? (
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <SummaryCard label="Interfaces" value={rows.length} tone="text-slate-900" />
-          <SummaryCard label="Devices" value={totalDevices} tone="text-cyan-700" />
+          <SummaryCard label={t("interfaces.summaryInterfaces")} value={rows.length} tone="text-slate-900" />
+          <SummaryCard label={t("interfaces.summaryDevices")} value={totalDevices} tone="text-cyan-700" />
           <SummaryCard label="UP" value={totalUp} tone="text-emerald-700" />
           <SummaryCard label="DOWN" value={totalDown} tone="text-rose-700" />
-          <SummaryCard label="Has issues" value={totalWithIssues} tone="text-amber-700" />
+          <SummaryCard label={t("interfaces.summaryIssues")} value={totalWithIssues} tone="text-amber-700" />
         </div>
       ) : null}
 
       <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
         <div className="grid gap-3 lg:grid-cols-5">
-          <FilterField label="Group">
+          <FilterField label={t("interfaces.filterGroup")}>
             <select
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={groupFilter}
@@ -298,7 +302,7 @@ const InterfaceInventoryPage = () => {
                 setDeviceFilter("ALL");
               }}
             >
-              <option value="ALL">All groups</option>
+              <option value="ALL">{t("interfaces.allGroups")}</option>
               {groups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -307,13 +311,13 @@ const InterfaceInventoryPage = () => {
             </select>
           </FilterField>
 
-          <FilterField label="Device">
+          <FilterField label={t("interfaces.filterDevice")}>
             <select
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={deviceFilter}
               onChange={(event) => setDeviceFilter(event.target.value)}
             >
-              <option value="ALL">All devices</option>
+              <option value="ALL">{t("interfaces.allDevices")}</option>
               {deviceOptions.map((device) => (
                 <option key={device.id} value={device.id}>
                   {device.label}
@@ -322,38 +326,38 @@ const InterfaceInventoryPage = () => {
             </select>
           </FilterField>
 
-          <FilterField label="Status">
+          <FilterField label={t("interfaces.filterStatus")}>
             <select
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
             >
-              <option value="ALL">All statuses</option>
-              <option value="UP">UP only</option>
-              <option value="DOWN">DOWN only</option>
-              <option value="Unknown">Unknown</option>
-              <option value="Issues">Has issues</option>
+              <option value="ALL">{t("interfaces.allStatuses")}</option>
+              <option value="UP">{t("interfaces.upOnly")}</option>
+              <option value="DOWN">{t("interfaces.downOnly")}</option>
+              <option value="Unknown">{t("interfaces.statusUnknown")}</option>
+              <option value="Issues">{t("interfaces.hasIssues")}</option>
             </select>
           </FilterField>
 
-          <FilterField label="Sort by">
+          <FilterField label={t("interfaces.filterSort")}>
             <select
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={sortMode}
               onChange={(event) => setSortMode(event.target.value as SortMode)}
             >
-              <option value="issues_desc">Issues first</option>
-              <option value="traffic_desc">Traffic counters</option>
-              <option value="checked_desc">Last checked</option>
-              <option value="device_asc">Device name</option>
-              <option value="name_asc">Interface name</option>
+              <option value="issues_desc">{t("interfaces.sortIssues")}</option>
+              <option value="traffic_desc">{t("interfaces.sortTraffic")}</option>
+              <option value="checked_desc">{t("interfaces.sortChecked")}</option>
+              <option value="device_asc">{t("interfaces.sortDevice")}</option>
+              <option value="name_asc">{t("interfaces.sortInterface")}</option>
             </select>
           </FilterField>
 
-          <FilterField label="Search">
+          <FilterField label={t("interfaces.filterSearch")}>
             <input
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              placeholder="interface, device, host..."
+              placeholder={t("interfaces.searchPlaceholder")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -368,7 +372,7 @@ const InterfaceInventoryPage = () => {
               onChange={(event) => setIssuesOnly(event.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
             />
-            Show only interfaces with errors/discards
+            {t("interfaces.issuesOnly")}
           </label>
           {(groupFilter !== "ALL" ||
             deviceFilter !== "ALL" ||
@@ -388,11 +392,11 @@ const InterfaceInventoryPage = () => {
               }}
               className="text-xs font-semibold text-cyan-700 transition hover:text-cyan-900"
             >
-              Reset filters
+              {t("interfaces.resetFilters")}
             </button>
           )}
           <span className="text-xs text-slate-400">
-            Showing {filtered.length} / {rows.length} interfaces
+            {t("interfaces.showing", { filtered: filtered.length, total: rows.length })}
           </span>
         </div>
       </div>
@@ -401,9 +405,9 @@ const InterfaceInventoryPage = () => {
         <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-slate-950">Noisy interfaces</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("interfaces.noisyTitle")}</h2>
               <p className="mt-1 text-xs text-slate-500">
-                เรียงตาม errors/discards ก่อน แล้วค่อยดู traffic counters
+                {t("interfaces.noisyDesc")}
               </p>
             </div>
           </div>
@@ -419,10 +423,10 @@ const InterfaceInventoryPage = () => {
                 </Link>
                 <p className="mt-1 font-mono text-xs font-semibold text-slate-700">{row.name}</p>
                 <p className="mt-2 text-xs text-slate-500">
-                  Errors {fmtNum(row.inErrors + row.outErrors)} · Discards {fmtNum(row.inDiscards + row.outDiscards)}
+                  {t("interfaces.errors")} {fmtNum(row.inErrors + row.outErrors)} · {t("interfaces.discards")} {fmtNum(row.inDiscards + row.outDiscards)}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  Traffic counters {fmtNum(row.trafficScore)}
+                  {t("interfaces.trafficCounters")} {fmtNum(row.trafficScore)}
                 </p>
               </div>
             ))}
@@ -432,40 +436,40 @@ const InterfaceInventoryPage = () => {
 
       <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
         {loading ? (
-          <div className="px-4 py-10 text-center text-sm text-slate-400">กำลังโหลด...</div>
+          <div className="px-4 py-10 text-center text-sm text-slate-400">{t("common.loading")}</div>
         ) : rows.length === 0 ? (
           <div className="px-4 py-14 text-center">
-            <p className="font-medium text-slate-700">ยังไม่มีข้อมูล interface</p>
+            <p className="font-medium text-slate-700">{t("interfaces.noData")}</p>
             <p className="mt-1 text-sm text-slate-400">
-              ต้องมี SNMP หรือ SYSTEM monitor ที่เช็กสำเร็จและมี interface counters ก่อน
+              {t("interfaces.emptyHint")}
             </p>
             <Link
               to="/monitors/new"
               className="mt-4 inline-flex items-center rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              + Add Device
+              {t("interfaces.addDevice")}
             </Link>
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-slate-400">
-            ไม่มี interface ตรงกับ filter ที่เลือก
+            {t("interfaces.noMatch")}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Device</th>
-                  <th className="px-4 py-3">Interface</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Issue score</th>
-                  <th className="px-4 py-3 text-right">In Octets</th>
-                  <th className="px-4 py-3 text-right">Out Octets</th>
-                  <th className="px-4 py-3 text-right">In Errors</th>
-                  <th className="px-4 py-3 text-right">Out Errors</th>
-                  <th className="px-4 py-3 text-right">In Discards</th>
-                  <th className="px-4 py-3 text-right">Out Discards</th>
-                  <th className="px-4 py-3">Last checked</th>
+                  <th className="px-4 py-3">{t("interfaces.colDevice")}</th>
+                  <th className="px-4 py-3">{t("interfaces.colInterface")}</th>
+                  <th className="px-4 py-3">{t("interfaces.colStatus")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colIssueScore")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colInOctets")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colOutOctets")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colInErrors")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colOutErrors")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colInDiscards")}</th>
+                  <th className="px-4 py-3 text-right">{t("interfaces.colOutDiscards")}</th>
+                  <th className="px-4 py-3">{t("interfaces.colLastChecked")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -494,7 +498,7 @@ const InterfaceInventoryPage = () => {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${operClass(row.operStatus)}`}>
-                        {operLabel(row.operStatus)}
+                        {statusLabel(row.operStatus)}
                       </span>
                     </td>
                     <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${row.hasIssues ? "text-amber-700" : "text-slate-400"}`}>
@@ -520,7 +524,7 @@ const InterfaceInventoryPage = () => {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-400">
                       {row.checkedAt
-                        ? new Intl.DateTimeFormat("th-TH", {
+                        ? new Intl.DateTimeFormat(i18n.language === "th" ? "th-TH" : "en-US", {
                             dateStyle: "short",
                             timeStyle: "short",
                           }).format(new Date(row.checkedAt))
@@ -535,8 +539,11 @@ const InterfaceInventoryPage = () => {
 
         {!loading && filtered.length > 0 ? (
           <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-400">
-            {filtered.length} interfaces จาก {new Set(filtered.map((row) => row.deviceId)).size} devices
-            {totalUnknown > 0 ? <span className="ml-3">· {totalUnknown} unknown</span> : null}
+            {t("interfaces.footer", {
+              interfaces: filtered.length,
+              devices: new Set(filtered.map((row) => row.deviceId)).size,
+            })}
+            {totalUnknown > 0 ? <span className="ml-3">· {t("interfaces.unknownCount", { count: totalUnknown })}</span> : null}
           </div>
         ) : null}
       </div>

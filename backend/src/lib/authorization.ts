@@ -8,6 +8,6 @@ export const isAdminRole = (role: string | null | undefined) =>
 
 export const requireAdminRole = (role: string | null | undefined) => {
   if (!isAdminRole(role)) {
-    throw new AuthError("เฉพาะ Admin เท่านั้น", 403);
+    throw new AuthError("Admin access only.", 403);
   }
 };

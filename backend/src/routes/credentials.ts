@@ -76,7 +76,7 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
 
       if (!credential) {
         set.status = 404;
-        return fail("ไม่พบ credential");
+        return fail("Credential not found.");
       }
 
       return ok({ secret: decryptCredentialSecret(credential.secret) });
@@ -115,7 +115,7 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ credential");
+        return fail("Credential not found.");
       }
 
       const credential = await prisma.credential.update({
@@ -156,13 +156,13 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
 
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ credential");
+        return fail("Credential not found.");
       }
 
       await prisma.credential.delete({ where: { id: params.id } });
 
       return ok({
-        message: "ลบ credential แล้ว",
+        message: "Credential deleted successfully.",
         detachedMonitorCount: existing.monitors.length,
         detachedMonitors: existing.monitors,
       });

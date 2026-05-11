@@ -1,13 +1,13 @@
 import { getSystemConfig, type SecurityConfig } from "./systemConfig.service";
 
 export const getPasswordPolicyMessage = (policy: SecurityConfig): string => {
-  const requirements = [`อย่างน้อย ${policy.passwordMinLength} ตัวอักษร`];
-  if (policy.requireLowercase) requirements.push("มีตัวพิมพ์เล็ก");
-  if (policy.requireUppercase) requirements.push("มีตัวพิมพ์ใหญ่");
-  if (policy.requireNumber) requirements.push("มีตัวเลข");
-  if (policy.requireSpecial) requirements.push("มีอักขระพิเศษ");
+  const requirements = [`At least ${policy.passwordMinLength} characters`];
+  if (policy.requireLowercase) requirements.push("lowercase letters");
+  if (policy.requireUppercase) requirements.push("uppercase letters");
+  if (policy.requireNumber) requirements.push("numbers");
+  if (policy.requireSpecial) requirements.push("special characters");
 
-  return `รหัสผ่านต้อง${requirements.join(", ")}`;
+  return `Password must include: ${requirements.join(", ")}`;
 };
 
 export const validatePasswordPolicy = async (password: string): Promise<string | null> => {

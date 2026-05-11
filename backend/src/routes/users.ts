@@ -51,17 +51,17 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       const dupUsername = await prisma.user.findUnique({ where: { username: body.username } });
       if (dupUsername) {
         set.status = 409;
-        return fail("Username นี้ถูกใช้ไปแล้ว");
+        return fail("This username is already taken");
       }
       const dupEmail = await prisma.user.findUnique({ where: { email: body.email } });
       if (dupEmail) {
         set.status = 409;
-        return fail("Email นี้ถูกใช้ไปแล้ว");
+        return fail("This email is already in use");
       }
       const role = await prisma.role.findUnique({ where: { id: body.roleId } });
       if (!role) {
         set.status = 400;
-        return fail("ไม่พบ role ที่เลือก");
+        return fail("The selected role was not found");
       }
       const policyError = await validatePasswordPolicy(body.password);
       if (policyError) {
@@ -103,7 +103,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ user");
+        return fail("User not found");
       }
 
       if (body.username && body.username !== existing.username) {
@@ -112,7 +112,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
         });
         if (dup) {
           set.status = 409;
-          return fail("Username นี้ถูกใช้ไปแล้ว");
+          return fail("This username is already taken");
         }
       }
 
@@ -122,14 +122,14 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
         });
         if (dup) {
           set.status = 409;
-          return fail("Email นี้ถูกใช้ไปแล้ว");
+          return fail("This email is already in use");
         }
       }
 
       if (body.roleId && body.roleId !== existing.roleId) {
         if (params.id === currentUser.id) {
           set.status = 400;
-          return fail("ไม่สามารถเปลี่ยน role ของตัวเองได้");
+          return fail("You cannot change your own role");
         }
         if (existing.role.name === "ADMIN") {
           const newRole = await prisma.role.findUnique({ where: { id: body.roleId } });
@@ -137,7 +137,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
             const adminCount = await prisma.user.count({ where: { role: { name: "ADMIN" } } });
             if (adminCount <= 1) {
               set.status = 400;
-              return fail("ไม่สามารถลด role ของ admin คนสุดท้ายได้");
+              return fail("Cannot demote the last admin");
             }
           }
         }
@@ -174,7 +174,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       const existing = await prisma.user.findUnique({ where: { id: params.id } });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ user");
+        return fail("User not found");
       }
       const policyError = await validatePasswordPolicy(body.password);
       if (policyError) {
@@ -186,7 +186,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       await prisma.user.update({ where: { id: params.id }, data: { password: hashed } });
       await prisma.refreshToken.deleteMany({ where: { userId: params.id } });
 
-      return ok({ message: "รีเซ็ต password แล้ว session ทั้งหมดถูก revoke" });
+      return ok({ message: "Password reset, all sessions have been revoked" });
     },
     {
       params: t.Object({ id: t.String() }),
@@ -200,7 +200,7 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
 
       if (params.id === currentUser.id) {
         set.status = 400;
-        return fail("ไม่สามารถลบบัญชีของตัวเองได้");
+        return fail("You cannot delete your own account");
       }
 
       const existing = await prisma.user.findUnique({
@@ -209,19 +209,19 @@ export const userRoutes = new Elysia({ prefix: "/admin/users" })
       });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ user");
+        return fail("User not found");
       }
 
       if (existing.role.name === "ADMIN") {
         const adminCount = await prisma.user.count({ where: { role: { name: "ADMIN" } } });
         if (adminCount <= 1) {
           set.status = 400;
-          return fail("ไม่สามารถลบ admin คนสุดท้ายได้");
+          return fail("Cannot delete the last admin");
         }
       }
 
       await prisma.user.delete({ where: { id: params.id } });
-      return ok({ message: "ลบ user แล้ว" });
+      return ok({ message: "User deleted" });
     },
     { params: t.Object({ id: t.String() }) },
   );

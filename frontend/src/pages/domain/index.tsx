@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type DiscoverySource =
@@ -58,13 +59,10 @@ interface HistoryPage {
 type ScanPhase = "idle" | "scanning" | "done" | "error";
 type ActiveTab = "scan" | "history";
 
-const dtFmt = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
-
 export default function DomainIntelligencePage() {
+  const { t, i18n } = useTranslation();
   const { get } = useApi();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
 
   // --- scan state ---
   const [activeTab, setActiveTab] = useState<ActiveTab>("scan");
@@ -109,7 +107,7 @@ export default function DomainIntelligencePage() {
       setResult(res.data);
       setPhase("done");
     } catch {
-      setErrorMsg("ไม่สามารถวิเคราะห์ domain ได้ กรุณาตรวจสอบชื่อ domain และลองใหม่อีกครั้ง");
+      setErrorMsg(t("domain.scanError"));
       setPhase("error");
     }
   };
@@ -137,9 +135,9 @@ export default function DomainIntelligencePage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Domain Intelligence</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("domain.title")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            วิเคราะห์ข้อมูล registrar, DNS, nameserver และ subdomains ของ domain
+            {t("domain.description")}
           </p>
         </div>
       </div>
@@ -163,14 +161,14 @@ export default function DomainIntelligencePage() {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                 </svg>
-                สแกน
+                {t("domain.scanTab")}
               </>
             ) : (
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                 </svg>
-                ประวัติการสแกน
+                {t("domain.historyTab")}
                 {history && history.total > 0 && (
                   <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
                     {history.total}
@@ -192,11 +190,11 @@ export default function DomainIntelligencePage() {
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-amber-800">ข้อควรระวังทางกฎหมาย</p>
+                <p className="text-sm font-semibold text-amber-800">{t("domain.legalTitle")}</p>
                 <p className="mt-1 text-xs leading-5 text-amber-700">
-                  เครื่องมือนี้ทำการ query DNS สาธารณะ, เปิด TCP connection, และส่ง HTTP/TLS request
-                  ไปยัง server เป้าหมายโดยตรง การใช้กับ domain ที่ไม่ได้รับอนุญาตอาจผิด{" "}
-                  <strong>พ.ร.บ. คอมพิวเตอร์ฯ มาตรา 5–7</strong> และกฎหมายอาชญากรรมคอมพิวเตอร์ในประเทศอื่น
+                  {t("domain.legalDescriptionPrefix")}{" "}
+                  <strong>{t("domain.legalLaw")}</strong>{" "}
+                  {t("domain.legalDescriptionSuffix")}
                 </p>
                 <label className="mt-3 flex cursor-pointer items-start gap-2.5">
                   <input
@@ -207,8 +205,7 @@ export default function DomainIntelligencePage() {
                     className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-amber-300 accent-amber-500"
                   />
                   <span className="text-xs font-medium leading-5 text-amber-800">
-                    ฉันยืนยันว่า domain ที่จะสแกนเป็นของฉัน หรือได้รับอนุญาตเป็นลายลักษณ์อักษรจากเจ้าของแล้ว
-                    และรับผิดชอบต่อการใช้งานนี้ทั้งหมด
+                    {t("domain.consentText")}
                   </span>
                 </label>
               </div>
@@ -238,14 +235,14 @@ export default function DomainIntelligencePage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  กำลังวิเคราะห์...
+                  {t("domain.scanning")}
                 </>
               ) : (
                 <>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                   </svg>
-                  วิเคราะห์
+                  {t("domain.scan")}
                 </>
               )}
             </button>
@@ -261,7 +258,7 @@ export default function DomainIntelligencePage() {
               </div>
               <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
               <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-                กำลังตรวจ passive sources, external tools, DNS records และ HTTP services
+                {t("domain.scanningHint")}
               </div>
             </div>
           )}
@@ -282,7 +279,7 @@ export default function DomainIntelligencePage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <SummaryCard
                   label="Registrar"
-                  value={result.registrar ?? "ไม่พบข้อมูล"}
+                  value={result.registrar ?? t("domain.noData")}
                   icon={
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
@@ -299,8 +296,8 @@ export default function DomainIntelligencePage() {
                   }
                 />
                 <SummaryCard
-                  label="Subdomains พบ"
-                  value={`${result.subdomains.length} host · ${onlineCount} active · ${sslCount} SSL · ${avgConfidence}% confidence`}
+                  label={t("domain.subdomainsFound")}
+                  value={t("domain.subdomainSummary", { total: result.subdomains.length, online: onlineCount, ssl: sslCount, confidence: avgConfidence })}
                   icon={
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
@@ -320,7 +317,7 @@ export default function DomainIntelligencePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">ไม่พบ nameserver</p>
+                  <p className="text-sm text-slate-400">{t("domain.noNameserver")}</p>
                 )}
               </div>
 
@@ -330,8 +327,8 @@ export default function DomainIntelligencePage() {
                 </div>
                 {result.subdomains.length === 0 ? (
                   <div className="space-y-1 py-12 text-center text-sm text-slate-400">
-                    <p>ไม่พบ subdomains จาก passive sources</p>
-                    <p>ระบบได้ลอง external tools และ DNS Bruteforce เพิ่มเติมแล้ว</p>
+                    <p>{t("domain.noSubdomains")}</p>
+                    <p>{t("domain.noSubdomainsHint")}</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -369,11 +366,11 @@ export default function DomainIntelligencePage() {
                             <td className="px-4 py-3">
                               {sub.online ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("domain.active")}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />Offline
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />{t("domain.offline")}
                                 </span>
                               )}
                             </td>
@@ -383,19 +380,19 @@ export default function DomainIntelligencePage() {
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                                   </svg>
-                                  Valid
+                                  {t("domain.valid")}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                     <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
                                   </svg>
-                                  No SSL
+                                  {t("domain.noSsl")}
                                 </span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-xs text-slate-500">
-                              {sub.lastSeen ? new Date(sub.lastSeen).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" }) : <span className="text-slate-300">—</span>}
+                              {sub.lastSeen ? new Date(sub.lastSeen).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" }) : <span className="text-slate-300">—</span>}
                             </td>
                           </tr>
                         ))}
@@ -414,7 +411,7 @@ export default function DomainIntelligencePage() {
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
             <h2 className="text-sm font-semibold text-slate-700">
-              ประวัติการสแกน{history ? ` (${history.total} รายการ)` : ""}
+              {t("domain.scanHistoryTitle")}{history ? ` (${t("domain.historyCount", { count: history.total })})` : ""}
             </h2>
             <button
               type="button"
@@ -425,7 +422,7 @@ export default function DomainIntelligencePage() {
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 ${historyLoading ? "animate-spin" : ""}`} viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
               </svg>
-              รีเฟรช
+              {t("common.refresh")}
             </button>
           </div>
 
@@ -440,8 +437,8 @@ export default function DomainIntelligencePage() {
               <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-10 w-10 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
               </svg>
-              <p className="mt-3 text-sm font-medium text-slate-500">ยังไม่มีประวัติการสแกน</p>
-              <p className="mt-1 text-xs text-slate-400">สแกน domain แรกแล้วมาดูที่นี่</p>
+              <p className="mt-3 text-sm font-medium text-slate-500">{t("domain.noHistory")}</p>
+              <p className="mt-1 text-xs text-slate-400">{t("domain.noHistoryHint")}</p>
             </div>
           ) : (
             <>
@@ -455,9 +452,9 @@ export default function DomainIntelligencePage() {
                       <th className="px-4 py-3">NS</th>
                       <th className="px-4 py-3">Subdomains</th>
                       <th className="px-4 py-3">Online</th>
-                      <th className="px-4 py-3">ใช้เวลา</th>
+                      <th className="px-4 py-3">{t("domain.duration")}</th>
                       <th className="px-4 py-3">Scanner IP</th>
-                      <th className="px-4 py-3">เวลาสแกน</th>
+                      <th className="px-4 py-3">{t("domain.scannedAt")}</th>
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
@@ -478,14 +475,14 @@ export default function DomainIntelligencePage() {
                           {item.durationMs >= 1000 ? `${(item.durationMs / 1000).toFixed(1)}s` : `${item.durationMs}ms`}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-400">{item.scannerIp ?? "—"}</td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{dtFmt.format(new Date(item.scannedAt))}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(item.scannedAt))}</td>
                         <td className="px-4 py-3">
                           <button
                             type="button"
                             onClick={() => reScan(item.domain)}
                             className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
                           >
-                            สแกนอีกครั้ง
+                            {t("domain.scanAgain")}
                           </button>
                         </td>
                       </tr>
@@ -498,7 +495,7 @@ export default function DomainIntelligencePage() {
               {history.totalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
                   <p className="text-xs text-slate-500">
-                    หน้า {history.page} / {history.totalPages}
+                    {t("systemLogs.pageCount", { page: history.page, totalPages: history.totalPages })}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -507,7 +504,7 @@ export default function DomainIntelligencePage() {
                       onClick={() => void loadHistory(history.page - 1)}
                       className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                     >
-                      ← ก่อนหน้า
+                      {t("systemLogs.previous")}
                     </button>
                     <button
                       type="button"
@@ -515,7 +512,7 @@ export default function DomainIntelligencePage() {
                       onClick={() => void loadHistory(history.page + 1)}
                       className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                     >
-                      ถัดไป →
+                      {t("systemLogs.next")}
                     </button>
                   </div>
                 </div>

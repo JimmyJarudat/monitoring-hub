@@ -2,16 +2,16 @@ const jwtSecret = process.env.JWT_SECRET;
 const credentialSecretKey = process.env.CREDENTIAL_SECRET_KEY || jwtSecret;
 if (!jwtSecret || jwtSecret === "change-me-in-production") {
   if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET ต้องตั้งค่าก่อนใช้งาน production");
+    throw new Error("JWT_SECRET must be configured before running in production.");
   }
-  console.warn("⚠️  JWT_SECRET ใช้ค่า default — ห้ามใช้ใน production");
+  console.warn("⚠️  JWT_SECRET is using the default value — do not use this in production.");
 }
 
 if (!process.env.CREDENTIAL_SECRET_KEY) {
   if (process.env.NODE_ENV === "production") {
-    console.warn("⚠️  CREDENTIAL_SECRET_KEY ยังไม่ได้ตั้งค่า — fallback ไปใช้ JWT_SECRET ชั่วคราว");
+    console.warn("⚠️  CREDENTIAL_SECRET_KEY is not configured — temporarily falling back to JWT_SECRET.");
   } else {
-    console.warn("⚠️  CREDENTIAL_SECRET_KEY ยังไม่ได้ตั้งค่า — ใช้ JWT_SECRET เป็น fallback ใน dev");
+    console.warn("⚠️  CREDENTIAL_SECRET_KEY is not configured — using JWT_SECRET as a fallback in development.");
   }
 }
 

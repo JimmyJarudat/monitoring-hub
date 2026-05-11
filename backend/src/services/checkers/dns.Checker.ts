@@ -95,7 +95,7 @@ export async function dnsCheck(config: DnsConfig): Promise<CheckResult> {
       return {
         status: "DOWN",
         responseTimeMs,
-        message: `ไม่พบ ${recordType} record สำหรับ ${host}`,
+        message: `No ${recordType} record found for ${host}.`,
         metadata: {
           host,
           recordType,
@@ -111,7 +111,7 @@ export async function dnsCheck(config: DnsConfig): Promise<CheckResult> {
         return {
           status: "DEGRADED",
           responseTimeMs,
-          message: `resolve ได้ แต่ไม่พบค่าที่คาดไว้: ${config.expectedValue}`,
+          message: `Resolved successfully, but no expected value was found.: ${config.expectedValue}`,
           metadata: {
             host,
             recordType,

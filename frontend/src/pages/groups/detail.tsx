@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
@@ -105,10 +106,10 @@ const incidentStyles: Record<IncidentStatus, string> = {
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 
-const formatDateTime = (value: string | null | undefined) => {
+const formatDateTime = (value: string | null | undefined, locale: string) => {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("th-TH", {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -147,6 +148,7 @@ const formatDuration = (startedAt: string, resolvedAt: string | null) => {
 };
 
 const GroupDetailPage = () => {
+  const { t, i18n } = useTranslation();
   const { id } = useParams();
   const { api } = useApi();
   const [group, setGroup] = useState<GroupDetail | null>(null);
@@ -167,11 +169,13 @@ const GroupDetailPage = () => {
 
       setGroup(response.data.data);
     } catch {
-      toast.error("โหลด group summary ไม่สำเร็จ");
+      toast.error(t("groups.detailLoadError"));
     } finally {
       setIsLoading(false);
     }
-  }, [api, id]);
+  }, [api, id, t]);
+
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
 
   useEffect(() => {
     void loadGroup();
@@ -190,7 +194,7 @@ const GroupDetailPage = () => {
     return (
       <div className="min-h-full bg-slate-50 p-6">
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading group summary...
+          {t("groups.loadingSummary")}
         </div>
       </div>
     );
@@ -200,9 +204,9 @@ const GroupDetailPage = () => {
     return (
       <div className="min-h-full bg-slate-50 p-6">
         <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h1 className="text-lg font-semibold text-slate-950">ไม่พบกลุ่ม</h1>
+          <h1 className="text-lg font-semibold text-slate-950">{t("groups.notFound")}</h1>
           <Link className="mt-4 inline-flex text-sm font-semibold text-cyan-700" to="/groups">
-            Back to Groups
+            {t("groups.backToGroups")}
           </Link>
         </div>
       </div>
@@ -218,11 +222,11 @@ const GroupDetailPage = () => {
               className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white"
               style={{ backgroundColor: group.color ?? "#22c55e" }}
             />
-            <p className="text-sm font-medium text-cyan-700">Group Summary</p>
+            <p className="text-sm font-medium text-cyan-700">{t("groups.detailSubtitle")}</p>
           </div>
           <h1 className="mt-1 truncate text-2xl font-semibold text-slate-950">{group.name}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            {group.description || "ดูภาพรวมสุขภาพของกลุ่มนี้, incident ล่าสุด, monitor ที่ noisy และทางลัดไปยัง views ที่ filter กลุ่มนี้ไว้แล้ว"}
+            {group.description || t("groups.detailDescriptionFallback")}
           </p>
         </div>
 
@@ -232,28 +236,28 @@ const GroupDetailPage = () => {
             type="button"
             onClick={() => void loadGroup()}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           <Link
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             to="/groups"
           >
-            Back
+            {t("common.back")}
           </Link>
         </div>
       </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Monitors", value: group.summary.total, tone: "text-slate-950" },
-          { label: "Open incidents", value: group.summary.openIncidents, tone: "text-rose-700" },
+          { label: t("groups.detailSummaryMonitors"), value: group.summary.total, tone: "text-slate-950" },
+          { label: t("groups.detailSummaryOpenIncidents"), value: group.summary.openIncidents, tone: "text-rose-700" },
           {
-            label: "24h uptime",
+            label: t("groups.detailSummaryUptime"),
             value: group.summary.uptime24h === null ? "-" : `${group.summary.uptime24h}%`,
             tone: "text-emerald-700",
           },
           {
-            label: "Avg response",
+            label: t("groups.detailSummaryAvgResponse"),
             value:
               group.summary.avgResponseTimeMs === null ? "-" : `${group.summary.avgResponseTimeMs} ms`,
             tone: "text-cyan-700",
@@ -270,16 +274,16 @@ const GroupDetailPage = () => {
         <div className="space-y-6">
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-950">Health breakdown</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("groups.healthBreakdown")}</h2>
             </div>
             <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 { label: "UP", value: group.summary.up, tone: "text-emerald-700" },
                 { label: "DEGRADED", value: group.summary.degraded, tone: "text-amber-700" },
                 { label: "DOWN", value: group.summary.down, tone: "text-rose-700" },
-                { label: "Pending", value: group.summary.pending, tone: "text-slate-600" },
-                { label: "Disabled", value: group.summary.disabled, tone: "text-slate-500" },
-                { label: "Devices", value: group.summary.devices, tone: "text-cyan-700" },
+                { label: t("groups.statusPending"), value: group.summary.pending, tone: "text-slate-600" },
+                { label: t("common.disabled"), value: group.summary.disabled, tone: "text-slate-500" },
+                { label: t("groups.summaryDevices"), value: group.summary.devices, tone: "text-cyan-700" },
               ].map((item) => (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={item.label}>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
@@ -291,17 +295,17 @@ const GroupDetailPage = () => {
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-950">Monitors in this group</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("groups.monitorsInGroup")}</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">Monitor</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">24h uptime</th>
-                    <th className="px-4 py-3">Avg response</th>
-                    <th className="px-4 py-3">Open incident</th>
+                    <th className="px-4 py-3">{t("groups.colMonitor")}</th>
+                    <th className="px-4 py-3">{t("common.status")}</th>
+                    <th className="px-4 py-3">{t("groups.detailSummaryUptime")}</th>
+                    <th className="px-4 py-3">{t("groups.detailSummaryAvgResponse")}</th>
+                    <th className="px-4 py-3">{t("groups.detailSummaryOpenIncidents")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -332,7 +336,7 @@ const GroupDetailPage = () => {
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {monitor.uptime24h === null ? "-" : `${monitor.uptime24h}%`}
                         {monitor.checkCount24h > 0 ? (
-                          <div className="text-xs text-slate-400">{monitor.checkCount24h} checks</div>
+                          <div className="text-xs text-slate-400">{t("groups.checksCount", { count: monitor.checkCount24h })}</div>
                         ) : null}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -360,46 +364,46 @@ const GroupDetailPage = () => {
 
         <aside className="space-y-6">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-950">Quick links</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("groups.quickLinks")}</h2>
             <div className="mt-4 grid gap-2">
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/devices?groupId=${group.id}`}
               >
-                View devices in this group
+                {t("groups.linkDevices")}
               </Link>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/interfaces?groupId=${group.id}`}
               >
-                View interfaces in this group
+                {t("groups.linkInterfaces")}
               </Link>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/monitors?groupId=${group.id}`}
               >
-                View monitors in this group
+                {t("groups.linkMonitors")}
               </Link>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/results?groupId=${group.id}`}
               >
-                View results for this group
+                {t("groups.linkResults")}
               </Link>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 to={`/incidents?groupId=${group.id}`}
               >
-                View incidents for this group
+                {t("groups.linkIncidents")}
               </Link>
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-950">Top noisy monitors</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("groups.topNoisyMonitors")}</h2>
             <div className="mt-4 space-y-3">
               {topNoisyMonitors.length === 0 ? (
-                <p className="text-sm text-slate-500">ยังไม่มี monitor ในกลุ่มนี้</p>
+                <p className="text-sm text-slate-500">{t("groups.noMonitorsInGroup")}</p>
               ) : null}
               {topNoisyMonitors.map((monitor) => (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3" key={monitor.id}>
@@ -410,7 +414,7 @@ const GroupDetailPage = () => {
                     >
                       {monitor.name}
                     </Link>
-                    <span className="text-xs text-slate-500">{monitor.downCount24h} down / 24h</span>
+                    <span className="text-xs text-slate-500">{t("groups.downPer24h", { count: monitor.downCount24h })}</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
                     {monitor.type} · {getTarget(monitor.config)}
@@ -421,10 +425,10 @@ const GroupDetailPage = () => {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-950">Recent incidents</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("groups.recentIncidents")}</h2>
             <div className="mt-4 space-y-3">
               {group.incidents.length === 0 ? (
-                <p className="text-sm text-slate-500">ยังไม่มี incident ในกลุ่มนี้</p>
+                <p className="text-sm text-slate-500">{t("groups.noIncidentsInGroup")}</p>
               ) : null}
               {group.incidents.map((incident) => (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3" key={incident.id}>
@@ -444,7 +448,7 @@ const GroupDetailPage = () => {
                   >
                     {incident.monitor.name}
                   </Link>
-                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(incident.startedAt)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(incident.startedAt, locale)}</p>
                   <p className="mt-2 text-sm text-slate-600">{incident.message ?? "-"}</p>
                 </div>
               ))}

@@ -364,7 +364,7 @@ const runChecker = async (
     case "DATABASE":
       return databaseCheck(config as unknown as Parameters<typeof databaseCheck>[0]);
     default:
-      return { status: "DOWN", message: `ไม่รองรับ monitor type: ${type}` };
+      return { status: "DOWN", message: `Unsupported monitor type: ${type}` };
   }
 };
 
@@ -663,7 +663,7 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       data: {
         monitorId: monitor.id,
         status: "DOWN",
-        message: "config ต้องเป็น object",
+        message: "config must be an object",
       },
     });
 
@@ -687,7 +687,7 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       data: {
         monitorId: monitor.id,
         status: "DOWN",
-        message: "credential ที่ผูกไว้ถูกลบหรือไม่พบแล้ว",
+        message: "The linked credential has been deleted or no longer exists",
       },
     });
 
@@ -709,7 +709,7 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       data: {
         monitorId: monitor.id,
         status: "DOWN",
-        message: "ไม่สามารถถอดรหัส credential ที่ผูกไว้ได้",
+        message: "Failed to decrypt the linked credential",
       },
     });
 

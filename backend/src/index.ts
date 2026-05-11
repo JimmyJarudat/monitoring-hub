@@ -39,7 +39,7 @@ const getErrorMessage = (error: unknown): string => {
   }
   const cause = getErrorCause(error);
   if (cause) return getErrorMessage(cause);
-  return "เกิดข้อผิดพลาดภายในระบบ";
+  return "An internal system error occurred.";
 };
 
 const getErrorDetails = (error: unknown, status: number | null) => {
@@ -107,7 +107,7 @@ const bootstrap = async () => {
       }
 
       set.status = 500;
-      return fail("เกิดข้อผิดพลาดภายในระบบ");
+      return fail("An internal system error occurred.");
     })
     .group("/api", (app) =>
       app

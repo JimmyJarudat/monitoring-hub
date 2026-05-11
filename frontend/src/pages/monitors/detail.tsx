@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Bar,
   BarChart,
@@ -191,20 +192,20 @@ type NotificationChannelOption = {
 
 type TimeRangePreset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
-const timeRangeOptions: Array<{ label: string; value: TimeRangePreset }> = [
-  { label: "1h", value: "1h" },
-  { label: "6h", value: "6h" },
-  { label: "Day", value: "24h" },
-  { label: "Week", value: "7d" },
-  { label: "Month", value: "30d" },
-  { label: "Custom", value: "custom" },
+const timeRangeOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
+  { labelKey: "monitorDetail.range1h", value: "1h" },
+  { labelKey: "monitorDetail.range6h", value: "6h" },
+  { labelKey: "monitorDetail.rangeDay", value: "24h" },
+  { labelKey: "monitorDetail.rangeWeek", value: "7d" },
+  { labelKey: "monitorDetail.rangeMonth", value: "30d" },
+  { labelKey: "monitorDetail.rangeCustom", value: "custom" },
 ];
 
-const deviceAnalysisOptions: Array<{ label: string; value: TimeRangePreset }> = [
-  { label: "Day", value: "24h" },
-  { label: "Week", value: "7d" },
-  { label: "Month", value: "30d" },
-  { label: "Custom", value: "custom" },
+const deviceAnalysisOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
+  { labelKey: "monitorDetail.rangeDay", value: "24h" },
+  { labelKey: "monitorDetail.rangeWeek", value: "7d" },
+  { labelKey: "monitorDetail.rangeMonth", value: "30d" },
+  { labelKey: "monitorDetail.rangeCustom", value: "custom" },
 ];
 
 const presetDurationsMs: Record<Exclude<TimeRangePreset, "custom">, number> = {
@@ -353,10 +354,10 @@ const getTarget = (monitor: MonitorDetail) => {
   return "-";
 };
 
-const formatDateTime = (value: string | null | undefined) => {
+const formatDateTime = (value: string | null | undefined, locale = "th-TH") => {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("th-TH", {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -366,8 +367,8 @@ const formatResponseTime = (value: number | null | undefined) => {
   return typeof value === "number" ? `${value} ms` : "-";
 };
 
-const formatShortTime = (value: string) => {
-  return new Intl.DateTimeFormat("th-TH", {
+const formatShortTime = (value: string, locale = "th-TH") => {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -375,8 +376,8 @@ const formatShortTime = (value: string) => {
   }).format(new Date(value));
 };
 
-const formatDayLabel = (value: string) => {
-  return new Intl.DateTimeFormat("th-TH", {
+const formatDayLabel = (value: string, locale = "th-TH") => {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -407,14 +408,18 @@ const thresholdValueClass = (pct: number | null | undefined) => {
   return "text-slate-950";
 };
 
-const computeSeriesAnomaly = (values: number[], latest: number | null | undefined): string | null => {
+const computeSeriesAnomaly = (
+  values: number[],
+  latest: number | null | undefined,
+  anomalyText: (latest: string, mean: string, stdDev: string) => string,
+): string | null => {
   if (!isFiniteNumber(latest) || values.length < 8) return null;
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
   const stdDev = Math.sqrt(variance);
   if (stdDev < 3) return null;
   if (latest > mean + 2 * stdDev)
-    return `ค่าปัจจุบัน ${latest.toFixed(1)}% สูงผิดปกติ (avg ${mean.toFixed(1)}% ± ${stdDev.toFixed(1)}%)`;
+    return anomalyText(latest.toFixed(1), mean.toFixed(1), stdDev.toFixed(1));
   return null;
 };
 
@@ -513,7 +518,7 @@ const getChartCeiling = (values: number[]) => {
   return Math.max(max * 1.1, 1);
 };
 
-const buildRatePoints = (points: Array<{ collectedAt: string; value: number }>) => {
+const buildRatePoints = (points: Array<{ collectedAt: string; value: number }>, locale: string) => {
   const sorted = [...points].sort(
     (a, b) => new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime(),
   );
@@ -532,7 +537,7 @@ const buildRatePoints = (points: Array<{ collectedAt: string; value: number }>) 
 
     rates.push({
       checkedAt: current.collectedAt,
-      timeLabel: formatShortTime(current.collectedAt),
+      timeLabel: formatShortTime(current.collectedAt, locale),
       rateBps,
     });
   }
@@ -556,6 +561,8 @@ const MonitorDetailPage = () => {
   const navigate = useNavigate();
   const { api } = useApi();
   const { user } = useSession();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const isAdmin = isAdminUser(user);
   const [monitor, setMonitor] = useState<MonitorDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -611,11 +618,11 @@ const MonitorDetailPage = () => {
 
       setMonitor(response.data.data);
     } catch {
-      toast.error("โหลด monitor ไม่สำเร็จ");
+      toast.error(t("monitorDetail.loadError"));
     } finally {
       setIsLoading(false);
     }
-  }, [api, appliedFrom, appliedTo, id, resultsLimit]);
+  }, [api, appliedFrom, appliedTo, id, resultsLimit, t]);
 
   useEffect(() => {
     void fetchMonitor();
@@ -685,11 +692,11 @@ const MonitorDetailPage = () => {
 
       setMetricSeries(response.data.data.series);
     } catch {
-      toast.error("โหลด device metrics ไม่สำเร็จ");
+      toast.error(t("monitorDetail.loadMetricsError"));
     } finally {
       setMetricsLoading(false);
     }
-  }, [api, appliedFrom, appliedTo, id, monitor]);
+  }, [api, appliedFrom, appliedTo, id, monitor, t]);
 
   useEffect(() => {
     void fetchDeviceMetrics();
@@ -719,12 +726,12 @@ const MonitorDetailPage = () => {
     const to = toIsoFromLocalValue(customTo);
 
     if (!from || !to) {
-      toast.error("กรุณาเลือกช่วงเวลาให้ครบ");
+      toast.error(t("monitorDetail.validationRange"));
       return;
     }
 
     if (new Date(from).getTime() > new Date(to).getTime()) {
-      toast.error("เวลาเริ่มต้นต้องไม่มากกว่าเวลาสิ้นสุด");
+      toast.error(t("monitorDetail.validationRangeOrder"));
       return;
     }
 
@@ -763,14 +770,14 @@ const MonitorDetailPage = () => {
     return [...(monitor?.results ?? [])].reverse().map((result) => ({
       id: result.id,
       checkedAt: result.checkedAt,
-      timeLabel: formatShortTime(result.checkedAt),
+      timeLabel: formatShortTime(result.checkedAt, locale),
       responseTime: result.responseTimeMs,
       status: result.status,
       statusValue: statusValues[result.status],
       message: result.message ?? "-",
       color: statusColors[result.status],
     }));
-  }, [monitor]);
+  }, [locale, monitor]);
 
   const availabilityMap = useMemo(() => {
     const bucketMap = new Map<string, { status: MonitorStatus; count: number }>();
@@ -801,7 +808,7 @@ const MonitorDetailPage = () => {
 
     const rows = dayKeys.map((dayKey) => ({
       dayKey,
-      dayLabel: formatDayLabel(dayKey),
+      dayLabel: formatDayLabel(dayKey, locale),
       cells: Array.from({ length: 24 }, (_, hour) => {
         const bucket = bucketMap.get(`${dayKey}-${hour}`);
 
@@ -817,7 +824,7 @@ const MonitorDetailPage = () => {
       rows,
       hours: Array.from({ length: 24 }, (_, hour) => hour),
     };
-  }, [monitor]);
+  }, [locale, monitor]);
 
   const isDeviceMonitor = monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
   const latestMetadata = (latestResult?.metadata as DeviceMetadata | null) ?? null;
@@ -882,7 +889,7 @@ const MonitorDetailPage = () => {
       for (const point of series?.points ?? []) {
         const current = bucket.get(point.collectedAt) ?? {
           checkedAt: point.collectedAt,
-          timeLabel: formatShortTime(point.collectedAt),
+          timeLabel: formatShortTime(point.collectedAt, locale),
         };
 
         if (series?.metricKey === "cpu.used_pct") current.cpu = point.value;
@@ -896,16 +903,26 @@ const MonitorDetailPage = () => {
     return Array.from(bucket.values()).sort(
       (a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
     );
-  }, [metricSeries]);
+  }, [locale, metricSeries]);
 
   const cpuAnomalyHint = useMemo(
-    () => computeSeriesAnomaly(utilizationChartData.map((p) => p.cpu).filter(isFiniteNumber), latestMetadata?.cpuUsedPct),
-    [utilizationChartData, latestMetadata],
+    () =>
+      computeSeriesAnomaly(
+        utilizationChartData.map((p) => p.cpu).filter(isFiniteNumber),
+        latestMetadata?.cpuUsedPct,
+        (latest, mean, stdDev) => t("monitorDetail.anomalyHint", { latest, mean, stdDev }),
+      ),
+    [utilizationChartData, latestMetadata, t],
   );
 
   const memAnomalyHint = useMemo(
-    () => computeSeriesAnomaly(utilizationChartData.map((p) => p.memory).filter(isFiniteNumber), latestMetadata?.memUsedPct),
-    [utilizationChartData, latestMetadata],
+    () =>
+      computeSeriesAnomaly(
+        utilizationChartData.map((p) => p.memory).filter(isFiniteNumber),
+        latestMetadata?.memUsedPct,
+        (latest, mean, stdDev) => t("monitorDetail.anomalyHint", { latest, mean, stdDev }),
+      ),
+    [utilizationChartData, latestMetadata, t],
   );
 
   const diskSeries = useMemo(
@@ -930,7 +947,7 @@ const MonitorDetailPage = () => {
       for (const point of series.points) {
         const current = bucket.get(point.collectedAt) ?? {
           checkedAt: point.collectedAt,
-          timeLabel: formatShortTime(point.collectedAt),
+          timeLabel: formatShortTime(point.collectedAt, locale),
         };
         current[key] = point.value;
         bucket.set(point.collectedAt, current);
@@ -940,7 +957,7 @@ const MonitorDetailPage = () => {
     return Array.from(bucket.values()).sort(
       (a, b) => new Date(String(a.checkedAt)).getTime() - new Date(String(b.checkedAt)).getTime(),
     );
-  }, [diskSeries]);
+  }, [diskSeries, locale]);
 
   const interfaceAnalytics = useMemo(() => {
     const seriesByInterface = new Map<
@@ -977,8 +994,8 @@ const MonitorDetailPage = () => {
     >();
     const perInterface = Array.from(seriesByInterface.entries())
       .map(([name, current]) => {
-        const rxRates = current.inSeries ? buildRatePoints(current.inSeries.points) : [];
-        const txRates = current.outSeries ? buildRatePoints(current.outSeries.points) : [];
+        const rxRates = current.inSeries ? buildRatePoints(current.inSeries.points, locale) : [];
+        const txRates = current.outSeries ? buildRatePoints(current.outSeries.points, locale) : [];
 
         for (const point of rxRates) {
           const bucket = totalsBucket.get(point.checkedAt) ?? {
@@ -1068,7 +1085,7 @@ const MonitorDetailPage = () => {
       interfaceTrafficChartData,
       topInterfaces: perInterface.slice(0, 8),
     };
-  }, [metricSeries]);
+  }, [locale, metricSeries]);
 
   const totalTrafficRateCeiling = useMemo(
     () =>
@@ -1118,10 +1135,10 @@ const MonitorDetailPage = () => {
         return;
       }
 
-      toast.success(`เช็ก ${monitor.name} แล้ว`);
+      toast.success(t("monitorDetail.checkSuccess", { name: monitor.name }));
       await fetchMonitor();
     } catch {
-      toast.error("สั่งเช็กไม่สำเร็จ");
+      toast.error(t("monitorDetail.checkError"));
     } finally {
       setIsBusy(false);
     }
@@ -1142,10 +1159,10 @@ const MonitorDetailPage = () => {
         return;
       }
 
-      toast.success(monitor.enabled ? "ปิด monitor แล้ว" : "เปิด monitor แล้ว");
+      toast.success(monitor.enabled ? t("monitorDetail.disableSuccess") : t("monitorDetail.enableSuccess"));
       await fetchMonitor();
     } catch {
-      toast.error("เปลี่ยนสถานะไม่สำเร็จ");
+      toast.error(t("monitorDetail.toggleError"));
     } finally {
       setIsBusy(false);
     }
@@ -1157,12 +1174,12 @@ const MonitorDetailPage = () => {
     const interval = Number(editForm.interval);
 
     if (!editForm.name.trim()) {
-      toast.error("กรุณาระบุชื่อ monitor");
+      toast.error(t("monitorDetail.validationName"));
       return;
     }
 
     if (!Number.isFinite(interval) || interval < 10) {
-      toast.error("interval ต้องมากกว่าหรือเท่ากับ 10 วินาที");
+      toast.error(t("monitorDetail.validationInterval"));
       return;
     }
 
@@ -1172,13 +1189,13 @@ const MonitorDetailPage = () => {
       const parsed = JSON.parse(editForm.configText) as unknown;
 
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        toast.error("config ต้องเป็น JSON object");
+        toast.error(t("monitorDetail.validationConfigObject"));
         return;
       }
 
       config = parsed as Record<string, unknown>;
     } catch {
-      toast.error("config JSON ไม่ถูกต้อง");
+      toast.error(t("monitorDetail.validationConfigJson"));
       return;
     }
 
@@ -1194,11 +1211,11 @@ const MonitorDetailPage = () => {
       const diskPct = toNumberOrNull(thresholdForm.diskPct);
       const values = [cpuPct, ramPct, diskPct].filter((value) => value !== null);
       if (values.some((value) => Number.isNaN(value))) {
-        toast.error("Threshold ต้องเป็นตัวเลข");
+        toast.error(t("monitorDetail.validationThresholdNumber"));
         return;
       }
       if (values.some((value) => (value as number) < 1 || (value as number) > 100)) {
-        toast.error("Threshold ต้องอยู่ระหว่าง 1-100%");
+        toast.error(t("monitorDetail.validationThresholdRange"));
         return;
       }
       const thresholdConfig: Record<string, number> = {};
@@ -1229,11 +1246,11 @@ const MonitorDetailPage = () => {
         return;
       }
 
-      toast.success("แก้ไข monitor แล้ว");
+      toast.success(t("monitorDetail.updateSuccess"));
       setIsEditing(false);
       await fetchMonitor();
     } catch {
-      toast.error("แก้ไข monitor ไม่สำเร็จ");
+      toast.error(t("monitorDetail.updateError"));
     } finally {
       setIsBusy(false);
     }
@@ -1297,21 +1314,21 @@ const MonitorDetailPage = () => {
   const handleSaveRule = async () => {
     if (!monitor) return;
     if (!availableAlertMetrics.includes(alertRuleForm.metric)) {
-      toast.error("metric นี้ใช้กับ monitor นี้ไม่ได้");
+      toast.error(t("monitorDetail.validationMetricUnsupported"));
       return;
     }
 
     const threshold = Number(alertRuleForm.threshold);
     if (!Number.isFinite(threshold)) {
-      toast.error("threshold ต้องเป็นตัวเลข");
+      toast.error(t("monitorDetail.validationThresholdNumber"));
       return;
     }
     if (alertRuleForm.metric === "status" && ![1, 2, 3].includes(threshold)) {
-      toast.error("เลือก status threshold ให้ถูกต้อง");
+      toast.error(t("monitorDetail.validationStatusThreshold"));
       return;
     }
     if (alertRuleForm.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
-      toast.error("threshold เปอร์เซ็นต์ต้องอยู่ระหว่าง 0-100");
+      toast.error(t("monitorDetail.validationPercentThreshold"));
       return;
     }
 
@@ -1334,12 +1351,12 @@ const MonitorDetailPage = () => {
         return;
       }
 
-      toast.success(editingRule ? "อัปเดต alert rule แล้ว" : "สร้าง alert rule แล้ว");
+      toast.success(editingRule ? t("monitorDetail.ruleUpdateSuccess") : t("monitorDetail.ruleCreateSuccess"));
       setIsRuleModalOpen(false);
       setEditingRule(null);
       await fetchMonitor();
     } catch {
-      toast.error("บันทึก alert rule ไม่สำเร็จ");
+      toast.error(t("monitorDetail.ruleSaveError"));
     } finally {
       setIsBusy(false);
     }
@@ -1347,7 +1364,7 @@ const MonitorDetailPage = () => {
 
   const handleDeleteRule = async (rule: AlertRule) => {
     if (!monitor) return;
-    if (!window.confirm(`ต้องการลบ rule "${alertMetricLabels[rule.metric] ?? rule.metric}" ใช่ไหม`)) return;
+    if (!window.confirm(t("monitorDetail.ruleDeleteConfirm", { metric: t(`monitorDetail.metrics.${rule.metric}`, { defaultValue: rule.metric }) }))) return;
 
     setIsBusy(true);
     try {
@@ -1358,10 +1375,10 @@ const MonitorDetailPage = () => {
         toast.error(response.data.message);
         return;
       }
-      toast.success("ลบ alert rule แล้ว");
+      toast.success(t("monitorDetail.ruleDeleteSuccess"));
       await fetchMonitor();
     } catch {
-      toast.error("ลบ alert rule ไม่สำเร็จ");
+      toast.error(t("monitorDetail.ruleDeleteError"));
     } finally {
       setIsBusy(false);
     }
@@ -1370,7 +1387,7 @@ const MonitorDetailPage = () => {
   const handleDeleteMonitor = async () => {
     if (!monitor) return;
 
-    const confirmed = window.confirm(`ต้องการลบ ${monitor.name} ใช่ไหม?`);
+    const confirmed = window.confirm(t("monitorDetail.deleteConfirm", { name: monitor.name }));
     if (!confirmed) return;
 
     setIsBusy(true);
@@ -1383,10 +1400,10 @@ const MonitorDetailPage = () => {
         return;
       }
 
-      toast.success("ลบ monitor แล้ว");
+      toast.success(t("monitorDetail.deleteSuccess"));
       navigate("/monitors", { replace: true });
     } catch {
-      toast.error("ลบ monitor ไม่สำเร็จ");
+      toast.error(t("monitorDetail.deleteError"));
     } finally {
       setIsBusy(false);
     }
@@ -1396,7 +1413,7 @@ const MonitorDetailPage = () => {
     return (
       <div className="min-h-full bg-slate-50 p-6">
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading monitor...
+          {t("monitorDetail.loading")}
         </div>
       </div>
     );
@@ -1406,9 +1423,9 @@ const MonitorDetailPage = () => {
     return (
       <div className="min-h-full bg-slate-50 p-6">
         <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h1 className="text-lg font-semibold text-slate-950">ไม่พบ monitor</h1>
+          <h1 className="text-lg font-semibold text-slate-950">{t("monitorDetail.notFound")}</h1>
           <Link className="mt-4 inline-flex text-sm font-semibold text-cyan-700" to="/monitors">
-            Back to Monitors
+            {t("monitorDetail.backToMonitors")}
           </Link>
         </div>
       </div>
@@ -1419,10 +1436,10 @@ const MonitorDetailPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-cyan-700">Monitor Detail</p>
+          <p className="text-sm font-medium text-cyan-700">{t("monitorDetail.title")}</p>
           <h1 className="mt-1 truncate text-2xl font-semibold text-slate-950">{monitor.name}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            {monitor.type} target {getTarget(monitor)} · every {monitor.interval}s
+            {t("monitorDetail.targetSummary", { type: monitor.type, target: getTarget(monitor), interval: monitor.interval })}
           </p>
         </div>
 
@@ -1431,7 +1448,7 @@ const MonitorDetailPage = () => {
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             to="/monitors"
           >
-            Back
+            {t("common.back")}
           </Link>
           <button
             className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1439,14 +1456,14 @@ const MonitorDetailPage = () => {
             onClick={() => void fetchMonitor()}
             disabled={isBusy}
           >
-            Refresh
+            {t("common.refresh")}
           </button>
           {monitor.type === "SNMP" || monitor.type === "SYSTEM" ? (
             <Link
               className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               to={`/interfaces?deviceId=${monitor.id}`}
             >
-              View interfaces
+              {t("monitorDetail.viewInterfaces")}
             </Link>
           ) : null}
           {isAdmin ? (
@@ -1457,7 +1474,7 @@ const MonitorDetailPage = () => {
                 onClick={() => void handleCheckNow()}
                 disabled={isBusy || !monitor.enabled}
               >
-                Check now
+                {t("monitors.checkNow")}
               </button>
               <button
                 className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1465,7 +1482,7 @@ const MonitorDetailPage = () => {
                 onClick={() => void handleToggleEnabled()}
                 disabled={isBusy}
               >
-                {monitor.enabled ? "Disable" : "Enable"}
+                {monitor.enabled ? t("common.disable") : t("common.enable")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1473,7 +1490,7 @@ const MonitorDetailPage = () => {
                 onClick={openEditModal}
                 disabled={isBusy}
               >
-                Edit
+                {t("common.edit")}
               </button>
               <button
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1481,7 +1498,7 @@ const MonitorDetailPage = () => {
                 onClick={() => void handleDeleteMonitor()}
                 disabled={isBusy}
               >
-                Delete
+                {t("common.delete")}
               </button>
             </>
           ) : null}
@@ -1490,7 +1507,7 @@ const MonitorDetailPage = () => {
 
       <section className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Status</p>
+          <p className="text-sm text-slate-500">{t("common.status")}</p>
           <span
             className={`mt-3 inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusStyles[latestStatus]}`}
           >
@@ -1498,23 +1515,26 @@ const MonitorDetailPage = () => {
           </span>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Last response</p>
+          <p className="text-sm text-slate-500">{t("monitorDetail.lastResponse")}</p>
           <p className="mt-2 text-2xl font-semibold text-slate-950">
             {formatResponseTime(latestResult?.responseTimeMs)}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Last checked</p>
+          <p className="text-sm text-slate-500">{t("monitorDetail.lastChecked")}</p>
           <p className="mt-2 text-sm font-semibold text-slate-950">
-            {formatDateTime(latestResult?.checkedAt)}
+            {formatDateTime(latestResult?.checkedAt, locale)}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Recent checks</p>
+          <p className="text-sm text-slate-500">{t("monitorDetail.recentChecks")}</p>
           <p className="mt-2 text-2xl font-semibold text-slate-950">{resultSummary.total}</p>
           <p className="mt-1 text-xs text-slate-500">
-            {resultSummary.upCount} up · {resultSummary.downCount} down · avg{" "}
-            {formatResponseTime(resultSummary.avgResponse)}
+            {t("monitorDetail.recentSummary", {
+              up: resultSummary.upCount,
+              down: resultSummary.downCount,
+              avg: formatResponseTime(resultSummary.avgResponse),
+            })}
           </p>
         </div>
       </section>
@@ -1526,9 +1546,9 @@ const MonitorDetailPage = () => {
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-950">Device metrics</h2>
+                    <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.deviceMetrics")}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      CPU, memory, disk และ network counters สำหรับอุปกรณ์/เซิร์ฟเวอร์
+                      {t("monitorDetail.deviceMetricsDescription")}
                     </p>
                   </div>
                   <div className="flex flex-col items-start gap-2 lg:items-end">
@@ -1548,13 +1568,15 @@ const MonitorDetailPage = () => {
                             ].join(" ")}
                             onClick={() => handleTimeRangeChange(option.value)}
                           >
-                            {option.label}
+                            {t(option.labelKey)}
                           </button>
                         );
                       })}
                     </div>
                     <p className="text-xs text-slate-400">
-                      {metricsLoading ? "Loading metrics..." : `${metricSeries.length} series in selected range`}
+                      {metricsLoading
+                        ? t("monitorDetail.loadingMetrics")
+                        : t("monitorDetail.seriesInRange", { count: metricSeries.length })}
                     </p>
                   </div>
                 </div>
@@ -1578,7 +1600,7 @@ const MonitorDetailPage = () => {
                       type="button"
                       onClick={handleApplyCustomRange}
                     >
-                      Apply
+                      {t("monitorDetail.apply")}
                     </button>
                   </div>
                 ) : null}
@@ -1589,7 +1611,7 @@ const MonitorDetailPage = () => {
                       <p className="text-xs text-slate-500">CPU</p>
                       {cpuAnomalyHint ? (
                         <span className="text-[10px] font-semibold text-amber-600" title={cpuAnomalyHint}>
-                          ↑ anomaly
+                          {t("monitorDetail.anomaly")}
                         </span>
                       ) : null}
                     </div>
@@ -1607,7 +1629,7 @@ const MonitorDetailPage = () => {
                       <p className="text-xs text-slate-500">Memory</p>
                       {memAnomalyHint ? (
                         <span className="text-[10px] font-semibold text-amber-600" title={memAnomalyHint}>
-                          ↑ anomaly
+                          {t("monitorDetail.anomaly")}
                         </span>
                       ) : null}
                     </div>
@@ -1633,7 +1655,7 @@ const MonitorDetailPage = () => {
                       {latestMetadata?.interfaces?.length ?? 0}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {latestMetadata?.disks?.length ?? 0} disks tracked
+                      {t("monitorDetail.disksTracked", { count: latestMetadata?.disks?.length ?? 0 })}
                     </p>
                   </div>
                 </div>
@@ -1642,12 +1664,12 @@ const MonitorDetailPage = () => {
               <div className="grid gap-6 2xl:grid-cols-2">
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="border-b border-slate-200 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-slate-950">CPU and memory</h2>
+                    <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.cpuMemory")}</h2>
                   </div>
                   <div className="h-72 p-4">
                     {utilizationChartData.length === 0 ? (
                       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                        ยังไม่มี time-series metrics
+                        {t("monitorDetail.noTimeSeries")}
                       </div>
                     ) : (
                       <ResponsiveContainer height="100%" width="100%">
@@ -1659,7 +1681,7 @@ const MonitorDetailPage = () => {
                           <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
                           <Tooltip
                             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
-                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
+                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt, locale) : "")}
                           />
                           <Line dataKey="cpu" name="CPU" stroke="#0f766e" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                           <Line dataKey="memory" name="Memory" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -1672,14 +1694,14 @@ const MonitorDetailPage = () => {
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="border-b border-slate-200 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <h2 className="text-sm font-semibold text-slate-950">Traffic rate</h2>
-                      <span className="text-xs text-slate-400">Aggregated across interfaces</span>
+                      <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.trafficRate")}</h2>
+                      <span className="text-xs text-slate-400">{t("monitorDetail.trafficRateDescription")}</span>
                     </div>
                   </div>
                   <div className="h-72 p-4">
                     {interfaceAnalytics.totalTrafficRateData.length === 0 ? (
                       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                        ยังไม่มี traffic rate
+                        {t("monitorDetail.noTrafficRate")}
                       </div>
                     ) : (
                       <ResponsiveContainer height="100%" width="100%">
@@ -1698,7 +1720,7 @@ const MonitorDetailPage = () => {
                           />
                           <Tooltip
                             formatter={(value, name) => [formatBitsPerSecond(Number(value)), String(name)]}
-                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt) : "")}
+                            labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt, locale) : "")}
                           />
                           <Line dataKey="rxRateBps" name="RX total" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                           <Line dataKey="txRateBps" name="TX total" stroke="#ea580c" strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -1711,13 +1733,13 @@ const MonitorDetailPage = () => {
 
               <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 px-4 py-3">
-                  <h2 className="text-sm font-semibold text-slate-950">Top interface traffic</h2>
+                  <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.topInterfaceTraffic")}</h2>
                 </div>
                 <div className="h-72 p-4">
                   {interfaceAnalytics.interfaceTrafficChartData.length === 0 ||
                   interfaceAnalytics.topInterfaces.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                      ยังไม่มีข้อมูล traffic ต่อ interface
+                      {t("monitorDetail.noInterfaceTraffic")}
                     </div>
                   ) : (
                     <ResponsiveContainer height="100%" width="100%">
@@ -1743,7 +1765,7 @@ const MonitorDetailPage = () => {
                           formatter={(value, name) => [formatBitsPerSecond(Number(value)), name]}
                           labelFormatter={(_, payload) =>
                             payload?.[0]?.payload?.checkedAt
-                              ? formatDateTime(String(payload[0].payload.checkedAt))
+                              ? formatDateTime(String(payload[0].payload.checkedAt), locale)
                               : ""
                           }
                         />
@@ -1784,12 +1806,12 @@ const MonitorDetailPage = () => {
 
               <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 px-4 py-3">
-                  <h2 className="text-sm font-semibold text-slate-950">Disk usage</h2>
+                  <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.diskUsage")}</h2>
                 </div>
                 <div className="h-72 p-4">
                   {diskChartData.length === 0 || diskSeries.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                      ยังไม่มี disk metrics
+                      {t("monitorDetail.noDiskMetrics")}
                     </div>
                   ) : (
                     <ResponsiveContainer height="100%" width="100%">
@@ -1801,7 +1823,7 @@ const MonitorDetailPage = () => {
                         <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
                         <Tooltip
                           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
-                          labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt)) : "")}
+                          labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt), locale) : "")}
                         />
                         {diskSeries.map((series, index) => {
                           const key = series.instance ?? series.metricKey;
@@ -1826,25 +1848,25 @@ const MonitorDetailPage = () => {
 
               <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 px-4 py-3">
-                  <h2 className="text-sm font-semibold text-slate-950">Latest interfaces</h2>
+                  <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.latestInterfaces")}</h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                       <tr>
-                        <th className="px-4 py-3">Interface</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">RX rate</th>
-                        <th className="px-4 py-3">TX rate</th>
-                        <th className="px-4 py-3">Errors</th>
-                        <th className="px-4 py-3">Discards</th>
+                        <th className="px-4 py-3">{t("monitorDetail.interface")}</th>
+                        <th className="px-4 py-3">{t("common.status")}</th>
+                        <th className="px-4 py-3">{t("monitorDetail.rxRate")}</th>
+                        <th className="px-4 py-3">{t("monitorDetail.txRate")}</th>
+                        <th className="px-4 py-3">{t("monitorDetail.errors")}</th>
+                        <th className="px-4 py-3">{t("monitorDetail.discards")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {!interfaceAnalytics.topInterfaces.length ? (
                         <tr>
                           <td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
-                            ยังไม่มีข้อมูล interface
+                            {t("monitorDetail.noInterfaces")}
                           </td>
                         </tr>
                       ) : (
@@ -1857,10 +1879,10 @@ const MonitorDetailPage = () => {
                             <td className="px-4 py-3 text-slate-600">{formatBitsPerSecond(iface.latestRxRate)}</td>
                             <td className="px-4 py-3 text-slate-600">{formatBitsPerSecond(iface.latestTxRate)}</td>
                             <td className="px-4 py-3 text-slate-600">
-                              in {Math.round(iface.latestInErrors)} · out {Math.round(iface.latestOutErrors)}
+                              {t("monitorDetail.inOut", { in: Math.round(iface.latestInErrors), out: Math.round(iface.latestOutErrors) })}
                             </td>
                             <td className="px-4 py-3 text-slate-600">
-                              in {Math.round(iface.latestInDiscards)} · out {Math.round(iface.latestOutDiscards)}
+                              {t("monitorDetail.inOut", { in: Math.round(iface.latestInDiscards), out: Math.round(iface.latestOutDiscards) })}
                             </td>
                           </tr>
                         ))
@@ -1876,27 +1898,27 @@ const MonitorDetailPage = () => {
             <div className="border-b border-slate-200 px-4 py-3">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-950">Availability map</h2>
+                  <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.availabilityMap")}</h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    มองภาพรวมตามวันและชั่วโมงเพื่อดูช่วงที่ระบบล่มหรือเสื่อมคุณภาพ
+                    {t("monitorDetail.availabilityMapDescription")}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/85" />
-                    Up
+                    {t("monitorDetail.up")}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-amber-500/85" />
-                    Degraded
+                    {t("monitorDetail.degraded")}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-rose-500/85" />
-                    Down
+                    {t("monitorDetail.down")}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-slate-200" />
-                    No data
+                    {t("common.noData")}
                   </span>
                 </div>
               </div>
@@ -1904,7 +1926,7 @@ const MonitorDetailPage = () => {
             <div className="overflow-x-auto px-4 py-4">
               {availabilityMap.rows.length === 0 ? (
                 <div className="flex h-36 items-center justify-center text-sm text-slate-500">
-                  ยังไม่มีข้อมูลพอสำหรับ availability map
+                  {t("monitorDetail.noAvailability")}
                 </div>
               ) : (
                 <div className="min-w-[820px]">
@@ -1937,7 +1959,7 @@ const MonitorDetailPage = () => {
                             key={`${row.dayKey}-${cell.hour}`}
                             title={`${row.dayLabel} ${cell.hour
                               .toString()
-                              .padStart(2, "0")}:00 - ${cell.status === "NO_DATA" ? "No data" : cell.status}${cell.checks > 0 ? ` (${cell.checks} checks)` : ""}`}
+                              .padStart(2, "0")}:00 - ${cell.status === "NO_DATA" ? t("common.noData") : cell.status}${cell.checks > 0 ? ` (${t("monitorDetail.checksCount", { count: cell.checks })})` : ""}`}
                           />
                         ))}
                       </div>
@@ -1951,12 +1973,12 @@ const MonitorDetailPage = () => {
           <div className="grid gap-6 2xl:grid-cols-2">
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-4 py-3">
-                <h2 className="text-sm font-semibold text-slate-950">Response time</h2>
+                <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.responseTime")}</h2>
               </div>
               <div className="h-72 p-4">
                 {chartData.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                    ยังไม่มีข้อมูลสำหรับกราฟ
+                    {t("monitorDetail.noChartData")}
                   </div>
                 ) : (
                   <ResponsiveContainer height="100%" width="100%">
@@ -1977,11 +1999,11 @@ const MonitorDetailPage = () => {
                       <Tooltip
                         formatter={(value, name) => [
                           name === "responseTime" ? formatResponseTime(Number(value)) : value,
-                          "Response",
+                          t("monitorDetail.response"),
                         ]}
                         labelFormatter={(_, payload) =>
                           payload?.[0]?.payload?.checkedAt
-                            ? formatDateTime(payload[0].payload.checkedAt)
+                            ? formatDateTime(payload[0].payload.checkedAt, locale)
                             : ""
                         }
                       />
@@ -1989,7 +2011,7 @@ const MonitorDetailPage = () => {
                         connectNulls={false}
                         dataKey="responseTime"
                         dot={{ r: 3, strokeWidth: 2 }}
-                        name="Response"
+                        name={t("monitorDetail.response")}
                         stroke="#0891b2"
                         strokeWidth={2}
                         type="monotone"
@@ -2002,12 +2024,12 @@ const MonitorDetailPage = () => {
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-4 py-3">
-                <h2 className="text-sm font-semibold text-slate-950">Status timeline</h2>
+                <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.statusTimeline")}</h2>
               </div>
               <div className="h-72 p-4">
                 {chartData.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                    ยังไม่มีข้อมูลสำหรับกราฟ
+                    {t("monitorDetail.noChartData")}
                   </div>
                 ) : (
                   <ResponsiveContainer height="100%" width="100%">
@@ -2028,14 +2050,14 @@ const MonitorDetailPage = () => {
                         width={84}
                       />
                       <Tooltip
-                        formatter={(_, __, item) => [item.payload.status, "Status"]}
+                        formatter={(_, __, item) => [item.payload.status, t("common.status")]}
                         labelFormatter={(_, payload) =>
                           payload?.[0]?.payload?.checkedAt
-                            ? formatDateTime(payload[0].payload.checkedAt)
+                            ? formatDateTime(payload[0].payload.checkedAt, locale)
                             : ""
                         }
                       />
-                      <Bar dataKey="statusValue" name="Status" radius={[4, 4, 0, 0]}>
+                      <Bar dataKey="statusValue" name={t("common.status")} radius={[4, 4, 0, 0]}>
                         {chartData.map((point) => (
                           <Cell fill={point.color} key={point.id} />
                         ))}
@@ -2050,7 +2072,7 @@ const MonitorDetailPage = () => {
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <h2 className="text-sm font-semibold text-slate-950">Recent results</h2>
+                <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.recentResults")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -2059,7 +2081,7 @@ const MonitorDetailPage = () => {
                   >
                     {timeRangeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -2082,12 +2104,12 @@ const MonitorDetailPage = () => {
                         type="button"
                         onClick={handleApplyCustomRange}
                       >
-                        Apply
+                        {t("monitorDetail.apply")}
                       </button>
                     </>
                   ) : null}
                   <span className="text-xs text-slate-500">
-                    Showing {monitor.results.length} results
+                    {t("monitorDetail.showingResults", { count: monitor.results.length })}
                   </span>
                 </div>
               </div>
@@ -2096,17 +2118,17 @@ const MonitorDetailPage = () => {
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Response</th>
-                    <th className="px-4 py-3">Message</th>
-                    <th className="px-4 py-3">Checked at</th>
+                    <th className="px-4 py-3">{t("common.status")}</th>
+                    <th className="px-4 py-3">{t("monitorDetail.response")}</th>
+                    <th className="px-4 py-3">{t("monitorDetail.message")}</th>
+                    <th className="px-4 py-3">{t("monitorDetail.checkedAt")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {monitor.results.length === 0 ? (
                     <tr>
                       <td className="px-4 py-8 text-center text-slate-500" colSpan={4}>
-                        ยังไม่มีผลตรวจ
+                        {t("monitorDetail.noResults")}
                       </td>
                     </tr>
                   ) : null}
@@ -2126,7 +2148,7 @@ const MonitorDetailPage = () => {
                         <span className="wrap-break-word">{result.message ?? "-"}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDateTime(result.checkedAt)}
+                        {formatDateTime(result.checkedAt, locale)}
                       </td>
                     </tr>
                   ))}
@@ -2141,7 +2163,7 @@ const MonitorDetailPage = () => {
                   onClick={handleLoadMoreResults}
                   disabled={isBusy || isLoading || resultsLimit >= 200}
                 >
-                  Load more results
+                  {t("monitorDetail.loadMoreResults")}
                 </button>
               </div>
             ) : null}
@@ -2149,11 +2171,11 @@ const MonitorDetailPage = () => {
 
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-950">Incidents</h2>
+              <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.incidents")}</h2>
             </div>
             <div className="divide-y divide-slate-100">
               {monitor.incidents.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-slate-500">ยังไม่มี incident</div>
+                <div className="px-4 py-8 text-center text-sm text-slate-500">{t("monitorDetail.noIncidents")}</div>
               ) : null}
               {monitor.incidents.map((incident) => (
                 <div className="grid gap-2 px-4 py-3 md:grid-cols-[120px_1fr_180px]" key={incident.id}>
@@ -2164,8 +2186,8 @@ const MonitorDetailPage = () => {
                   </span>
                   <div className="text-sm text-slate-700">{incident.message ?? "-"}</div>
                   <div className="text-xs text-slate-500">
-                    {formatDateTime(incident.startedAt)}
-                    {incident.resolvedAt ? ` - ${formatDateTime(incident.resolvedAt)}` : ""}
+                    {formatDateTime(incident.startedAt, locale)}
+                    {incident.resolvedAt ? ` - ${formatDateTime(incident.resolvedAt, locale)}` : ""}
                   </div>
                 </div>
               ))}
@@ -2175,15 +2197,15 @@ const MonitorDetailPage = () => {
 
         <aside className="space-y-6">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-950">Configuration</h2>
+            <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.configuration")}</h2>
             {monitor.credential ? (
               <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 px-3 py-3 text-sm">
-                <div className="font-semibold text-violet-950">Linked credential</div>
+                <div className="font-semibold text-violet-950">{t("monitorDetail.linkedCredential")}</div>
                 <div className="mt-1 text-violet-800">
                   {monitor.credential.name} · {monitor.credential.type}
                 </div>
                 <p className="mt-2 text-xs text-violet-700">
-                  ตอนรันจริงระบบจะใช้ค่าล่าสุดจาก credential นี้ แม้ config ด้านล่างจะยังมีค่าที่ถูก fill ไว้
+                  {t("monitorDetail.linkedCredentialHint")}
                 </p>
               </div>
             ) : null}
@@ -2195,8 +2217,8 @@ const MonitorDetailPage = () => {
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">Alert rules</h2>
-                <p className="mt-1 text-xs text-slate-500">ตั้งเงื่อนไขและช่องทางแจ้งเตือนเฉพาะ monitor นี้</p>
+                <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.alertRules")}</h2>
+                <p className="mt-1 text-xs text-slate-500">{t("monitorDetail.alertRulesDescription")}</p>
               </div>
               {isAdmin ? (
                 <button
@@ -2204,7 +2226,7 @@ const MonitorDetailPage = () => {
                   type="button"
                   onClick={() => openCreateRule()}
                 >
-                  New rule
+                  {t("monitorDetail.newRule")}
                 </button>
               ) : null}
             </div>
@@ -2221,15 +2243,15 @@ const MonitorDetailPage = () => {
                     type="button"
                     onClick={() => openCreateRule(preset.metric)}
                   >
-                    <p className="text-xs font-semibold text-amber-900">+ {preset.label} threshold</p>
-                    <p className="mt-0.5 text-[11px] text-amber-700">เตือนเมื่อ {preset.default} · {preset.severity}</p>
+                    <p className="text-xs font-semibold text-amber-900">+ {preset.label} {t("monitorDetail.threshold")}</p>
+                    <p className="mt-0.5 text-[11px] text-amber-700">{t("monitorDetail.alertWhen", { condition: preset.default, severity: preset.severity })}</p>
                   </button>
                 ))}
               </div>
             ) : null}
             <div className="mt-3 divide-y divide-slate-100">
               {monitor.alertRules.length === 0 ? (
-                <div className="py-4 text-sm text-slate-500">ยังไม่มี alert rule</div>
+                <div className="py-4 text-sm text-slate-500">{t("monitorDetail.noAlertRules")}</div>
               ) : null}
               {monitor.alertRules.map((rule) => {
                 const { currentValue, isFiring } = evaluateAlertRule(rule, latestResult, latestMetadata);
@@ -2237,7 +2259,7 @@ const MonitorDetailPage = () => {
                 <div className="py-3" key={rule.id}>
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-slate-900">
-                      {alertMetricLabels[rule.metric] ?? rule.metric}
+                      {t(`monitorDetail.metrics.${rule.metric}`, { defaultValue: alertMetricLabels[rule.metric] ?? rule.metric })}
                     </p>
                     <div className="flex items-center gap-2">
                       {currentValue !== null && rule.enabled ? (
@@ -2250,16 +2272,19 @@ const MonitorDetailPage = () => {
                         </span>
                       ) : null}
                       <span className="text-xs text-slate-400">
-                        {rule.enabled ? "Enabled" : "Disabled"}
+                        {rule.enabled ? t("common.enabled") : t("common.disabled")}
                       </span>
                     </div>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    เตือนเมื่อ {operatorSymbols[rule.operator]} {formatAlertThreshold(rule.metric, rule.threshold)} · {rule.severity}
+                    {t("monitorDetail.alertWhen", {
+                      condition: `${operatorSymbols[rule.operator]} ${formatAlertThreshold(rule.metric, rule.threshold)}`,
+                      severity: rule.severity,
+                    })}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {(rule.channels ?? []).length === 0 ? (
-                      <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-500">No channels</span>
+                      <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{t("monitorDetail.noChannels")}</span>
                     ) : null}
                     {(rule.channels ?? []).map(({ channel }) => (
                       <span
@@ -2279,14 +2304,14 @@ const MonitorDetailPage = () => {
                         type="button"
                         onClick={() => openEditRule(rule)}
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         className="rounded-md border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
                         type="button"
                         onClick={() => void handleDeleteRule(rule)}
                       >
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </div>
                   ) : null}
@@ -2302,14 +2327,14 @@ const MonitorDetailPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Edit monitor</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{t("monitorDetail.editMonitor")}</h2>
               <p className="mt-1 text-sm text-slate-500">{monitor?.name}</p>
             </div>
 
             <div className="max-h-[75vh] overflow-y-auto p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Name</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.name")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={editForm.name}
@@ -2320,7 +2345,7 @@ const MonitorDetailPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Type</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.type")}</span>
                   <select
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={editForm.type}
@@ -2344,7 +2369,7 @@ const MonitorDetailPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Interval</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.interval")}</span>
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     min={10}
@@ -2359,28 +2384,28 @@ const MonitorDetailPage = () => {
                 <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 sm:col-span-2">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-violet-950">Linked credential</p>
+                      <p className="text-sm font-semibold text-violet-950">{t("monitorDetail.linkedCredential")}</p>
                       <p className="mt-1 text-xs text-violet-800">
-                        เปลี่ยน shared credential ได้จากตรงนี้ หรือเลือก No linked credential เพื่อถอดออก
+                        {t("monitorDetail.changeCredentialHint")}
                       </p>
                     </div>
                     <Link
                       className="text-xs font-semibold text-violet-700 transition hover:text-violet-900"
                       to="/credentials"
                     >
-                      Manage credentials
+                      {t("monitorDetail.manageCredentials")}
                     </Link>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                     <label className="block">
-                      <span className="text-sm font-medium text-violet-950">Credential</span>
+                      <span className="text-sm font-medium text-violet-950">{t("monitorDetail.credential")}</span>
                       <select
                         className="mt-2 w-full rounded-md border border-violet-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
                         value={selectedEditCredentialId}
                         onChange={(event) => setSelectedEditCredentialId(event.target.value)}
                       >
-                        <option value="">No linked credential</option>
+                        <option value="">{t("monitorDetail.noLinkedCredential")}</option>
                         {availableCredentials.map((credential) => (
                           <option key={credential.id} value={credential.id}>
                             {credential.name} · {credentialTypeLabels[credential.type]}
@@ -2390,18 +2415,18 @@ const MonitorDetailPage = () => {
                     </label>
 
                     <div className="rounded-md border border-violet-200 bg-white px-3 py-3 text-xs text-violet-900">
-                      <div className="font-semibold">Compatible types</div>
+                      <div className="font-semibold">{t("monitorDetail.compatibleTypes")}</div>
                       <div className="mt-1">
                         {compatibleCredentialTypes.length > 0
                           ? compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")
-                          : "This monitor type/config does not use shared credentials"}
+                          : t("monitorDetail.noSharedCredentialNeeded")}
                       </div>
                     </div>
                   </div>
 
                   {compatibleCredentialTypes.length > 0 && availableCredentials.length === 0 ? (
                     <p className="mt-3 text-xs text-violet-800">
-                      ยังไม่มี credential ที่ตรงกับ monitor แบบนี้ ไปสร้างที่หน้า /credentials ก่อนแล้วค่อยกลับมาเลือกได้
+                      {t("monitorDetail.noCompatibleCredentials")}
                     </p>
                   ) : null}
                 </div>
@@ -2415,14 +2440,14 @@ const MonitorDetailPage = () => {
                       setEditForm((current) => ({ ...current, enabled: event.target.checked }))
                     }
                   />
-                  <span className="text-sm font-medium text-slate-700">Enabled</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.enabled")}</span>
                 </label>
 
                 {editForm.type === "SYSTEM" || editForm.type === "SNMP" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
-                    <p className="text-sm font-semibold text-amber-900">Device alert thresholds (%)</p>
+                    <p className="text-sm font-semibold text-amber-900">{t("monitorDetail.deviceAlertThresholds")}</p>
                     <p className="mt-1 text-xs text-amber-800">
-                      เตือนตอนค่าเกิน threshold ครั้งแรก และเตือนอีกครั้งเมื่อกลับมาปกติ
+                      {t("monitorDetail.deviceAlertThresholdsHint")}
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
                       <label className="block">
@@ -2469,7 +2494,7 @@ const MonitorDetailPage = () => {
                 ) : null}
 
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Config JSON</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitorDetail.configJson")}</span>
                   <textarea
                     className="mt-2 min-h-52 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={editForm.configText}
@@ -2489,7 +2514,7 @@ const MonitorDetailPage = () => {
                 onClick={() => setIsEditing(false)}
                 disabled={isBusy}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2497,7 +2522,7 @@ const MonitorDetailPage = () => {
                 onClick={() => void handleUpdateMonitor()}
                 disabled={isBusy}
               >
-                Save changes
+                {t("common.save")}
               </button>
             </div>
           </div>
@@ -2509,7 +2534,7 @@ const MonitorDetailPage = () => {
           <div className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="border-b border-slate-200 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">
-                {editingRule ? "Edit alert rule" : "Create alert rule"}
+                {editingRule ? t("monitorDetail.editAlertRule") : t("monitorDetail.createAlertRule")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">{monitor?.name}</p>
             </div>
@@ -2517,7 +2542,7 @@ const MonitorDetailPage = () => {
             <div className="max-h-[75vh] overflow-y-auto p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Metric</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitorDetail.metric")}</span>
                   <select
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={alertRuleForm.metric}
@@ -2525,14 +2550,14 @@ const MonitorDetailPage = () => {
                   >
                     {availableAlertMetrics.map((metric) => (
                       <option key={metric} value={metric}>
-                        {alertMetricLabels[metric] ?? metric}
+                        {t(`monitorDetail.metrics.${metric}`, { defaultValue: alertMetricLabels[metric] ?? metric })}
                       </option>
                     ))}
                   </select>
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Operator</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitorDetail.operator")}</span>
                   <select
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={alertRuleForm.operator}
@@ -2543,15 +2568,15 @@ const MonitorDetailPage = () => {
                       }))
                     }
                   >
-                    <option value="GT">Greater than</option>
-                    <option value="LT">Less than</option>
-                    <option value="EQ">Equals</option>
-                    <option value="NEQ">Not equals</option>
+                    <option value="GT">{t("monitorDetail.operatorGt")}</option>
+                    <option value="LT">{t("monitorDetail.operatorLt")}</option>
+                    <option value="EQ">{t("monitorDetail.operatorEq")}</option>
+                    <option value="NEQ">{t("monitorDetail.operatorNeq")}</option>
                   </select>
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Threshold</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitorDetail.threshold")}</span>
                   {alertRuleForm.metric === "status" ? (
                     <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -2579,7 +2604,7 @@ const MonitorDetailPage = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Severity</span>
+                  <span className="text-sm font-medium text-slate-700">{t("monitorDetail.severity")}</span>
                   <select
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     value={alertRuleForm.severity}
@@ -2590,9 +2615,9 @@ const MonitorDetailPage = () => {
                       }))
                     }
                   >
-                    <option value="INFO">Info</option>
-                    <option value="WARNING">Warning</option>
-                    <option value="CRITICAL">Critical</option>
+                    <option value="INFO">{t("monitorDetail.severityInfo")}</option>
+                    <option value="WARNING">{t("monitorDetail.severityWarning")}</option>
+                    <option value="CRITICAL">{t("monitorDetail.severityCritical")}</option>
                   </select>
                 </label>
 
@@ -2605,20 +2630,20 @@ const MonitorDetailPage = () => {
                       setAlertRuleForm((current) => ({ ...current, enabled: event.target.checked }))
                     }
                   />
-                  <span className="text-sm font-medium text-slate-700">Enabled</span>
+                  <span className="text-sm font-medium text-slate-700">{t("common.enabled")}</span>
                 </label>
 
                 <div className="sm:col-span-2">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-slate-700">Notification channels</span>
+                    <span className="text-sm font-medium text-slate-700">{t("monitorDetail.notificationChannels")}</span>
                     <Link className="text-xs font-semibold text-cyan-700 hover:text-cyan-900" to="/channels">
-                      Manage channels
+                      {t("monitorDetail.manageChannels")}
                     </Link>
                   </div>
                   <div className="mt-2 grid gap-2">
                     {channelsLoaded && notificationChannels.length === 0 ? (
                       <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                        ยังไม่มี notification channel
+                        {t("monitorDetail.noNotificationChannels")}
                       </div>
                     ) : null}
                     {notificationChannels.map((channel) => (
@@ -2629,7 +2654,7 @@ const MonitorDetailPage = () => {
                         <span className="min-w-0 text-sm text-slate-700">
                           <span className="font-medium text-slate-900">{channel.name}</span>
                           <span className="ml-2 text-xs text-slate-500">
-                            {channelTypeLabels[channel.type]} · {channel.enabled ? "Enabled" : "Disabled"}
+                            {channelTypeLabels[channel.type]} · {channel.enabled ? t("common.enabled") : t("common.disabled")}
                           </span>
                         </span>
                         <input
@@ -2655,7 +2680,7 @@ const MonitorDetailPage = () => {
                 }}
                 disabled={isBusy}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
@@ -2663,7 +2688,7 @@ const MonitorDetailPage = () => {
                 onClick={() => void handleSaveRule()}
                 disabled={isBusy}
               >
-                {editingRule ? "Save rule" : "Create rule"}
+                {editingRule ? t("monitorDetail.saveRule") : t("monitorDetail.createRule")}
               </button>
             </div>
           </div>

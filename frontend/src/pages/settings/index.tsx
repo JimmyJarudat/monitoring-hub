@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 import { useSystemConfig } from "@/contexts/systemConfig.context";
 import type { SystemConfig } from "@/contexts/systemConfig.context";
@@ -42,26 +43,26 @@ type ClearResponse = {
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
 
 const DAY_OPTIONS = [7, 14, 30, 60, 90, 180, 365];
-const CLEAR_TARGET_OPTIONS: Array<{ key: RetentionTarget; label: string; description: string }> = [
+const CLEAR_TARGET_OPTIONS: Array<{ key: RetentionTarget; labelKey: string; descriptionKey: string }> = [
   {
     key: "results",
-    label: "Monitor results",
-    description: "ผลตรวจ UP / DOWN / DEGRADED",
+    labelKey: "settings.clearTargets.results.label",
+    descriptionKey: "settings.clearTargets.results.description",
   },
   {
     key: "metrics",
-    label: "Device metrics",
-    description: "CPU, RAM, Disk, Network samples",
+    labelKey: "settings.clearTargets.metrics.label",
+    descriptionKey: "settings.clearTargets.metrics.description",
   },
   {
     key: "audit",
-    label: "Audit logs",
-    description: "ประวัติการกระทำของผู้ใช้",
+    labelKey: "settings.clearTargets.audit.label",
+    descriptionKey: "settings.clearTargets.audit.description",
   },
 ];
 
-const formatDateTime = (value: string | null) =>
-  value ? new Date(value).toLocaleString("th-TH") : "ยังไม่มีข้อมูล";
+const formatDateTime = (value: string | null, locale: string, emptyText: string) =>
+  value ? new Date(value).toLocaleString(locale) : emptyText;
 
 const getDeletedTotal = (summary: RetentionLastRun) =>
   summary.deletedResults + summary.deletedMetrics + summary.deletedAuditLogs;
@@ -92,6 +93,8 @@ const LOGIN_ATTEMPT_OPTIONS = [3, 5, 10, 20, 0];
 const SettingsPage = () => {
   const { api } = useApi();
   const { reload: reloadSysConfig } = useSystemConfig();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === "th" ? "th-TH" : "en-US";
 
   // ── System config state ───────────────────────────────────────
   const [sysConfig, setSysConfig] = useState<SystemConfig>(SYS_DEFAULTS);
@@ -113,22 +116,22 @@ const SettingsPage = () => {
       );
       if (!res.data.success) { toast.error(res.data.message); return; }
       setSysConfig((c) => ({ ...c, general: { ...c.general, logoUrl: res.data.success ? res.data.data.logoUrl : c.general.logoUrl } }));
-      toast.success("อัปโหลดโลโก้แล้ว");
+      toast.success(t("settings.logoUploadSuccess"));
       await reloadSysConfig();
-    } catch { toast.error("อัปโหลดไม่สำเร็จ"); }
+    } catch { toast.error(t("settings.logoUploadError")); }
     finally { setLogoUploading(false); if (logoInputRef.current) logoInputRef.current.value = ""; }
   };
 
   const handleLogoRemove = async () => {
-    if (!window.confirm("ต้องการลบโลโก้ใช่ไหม?")) return;
+    if (!window.confirm(t("settings.logoRemoveConfirm"))) return;
     setLogoRemoving(true);
     try {
       const res = await api.delete<ApiResponse<{ message: string }>>("/admin/system-config/logo");
       if (!res.data.success) { toast.error(res.data.message); return; }
       setSysConfig((c) => ({ ...c, general: { ...c.general, logoUrl: null } }));
-      toast.success("ลบโลโก้แล้ว");
+      toast.success(t("settings.logoRemoveSuccess"));
       await reloadSysConfig();
-    } catch { toast.error("ลบไม่สำเร็จ"); }
+    } catch { toast.error(t("settings.logoRemoveError")); }
     finally { setLogoRemoving(false); }
   };
 
@@ -144,9 +147,9 @@ const SettingsPage = () => {
     try {
       const res = await api.patch<ApiResponse<{ message: string }>>("/admin/system-config", patch);
       if (!res.data.success) { toast.error(res.data.message); return; }
-      toast.success(`บันทึก ${label} แล้ว`);
+      toast.success(t("settings.saveSectionSuccess", { label }));
       await reloadSysConfig();
-    } catch { toast.error("บันทึกไม่สำเร็จ"); }
+    } catch { toast.error(t("settings.saveError")); }
     finally { setSysSaving(false); }
   };
 
@@ -163,7 +166,7 @@ const SettingsPage = () => {
   );
 
   const handleSaveEmail = async () => {
-    await saveSysSection({ email: { ...sysConfig.email, enabled: true } }, "Email");
+    await saveSysSection({ email: { ...sysConfig.email, enabled: true } }, t("settings.sections.email.title"));
     setEmailEditing(false);
   };
 
@@ -235,7 +238,7 @@ const SettingsPage = () => {
   };
 
   const handleRunNow = async () => {
-    if (!confirm("ต้องการรัน cleanup ตาม retention ปัจจุบันทันทีใช่ไหม?")) return;
+    if (!confirm(t("settings.cleanupConfirm"))) return;
     setRunning(true);
     try {
       const res = await api.post<ApiResponse<RetentionLastRun>>("/admin/retention/run");
@@ -243,9 +246,13 @@ const SettingsPage = () => {
         const summary = res.data.data;
         setLastRun(summary);
         await refreshRetentionState();
-        const message = `Cleanup เสร็จแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`;
+        const message = t("settings.cleanupDone", {
+          results: summary.deletedResults,
+          metrics: summary.deletedMetrics,
+          audit: summary.deletedAuditLogs,
+        });
         if (getDeletedTotal(summary) === 0) {
-          toast.info(`${message} (ไม่มีข้อมูลที่เก่ากว่า retention ให้ลบ)`);
+          toast.info(`${message} ${t("settings.cleanupNoExpiredSuffix")}`);
         } else {
           toast.success(message);
         }
@@ -266,18 +273,18 @@ const SettingsPage = () => {
   };
 
   const clearSummaryText = useMemo(() => {
-    if (clearMode === "all") return "ลบข้อมูลทุกช่วงเวลาของประเภทที่เลือก";
-    return `ลบเฉพาะข้อมูลที่เก่ากว่า ${clearOlderThanDays} วัน ของประเภทที่เลือก`;
-  }, [clearMode, clearOlderThanDays]);
+    if (clearMode === "all") return t("settings.clearSummaryAll");
+    return t("settings.clearSummaryExpired", { days: clearOlderThanDays });
+  }, [clearMode, clearOlderThanDays, t]);
 
   const handleClearHistory = async () => {
     if (clearTargets.length === 0) {
-      toast.warning("เลือกอย่างน้อย 1 ประเภทข้อมูลก่อนล้าง");
+      toast.warning(t("settings.clearSelectWarning"));
       return;
     }
 
     const confirmed = confirm(
-      `${clearSummaryText}\n\nการล้างข้อมูลเป็นการลบถาวรและย้อนกลับไม่ได้ ต้องการดำเนินการต่อหรือไม่?`,
+      t("settings.clearConfirm", { summary: clearSummaryText }),
     );
     if (!confirmed) return;
 
@@ -293,9 +300,13 @@ const SettingsPage = () => {
         const { summary, stats: nextStats } = res.data.data;
         setLastRun(summary);
         setStats(nextStats);
-        const message = `ล้างข้อมูลแล้ว: ลบ ${summary.deletedResults} results, ${summary.deletedMetrics} metrics, ${summary.deletedAuditLogs} audit logs`;
+        const message = t("settings.clearDone", {
+          results: summary.deletedResults,
+          metrics: summary.deletedMetrics,
+          audit: summary.deletedAuditLogs,
+        });
         if (getDeletedTotal(summary) === 0) {
-          toast.info(`${message} (ไม่พบข้อมูลที่ตรงเงื่อนไข)`);
+          toast.info(`${message} ${t("settings.clearNoMatchSuffix")}`);
         } else {
           toast.success(message);
         }
@@ -320,21 +331,19 @@ const SettingsPage = () => {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">ตั้งค่าระบบ</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{t("settings.title")}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          ตั้งค่า Branding, Alerting, Monitor defaults, Security และ Data retention
+          {t("settings.subtitle")}
         </p>
       </div>
 
-      {/* ── General / Branding ──────────────────────────────── */}
-      <SysSection title="General" description="ชื่อระบบ, tagline, logo text และ logo รูปภาพที่แสดงใน sidebar">
-        {/* Logo upload row */}
+      <SysSection title={t("settings.sections.general.title")} description={t("settings.sections.general.description")}>
         <div className="flex items-center gap-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {sysConfig.general.logoUrl ? (
               <img
                 src={`${API_BASE_URL}${sysConfig.general.logoUrl}?v=${Date.now()}`}
-                alt="logo"
+                alt={t("settings.logoAlt")}
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -344,8 +353,8 @@ const SettingsPage = () => {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-slate-700">Logo รูปภาพ</p>
-            <p className="mt-0.5 text-xs text-slate-500">PNG, JPG, WEBP, GIF — ไม่เกิน 2 MB · แทนที่ logo text ใน sidebar</p>
+            <p className="text-sm font-medium text-slate-700">{t("settings.logoImage")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t("settings.logoHint")}</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
@@ -353,7 +362,7 @@ const SettingsPage = () => {
                 onClick={() => logoInputRef.current?.click()}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
               >
-                {logoUploading ? "กำลังอัปโหลด..." : sysConfig.general.logoUrl ? "เปลี่ยนรูป" : "อัปโหลดรูป"}
+                {logoUploading ? t("settings.uploading") : sysConfig.general.logoUrl ? t("settings.changeImage") : t("settings.uploadImage")}
               </button>
               {sysConfig.general.logoUrl ? (
                 <button
@@ -362,7 +371,7 @@ const SettingsPage = () => {
                   onClick={() => void handleLogoRemove()}
                   className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
                 >
-                  {logoRemoving ? "กำลังลบ..." : "ลบรูป"}
+                  {logoRemoving ? t("settings.removing") : t("settings.removeImage")}
                 </button>
               ) : null}
             </div>
@@ -377,7 +386,7 @@ const SettingsPage = () => {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <SysField label="ชื่อระบบ">
+          <SysField label={t("settings.systemName")}>
             <input
               type="text"
               maxLength={60}
@@ -386,7 +395,7 @@ const SettingsPage = () => {
               className={INPUT_CLS}
             />
           </SysField>
-          <SysField label="Tagline">
+          <SysField label={t("settings.tagline")}>
             <input
               type="text"
               maxLength={80}
@@ -395,7 +404,7 @@ const SettingsPage = () => {
               className={INPUT_CLS}
             />
           </SysField>
-          <SysField label="Logo text (1–4 ตัวอักษร)">
+          <SysField label={t("settings.logoText")}>
             <input
               type="text"
               maxLength={4}
@@ -405,133 +414,129 @@ const SettingsPage = () => {
             />
           </SysField>
         </div>
-        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ general: sysConfig.general }, "General")} />
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ general: sysConfig.general }, t("settings.sections.general.title"))} />
       </SysSection>
 
-      {/* ── Alerting Defaults ───────────────────────────────── */}
-      <SysSection title="Alerting Defaults" description="ความถี่การส่ง reminder เมื่อ incident ยังคงเปิดอยู่">
+      <SysSection title={t("settings.sections.alerting.title")} description={t("settings.sections.alerting.description")}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <SysField label="Incident reminder interval">
+          <SysField label={t("settings.incidentReminderInterval")}>
             <select
               value={sysConfig.alerting.incidentReminderIntervalHours}
               onChange={(e) => setSysConfig((c) => ({ ...c, alerting: { incidentReminderIntervalHours: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
               {REMINDER_OPTIONS.map((h) => (
-                <option key={h} value={h}>{h === 1 ? "1 ชั่วโมง" : `${h} ชั่วโมง`}</option>
+                <option key={h} value={h}>{t("settings.hours", { count: h })}</option>
               ))}
             </select>
           </SysField>
         </div>
-        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ alerting: sysConfig.alerting }, "Alerting")} />
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ alerting: sysConfig.alerting }, t("settings.sections.alerting.title"))} />
       </SysSection>
 
-      {/* ── Monitor Defaults ────────────────────────────────── */}
-      <SysSection title="Monitor Defaults" description="ค่าเริ่มต้นสำหรับ monitor ใหม่">
+      <SysSection title={t("settings.sections.monitorDefaults.title")} description={t("settings.sections.monitorDefaults.description")}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <SysField label="Check interval">
+          <SysField label={t("settings.checkInterval")}>
             <select
               value={sysConfig.monitorDefaults.intervalSeconds}
               onChange={(e) => setSysConfig((c) => ({ ...c, monitorDefaults: { ...c.monitorDefaults, intervalSeconds: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
               {INTERVAL_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s < 60 ? `${s} วินาที` : `${s / 60} นาที`}</option>
+                <option key={s} value={s}>{s < 60 ? t("settings.seconds", { count: s }) : t("settings.minutes", { count: s / 60 })}</option>
               ))}
             </select>
           </SysField>
-          <SysField label="Timeout">
+          <SysField label={t("settings.timeout")}>
             <select
               value={sysConfig.monitorDefaults.timeoutMs}
               onChange={(e) => setSysConfig((c) => ({ ...c, monitorDefaults: { ...c.monitorDefaults, timeoutMs: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
               {TIMEOUT_OPTIONS.map((ms) => (
-                <option key={ms} value={ms}>{ms / 1000} วินาที</option>
+                <option key={ms} value={ms}>{t("settings.seconds", { count: ms / 1000 })}</option>
               ))}
             </select>
           </SysField>
         </div>
-        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ monitorDefaults: sysConfig.monitorDefaults }, "Monitor Defaults")} />
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ monitorDefaults: sysConfig.monitorDefaults }, t("settings.sections.monitorDefaults.title"))} />
       </SysSection>
 
-      {/* ── Security ────────────────────────────────────────── */}
-      <SysSection title="Security" description="นโยบาย password, session และ login attempt ที่ backend ใช้ตรวจจริง">
+      <SysSection title={t("settings.sections.security.title")} description={t("settings.sections.security.description")}>
         <div className="grid gap-4 sm:grid-cols-3">
-          <SysField label="Password ขั้นต่ำ (ตัวอักษร)">
+          <SysField label={t("settings.passwordMinLength")}>
             <select
               value={sysConfig.security.passwordMinLength}
               onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, passwordMinLength: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
-              {PW_MIN_OPTIONS.map((n) => <option key={n} value={n}>{n} ตัวอักษร</option>)}
+              {PW_MIN_OPTIONS.map((n) => <option key={n} value={n}>{t("settings.characters", { count: n })}</option>)}
             </select>
           </SysField>
-          <SysField label="Session duration">
+          <SysField label={t("settings.sessionDuration")}>
             <select
               value={sysConfig.security.sessionDays}
               onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, sessionDays: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
-              {SESSION_OPTIONS.map((d) => <option key={d} value={d}>{d === 1 ? "1 วัน" : `${d} วัน`}</option>)}
+              {SESSION_OPTIONS.map((d) => <option key={d} value={d}>{t("settings.days", { count: d })}</option>)}
             </select>
           </SysField>
-          <SysField label="Max login attempts">
+          <SysField label={t("settings.maxLoginAttempts")}>
             <select
               value={sysConfig.security.maxLoginAttempts}
               onChange={(e) => setSysConfig((c) => ({ ...c, security: { ...c.security, maxLoginAttempts: Number(e.target.value) } }))}
               className={INPUT_CLS}
             >
               {LOGIN_ATTEMPT_OPTIONS.map((n) => (
-                <option key={n} value={n}>{n === 0 ? "ไม่จำกัด" : `${n} ครั้ง`}</option>
+                <option key={n} value={n}>{n === 0 ? t("settings.unlimited") : t("settings.attempts", { count: n })}</option>
               ))}
             </select>
           </SysField>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-semibold text-slate-800">Password complexity</p>
+          <p className="text-sm font-semibold text-slate-800">{t("settings.passwordComplexity")}</p>
           <p className="mt-1 text-xs text-slate-500">
-            เปิดเงื่อนไขที่ต้องการบังคับใช้ตอนสร้างผู้ใช้, reset password, change password และ forgot password
+            {t("settings.passwordComplexityHint")}
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <SecurityToggle
-              label="บังคับตัวพิมพ์เล็ก"
-              description="ต้องมี a-z อย่างน้อย 1 ตัว"
+              label={t("settings.requireLowercase")}
+              description={t("settings.requireLowercaseHint")}
               checked={sysConfig.security.requireLowercase}
               onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireLowercase: value } }))}
             />
             <SecurityToggle
-              label="บังคับตัวพิมพ์ใหญ่"
-              description="ต้องมี A-Z อย่างน้อย 1 ตัว"
+              label={t("settings.requireUppercase")}
+              description={t("settings.requireUppercaseHint")}
               checked={sysConfig.security.requireUppercase}
               onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireUppercase: value } }))}
             />
             <SecurityToggle
-              label="บังคับตัวเลข"
-              description="ต้องมี 0-9 อย่างน้อย 1 ตัว"
+              label={t("settings.requireNumber")}
+              description={t("settings.requireNumberHint")}
               checked={sysConfig.security.requireNumber}
               onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireNumber: value } }))}
             />
             <SecurityToggle
-              label="บังคับอักขระพิเศษ"
-              description="ต้องมีสัญลักษณ์ เช่น ! @ # $"
+              label={t("settings.requireSpecial")}
+              description={t("settings.requireSpecialHint")}
               checked={sysConfig.security.requireSpecial}
               onChange={(value) => setSysConfig((c) => ({ ...c, security: { ...c.security, requireSpecial: value } }))}
             />
           </div>
         </div>
-        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ security: sysConfig.security }, "Security")} />
+        <SysSaveBtn loading={sysSaving} onClick={() => void saveSysSection({ security: sysConfig.security }, t("settings.sections.security.title"))} />
       </SysSection>
 
-      {/* ── Email / Password Reset ─────────────────────────── */}
-      <SysSection title="Email" description="SMTP สำหรับส่งรหัส reset password และอีเมลระบบ">
+      <SysSection title={t("settings.sections.email.title")} description={t("settings.sections.email.description")}>
         {isEmailConfigured && !emailEditing ? (
           <div className="space-y-4">
             <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-emerald-800">Email configured</p>
+                <p className="text-sm font-semibold text-emerald-800">{t("settings.emailConfigured")}</p>
                 <p className="mt-1 text-xs text-emerald-700">
-                  ระบบจะใช้ SMTP นี้สำหรับส่งรหัสยืนยัน reset password
+                  {t("settings.emailConfiguredHint")}
                 </p>
               </div>
               <button
@@ -539,29 +544,29 @@ const SettingsPage = () => {
                 onClick={() => setEmailEditing(true)}
                 className="w-fit rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
               >
-                แก้ไข
+                {t("common.edit")}
               </button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <EmailSettingItem label="SMTP host" value={sysConfig.email.host} />
-              <EmailSettingItem label="SMTP port" value={String(sysConfig.email.port)} />
-              <EmailSettingItem label="Username" value={sysConfig.email.username} />
-              <EmailSettingItem label="Password" value="••••••••" />
-              <EmailSettingItem label="From email" value={sysConfig.email.from} />
-              <EmailSettingItem label="Security" value={sysConfig.email.secure ? "SSL" : "STARTTLS / Plain"} />
+              <EmailSettingItem label={t("settings.smtpHost")} value={sysConfig.email.host} />
+              <EmailSettingItem label={t("settings.smtpPort")} value={String(sysConfig.email.port)} />
+              <EmailSettingItem label={t("settings.username")} value={sysConfig.email.username} />
+              <EmailSettingItem label={t("settings.password")} value="••••••••" />
+              <EmailSettingItem label={t("settings.fromEmail")} value={sysConfig.email.from} />
+              <EmailSettingItem label={t("settings.connectionSecurity")} value={sysConfig.email.secure ? "SSL" : "STARTTLS / Plain"} />
             </div>
           </div>
         ) : (
           <>
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
               {isEmailConfigured
-                ? "แก้ไขค่า SMTP สำหรับส่งรหัส reset password"
-                : "ยังไม่ได้ตั้งค่า SMTP กรอกข้อมูลด้านล่างเพื่อให้ระบบส่งรหัส reset password ทางอีเมลได้"}
+                ? t("settings.editSmtpHint")
+                : t("settings.setupSmtpHint")}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <SysField label="SMTP host">
+              <SysField label={t("settings.smtpHost")}>
                 <input
                   type="text"
                   value={sysConfig.email.host}
@@ -570,7 +575,7 @@ const SettingsPage = () => {
                   className={INPUT_CLS}
                 />
               </SysField>
-              <SysField label="SMTP port">
+              <SysField label={t("settings.smtpPort")}>
                 <input
                   type="number"
                   min={1}
@@ -580,7 +585,7 @@ const SettingsPage = () => {
                   className={INPUT_CLS}
                 />
               </SysField>
-              <SysField label="Username">
+              <SysField label={t("settings.username")}>
                 <input
                   type="text"
                   value={sysConfig.email.username}
@@ -589,7 +594,7 @@ const SettingsPage = () => {
                   className={INPUT_CLS}
                 />
               </SysField>
-              <SysField label="Password">
+              <SysField label={t("settings.password")}>
                 <input
                   type="password"
                   value={sysConfig.email.password}
@@ -599,7 +604,7 @@ const SettingsPage = () => {
                   className={INPUT_CLS}
                 />
               </SysField>
-              <SysField label="From email">
+              <SysField label={t("settings.fromEmail")}>
                 <input
                   type="email"
                   value={sysConfig.email.from}
@@ -608,7 +613,7 @@ const SettingsPage = () => {
                   className={INPUT_CLS}
                 />
               </SysField>
-              <SysField label="Connection security">
+              <SysField label={t("settings.connectionSecurity")}>
                 <select
                   value={sysConfig.email.secure ? "ssl" : "starttls"}
                   onChange={(e) => setSysConfig((c) => ({ ...c, email: { ...c.email, secure: e.target.value === "ssl" } }))}
@@ -630,7 +635,7 @@ const SettingsPage = () => {
                   }}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  ยกเลิก
+                  {t("common.cancel")}
                 </button>
               ) : null}
               <button
@@ -639,7 +644,7 @@ const SettingsPage = () => {
                 onClick={() => void handleSaveEmail()}
                 className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
               >
-                {sysSaving ? "กำลังบันทึก..." : "บันทึก"}
+                {sysSaving ? t("settings.saving") : t("common.save")}
               </button>
             </div>
           </>
@@ -648,36 +653,45 @@ const SettingsPage = () => {
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatsCard
-          label="Monitor results"
+          label={t("settings.clearTargets.results.label")}
           count={stats?.results.count ?? 0}
           oldest={stats?.results.oldest ?? null}
+          locale={locale}
+          oldestLabel={t("settings.oldest")}
+          emptyText={t("common.notAvailable")}
         />
         <StatsCard
-          label="Device metrics"
+          label={t("settings.clearTargets.metrics.label")}
           count={stats?.metrics.count ?? 0}
           oldest={stats?.metrics.oldest ?? null}
+          locale={locale}
+          oldestLabel={t("settings.oldest")}
+          emptyText={t("common.notAvailable")}
         />
         <StatsCard
-          label="Audit logs"
+          label={t("settings.clearTargets.audit.label")}
           count={stats?.audit.count ?? 0}
           oldest={stats?.audit.oldest ?? null}
+          locale={locale}
+          oldestLabel={t("settings.oldest")}
+          emptyText={t("common.notAvailable")}
         />
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-6 py-4">
-          <h2 className="font-semibold text-slate-800">Data retention</h2>
+          <h2 className="font-semibold text-slate-800">{t("settings.sections.retention.title")}</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ตั้งอายุข้อมูลรายประเภท และเลือกว่าจะให้ scheduler cleanup อัตโนมัติทุก 24 ชั่วโมงหรือไม่
+            {t("settings.sections.retention.description")}
           </p>
         </div>
 
         <div className="space-y-5 px-6 py-5">
           <label className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-800">Auto cleanup scheduler</p>
+              <p className="text-sm font-medium text-slate-800">{t("settings.autoCleanupScheduler")}</p>
               <p className="mt-1 text-xs text-slate-500">
-                เปิดไว้เพื่อให้ backend รัน cleanup ตาม retention ทุก 24 ชั่วโมงโดยอัตโนมัติ
+                {t("settings.autoCleanupHint")}
               </p>
             </div>
             <input
@@ -694,20 +708,20 @@ const SettingsPage = () => {
           </label>
 
           <RetentionField
-            label="Monitor Results"
-            description="ผลการตรวจสอบสถานะและข้อความตอบกลับ"
+            label={t("settings.clearTargets.results.label")}
+            description={t("settings.retentionResultsDescription")}
             value={config.results_days}
             onChange={(value) => setConfig((current) => ({ ...current, results_days: value }))}
           />
           <RetentionField
-            label="Device Metrics"
-            description="ข้อมูล CPU, RAM, Disk, Network samples สำหรับกราฟย้อนหลัง"
+            label={t("settings.clearTargets.metrics.label")}
+            description={t("settings.retentionMetricsDescription")}
             value={config.metrics_days}
             onChange={(value) => setConfig((current) => ({ ...current, metrics_days: value }))}
           />
           <RetentionField
-            label="Audit Logs"
-            description="ประวัติการแก้ไขและการกระทำของผู้ใช้"
+            label={t("settings.clearTargets.audit.label")}
+            description={t("settings.retentionAuditDescription")}
             value={config.audit_days}
             onChange={(value) => setConfig((current) => ({ ...current, audit_days: value }))}
           />
@@ -720,7 +734,7 @@ const SettingsPage = () => {
             disabled={running}
             className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
-            {running ? "กำลังรัน..." : "Run cleanup now"}
+            {running ? t("settings.running") : t("settings.runCleanupNow")}
           </button>
           <button
             type="button"
@@ -728,7 +742,7 @@ const SettingsPage = () => {
             disabled={saving}
             className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
           >
-            {saving ? "กำลังบันทึก..." : "บันทึก"}
+            {saving ? t("settings.saving") : t("common.save")}
           </button>
         </div>
       </div>
@@ -736,9 +750,9 @@ const SettingsPage = () => {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
-            <h2 className="font-semibold text-slate-800">Manual clear history</h2>
+            <h2 className="font-semibold text-slate-800">{t("settings.manualClearTitle")}</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              ล้างข้อมูลบางประเภทแบบตั้งใจได้ทันที โดยเลือกว่าจะลบทั้งหมดหรือเฉพาะข้อมูลเก่า
+              {t("settings.manualClearDescription")}
             </p>
           </div>
 
@@ -756,8 +770,8 @@ const SettingsPage = () => {
                     className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{option.label}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{option.description}</p>
+                    <p className="text-sm font-medium text-slate-800">{t(option.labelKey)}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t(option.descriptionKey)}</p>
                   </div>
                 </label>
               ))}
@@ -765,19 +779,19 @@ const SettingsPage = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-sm font-medium text-slate-800">Clear mode</span>
+                <span className="text-sm font-medium text-slate-800">{t("settings.clearMode")}</span>
                 <select
                   value={clearMode}
                   onChange={(e) => setClearMode(e.target.value as ClearMode)}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 >
-                  <option value="expired">Expired only</option>
-                  <option value="all">All history</option>
+                  <option value="expired">{t("settings.expiredOnly")}</option>
+                  <option value="all">{t("settings.allHistory")}</option>
                 </select>
               </label>
 
               <label className="space-y-2">
-                <span className="text-sm font-medium text-slate-800">Older than</span>
+                <span className="text-sm font-medium text-slate-800">{t("settings.olderThan")}</span>
                 <select
                   value={clearOlderThanDays}
                   onChange={(e) => setClearOlderThanDays(Number(e.target.value))}
@@ -786,7 +800,7 @@ const SettingsPage = () => {
                 >
                   {DAY_OPTIONS.map((days) => (
                     <option key={days} value={days}>
-                      {days} วัน
+                      {t("settings.days", { count: days })}
                     </option>
                   ))}
                 </select>
@@ -794,7 +808,7 @@ const SettingsPage = () => {
             </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-medium">กำลังจะทำอะไร</p>
+              <p className="font-medium">{t("settings.whatWillHappen")}</p>
               <p className="mt-1 text-xs leading-5 text-amber-800">{clearSummaryText}</p>
             </div>
           </div>
@@ -806,37 +820,37 @@ const SettingsPage = () => {
               disabled={clearing || clearTargets.length === 0}
               className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-600 disabled:opacity-50"
             >
-              {clearing ? "กำลังล้าง..." : "Clear selected history"}
+              {clearing ? t("settings.clearing") : t("settings.clearSelectedHistory")}
             </button>
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
-            <h2 className="font-semibold text-slate-800">Cleanup ล่าสุด</h2>
+            <h2 className="font-semibold text-slate-800">{t("settings.latestCleanup")}</h2>
           </div>
           <div className="space-y-4 px-6 py-5">
             {lastRun ? (
               <>
                 <div>
-                  <p className="text-xs text-slate-500">รันเมื่อ</p>
+                  <p className="text-xs text-slate-500">{t("settings.ranAt")}</p>
                   <p className="mt-1 text-sm font-medium text-slate-800">
-                    {formatDateTime(lastRun.ranAt)}
+                    {formatDateTime(lastRun.ranAt, locale, t("common.notAvailable"))}
                   </p>
                 </div>
                 <div className="grid gap-3">
-                  <StatPill label="Results ที่ลบ" value={lastRun.deletedResults} />
-                  <StatPill label="Metrics ที่ลบ" value={lastRun.deletedMetrics} />
-                  <StatPill label="Audit logs ที่ลบ" value={lastRun.deletedAuditLogs} />
+                  <StatPill label={t("settings.deletedResults")} value={lastRun.deletedResults} />
+                  <StatPill label={t("settings.deletedMetrics")} value={lastRun.deletedMetrics} />
+                  <StatPill label={t("settings.deletedAuditLogs")} value={lastRun.deletedAuditLogs} />
                 </div>
                 {getDeletedTotal(lastRun) === 0 ? (
                   <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-                    รันสำเร็จ แต่ไม่มีข้อมูลที่ตรงเงื่อนไขให้ลบ
+                    {t("settings.cleanupNoMatchedData")}
                   </p>
                 ) : null}
               </>
             ) : (
-              <p className="text-sm text-slate-400">ยังไม่เคยรัน cleanup</p>
+              <p className="text-sm text-slate-400">{t("settings.noCleanupYet")}</p>
             )}
           </div>
         </div>
@@ -853,24 +867,32 @@ type RetentionFieldProps = {
 };
 
 const RetentionField = ({ label, description, value, onChange }: RetentionFieldProps) => (
-  <div className="flex items-center justify-between gap-4">
-    <div className="min-w-0">
-      <p className="text-sm font-medium text-slate-800">{label}</p>
-      <p className="text-xs text-slate-500">{description}</p>
-    </div>
-    <select
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="w-32 shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-    >
-      {DAY_OPTIONS.map((days) => (
-        <option key={days} value={days}>
-          {days} วัน
-        </option>
-      ))}
-    </select>
-  </div>
+  <RetentionFieldInner label={label} description={description} value={value} onChange={onChange} />
 );
+
+const RetentionFieldInner = ({ label, description, value, onChange }: RetentionFieldProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-slate-800">{label}</p>
+        <p className="text-xs text-slate-500">{description}</p>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-32 shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+      >
+        {DAY_OPTIONS.map((days) => (
+          <option key={days} value={days}>
+            {t("settings.days", { count: days })}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 type StatPillProps = {
   label: string;
@@ -888,13 +910,18 @@ type StatsCardProps = {
   label: string;
   count: number;
   oldest: string | null;
+  locale: string;
+  oldestLabel: string;
+  emptyText: string;
 };
 
-const StatsCard = ({ label, count, oldest }: StatsCardProps) => (
+const StatsCard = ({ label, count, oldest, locale, oldestLabel, emptyText }: StatsCardProps) => (
   <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
     <p className="text-sm font-medium text-slate-800">{label}</p>
     <p className="mt-2 text-2xl font-bold text-slate-900">{count.toLocaleString()}</p>
-    <p className="mt-2 text-xs text-slate-500">เก่าสุด: {formatDateTime(oldest)}</p>
+    <p className="mt-2 text-xs text-slate-500">
+      {oldestLabel}: {formatDateTime(oldest, locale, emptyText)}
+    </p>
   </div>
 );
 
@@ -960,17 +987,21 @@ const EmailSettingItem = ({ label, value }: { label: string; value: string }) =>
   </div>
 );
 
-const SysSaveBtn = ({ loading, onClick }: { loading: boolean; onClick: () => void }) => (
-  <div className="flex justify-end border-t border-slate-100 pt-4">
-    <button
-      type="button"
-      disabled={loading}
-      onClick={onClick}
-      className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
-    >
-      {loading ? "กำลังบันทึก..." : "บันทึก"}
-    </button>
-  </div>
-);
+const SysSaveBtn = ({ loading, onClick }: { loading: boolean; onClick: () => void }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex justify-end border-t border-slate-100 pt-4">
+      <button
+        type="button"
+        disabled={loading}
+        onClick={onClick}
+        className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
+      >
+        {loading ? t("settings.saving") : t("common.save")}
+      </button>
+    </div>
+  );
+};
 
 export default SettingsPage;

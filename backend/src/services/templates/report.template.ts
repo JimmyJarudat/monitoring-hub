@@ -43,15 +43,15 @@ const escapeHtml = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-const fmtDateTime = new Intl.DateTimeFormat("th-TH", { dateStyle: "short", timeStyle: "short" });
-const fmtTime = new Intl.DateTimeFormat("th-TH", { timeStyle: "short" });
+const fmtDateTime = new Intl.DateTimeFormat("en-GB", { dateStyle: "short", timeStyle: "short" });
+const fmtTime = new Intl.DateTimeFormat("en-GB", { timeStyle: "short" });
 
 const formatDateTime = (value: string | null) => (value ? fmtDateTime.format(new Date(value)) : "-");
 const formatTime = (value: string | null) => (value ? fmtTime.format(new Date(value)) : "-");
 
 const formatDowntimeWindows = (windows: DowntimeWindow[]) =>
   windows
-    .map((w) => `${formatTime(w.start)} → ${w.end ? formatTime(w.end) : "ยังไม่กลับมา"}`)
+    .map((w) => `${formatTime(w.start)} → ${w.end ? formatTime(w.end) : "still down"}`)
     .join(", ");
 
 // ── Per-monitor helpers ───────────────────────────────────────────
@@ -64,10 +64,10 @@ const statusIcon = (status: MonitorStatus | "UNKNOWN") => {
 };
 
 const monitorStatusLabel = (m: DailyStatusMonitor) => {
-  if (m.status === "UP") return m.downtimeWindows.length > 0 ? "ออนไลน์อยู่ แต่มีหยุดในช่วงนี้" : "ออนไลน์ปกติ";
-  if (m.status === "DOWN") return "ออฟไลน์อยู่ตอนนี้";
-  if (m.status === "DEGRADED") return "ไม่สมบูรณ์ตอนนี้";
-  return "ไม่ทราบสถานะ";
+  if (m.status === "UP") return m.downtimeWindows.length > 0 ? "Online but had downtime in this period" : "Online";
+  if (m.status === "DOWN") return "Currently offline";
+  if (m.status === "DEGRADED") return "Currently degraded";
+  return "Unknown status";
 };
 
 const monitorListText = (monitors: DailyStatusMonitor[]) =>
@@ -75,7 +75,7 @@ const monitorListText = (monitors: DailyStatusMonitor[]) =>
     .map((m) => {
       const line = `${statusIcon(m.status)} ${m.name} (${m.target}) - ${monitorStatusLabel(m)}`;
       if (m.downtimeWindows.length === 0) return line;
-      return `${line}\n   └ หลุด: ${formatDowntimeWindows(m.downtimeWindows)}`;
+      return `${line}\n   └ Downtime: ${formatDowntimeWindows(m.downtimeWindows)}`;
     })
     .join("\n");
 
@@ -83,16 +83,16 @@ const monitorListText = (monitors: DailyStatusMonitor[]) =>
 
 const plainText = (data: DailyStatusReportTemplateData) =>
   [
-    "📊 Monitoring Hub - สรุปสถานะรายวัน",
-    `วันที่: ${data.todayLabel}`,
-    `ช่วงเวลา: ${formatTime(data.windowStart)} - ${formatTime(data.windowEnd)}`,
+    "📊 Monitoring Hub - Daily Status Summary",
+    `Date: ${data.todayLabel}`,
+    `Period: ${formatTime(data.windowStart)} - ${formatTime(data.windowEnd)}`,
     "",
-    `สรุป: Online ${data.online}/${data.total}  |  Offline ${data.offline}  |  Degraded ${data.degraded}  |  Unknown ${data.unknown}`,
+    `Summary: Online ${data.online}/${data.total}  |  Offline ${data.offline}  |  Degraded ${data.degraded}  |  Unknown ${data.unknown}`,
     "",
-    "─── สถานะแต่ละ monitor ───",
-    data.allMonitors.length > 0 ? monitorListText(data.allMonitors) : "ยังไม่มี monitor",
+    "─── Monitor Status ───",
+    data.allMonitors.length > 0 ? monitorListText(data.allMonitors) : "No monitors",
     "",
-    `Incidents ในช่วง 24 ชม.: ${data.incidentsInWindow}  |  Open: ${data.openIncidents}`,
+    `Incidents in last 24h: ${data.incidentsInWindow}  |  Open: ${data.openIncidents}`,
     `Generated: ${formatDateTime(data.generatedAt)}`,
   ].join("\n");
 
@@ -122,9 +122,9 @@ export const buildDailyReportEmailMessage = (data: DailyStatusReportTemplateData
   const allGood = data.offline === 0 && data.degraded === 0 && data.unknown === 0;
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;max-width:720px">
-      <h2 style="margin-bottom:4px">📊 สรุปสถานะรายวัน</h2>
+      <h2 style="margin-bottom:4px">📊 Daily Status Summary</h2>
       <p style="color:#64748b;margin-top:0;font-size:14px">
-        ${escapeHtml(data.todayLabel)} &nbsp;·&nbsp; ช่วงเวลา ${formatTime(data.windowStart)} – ${formatTime(data.windowEnd)}
+        ${escapeHtml(data.todayLabel)} &nbsp;·&nbsp; Period: ${formatTime(data.windowStart)} – ${formatTime(data.windowEnd)}
       </p>
 
       <table cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e2e8f0;border-radius:8px;width:100%">
@@ -152,26 +152,26 @@ export const buildDailyReportEmailMessage = (data: DailyStatusReportTemplateData
         </tr>
       </table>
 
-      <h3 style="margin-bottom:10px">สถานะแต่ละ monitor</h3>
+      <h3 style="margin-bottom:10px">Monitor Status</h3>
       <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
         <thead>
           <tr style="background:#f1f5f9;color:#475569;font-size:12px">
             <th style="padding:8px 10px;text-align:left;width:28px"></th>
             <th style="padding:8px 10px;text-align:left">Monitor</th>
             <th style="padding:8px 10px;text-align:left">Type</th>
-            <th style="padding:8px 10px;text-align:left">สถานะ</th>
-            <th style="padding:8px 10px;text-align:left">ช่วงที่หยุด</th>
+            <th style="padding:8px 10px;text-align:left">Status</th>
+            <th style="padding:8px 10px;text-align:left">Downtime</th>
           </tr>
         </thead>
         <tbody>
           ${data.allMonitors.length > 0
             ? monitorRowsHtml(data.allMonitors)
-            : '<tr><td colspan="5" style="padding:14px 10px;color:#94a3b8;text-align:center">ยังไม่มี monitor</td></tr>'}
+            : '<tr><td colspan="5" style="padding:14px 10px;color:#94a3b8;text-align:center">No monitors</td></tr>'}
         </tbody>
       </table>
 
       <p style="color:#94a3b8;font-size:12px;margin-top:16px">
-        Incidents ในช่วง 24 ชม.: ${data.incidentsInWindow} &nbsp;·&nbsp; Generated: ${formatDateTime(data.generatedAt)}
+        Incidents in last 24h: ${data.incidentsInWindow} &nbsp;·&nbsp; Generated: ${formatDateTime(data.generatedAt)}
       </p>
     </div>
   `;
@@ -196,13 +196,13 @@ export const buildDailyReportLineMessage = (data: DailyStatusReportTemplateData)
     return `${line}\n   └ ${formatDowntimeWindows(m.downtimeWindows)}`;
   });
   if (data.allMonitors.length > LINE_MAX_MONITORS) {
-    monitorLines.push(`...และอีก ${data.allMonitors.length - LINE_MAX_MONITORS} รายการ`);
+    monitorLines.push(`...and ${data.allMonitors.length - LINE_MAX_MONITORS} more`);
   }
 
   const allGood = data.offline === 0 && data.degraded === 0 && data.unknown === 0;
 
   return {
-    altText: `สรุปสถานะ ${data.todayLabel}: Online ${data.online}/${data.total}, Offline ${data.offline}, Degraded ${data.degraded}`,
+    altText: `Status Summary ${data.todayLabel}: Online ${data.online}/${data.total}, Offline ${data.offline}, Degraded ${data.degraded}`,
     flexContents: {
       type: "bubble",
       body: {
@@ -211,7 +211,7 @@ export const buildDailyReportLineMessage = (data: DailyStatusReportTemplateData)
         spacing: "sm",
         contents: [
           { type: "text", text: "Monitoring Hub", weight: "bold", size: "sm", color: "#0891b2" },
-          { type: "text", text: "📊 สรุปสถานะรายวัน", weight: "bold", size: "lg", wrap: true },
+          { type: "text", text: "📊 Daily Status Summary", weight: "bold", size: "lg", wrap: true },
           {
             type: "text",
             text: `${data.todayLabel}  ·  ${formatTime(data.windowStart)}–${formatTime(data.windowEnd)}`,
@@ -237,14 +237,14 @@ export const buildDailyReportLineMessage = (data: DailyStatusReportTemplateData)
           { type: "separator", margin: "md" },
           {
             type: "text",
-            text: "─── สถานะแต่ละ monitor ───",
+            text: "─── Monitor Status ───",
             size: "xs",
             color: "#64748b",
             weight: "bold",
           },
           {
             type: "text",
-            text: monitorLines.length > 0 ? monitorLines.join("\n") : "ยังไม่มี monitor",
+            text: monitorLines.length > 0 ? monitorLines.join("\n") : "No monitors",
             size: "xs",
             wrap: true,
           },
@@ -266,7 +266,7 @@ export const buildDailyReportSlackMessage = (data: DailyStatusReportTemplateData
 export const buildDailyReportDiscordMessage = (data: DailyStatusReportTemplateData) => ({
   embeds: [
     {
-      title: "📊 สรุปสถานะรายวัน",
+      title: "📊 Daily Status Summary",
       description: plainText(data),
       color: data.offline > 0 ? 0xdc2626 : data.degraded > 0 ? 0xf59e0b : 0x10b981,
       timestamp: data.generatedAt,

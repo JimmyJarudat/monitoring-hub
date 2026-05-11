@@ -70,7 +70,7 @@ export const authProtectedRoutes = new Elysia()
     "/auth/profile",
     async ({ body, currentUser, set }) => {
       const existing = await prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (!existing) { set.status = 404; return fail("ไม่พบ user"); }
+      if (!existing) { set.status = 404; return fail("User not found"); }
 
       if (body.username && body.username !== existing.username) {
         const dup = await prisma.user.findFirst({
@@ -78,7 +78,7 @@ export const authProtectedRoutes = new Elysia()
         });
         if (dup) {
           set.status = 409;
-          return fail("Username นี้ถูกใช้ไปแล้ว");
+          return fail("Username is already in use");
         }
       }
 
@@ -88,7 +88,7 @@ export const authProtectedRoutes = new Elysia()
         });
         if (dup) {
           set.status = 409;
-          return fail("Email นี้ถูกใช้ไปแล้ว");
+          return fail("Email is already in use");
         }
       }
 
@@ -124,13 +124,13 @@ export const authProtectedRoutes = new Elysia()
       const existing = await prisma.user.findUnique({ where: { id: currentUser.id } });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ user");
+        return fail("User not found");
       }
 
       const valid = await Bun.password.verify(body.currentPassword, existing.password);
       if (!valid) {
         set.status = 400;
-        return fail("รหัสผ่านปัจจุบันไม่ถูกต้อง");
+        return fail("Current password is incorrect.");
       }
       const policyError = await validatePasswordPolicy(body.newPassword);
       if (policyError) {
@@ -142,7 +142,7 @@ export const authProtectedRoutes = new Elysia()
       await prisma.user.update({ where: { id: currentUser.id }, data: { password: hashed } });
       await prisma.refreshToken.deleteMany({ where: { userId: currentUser.id } });
 
-      return ok({ message: "เปลี่ยนรหัสผ่านสำเร็จ กรุณาล็อกอินใหม่" });
+      return ok({ message: "Password changed successfully. Please sign in again." });
     },
     {
       body: t.Object({

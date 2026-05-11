@@ -65,7 +65,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
       const channel = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
       if (!channel) {
         set.status = 404;
-        return fail("ไม่พบ notification channel");
+        return fail("Notification channel not found.");
       }
 
       return ok({
@@ -117,7 +117,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         });
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "สร้าง notification channel ไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to create notification channel.");
       }
     },
     { body: channelBodySchema },
@@ -145,10 +145,10 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
             emailTo: body.emailTo,
           },
         });
-        return ok({ message: "ส่ง draft test message แล้ว" });
+        return ok({ message: "Draft test message sent successfully." });
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "ส่ง draft test message ไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to send draft test message.");
       }
     },
     { body: channelBodySchema },
@@ -160,7 +160,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
       const existing = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ notification channel");
+        return fail("Notification channel not found.");
       }
 
       const nextType = body.type ?? existing.type;
@@ -276,7 +276,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         });
       } catch (error) {
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "อัปเดต notification channel ไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to update notification channel.");
       }
     },
     {
@@ -290,14 +290,14 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
       requireAdminRole(currentUser.role);
       try {
         await testNotificationChannel(params.id);
-        return ok({ message: "ส่งข้อความทดสอบแล้ว" });
+        return ok({ message: "Test message sent successfully." });
       } catch (error) {
-        if (error instanceof Error && error.message === "ไม่พบ notification channel") {
+        if (error instanceof Error && error.message === "Notification channel not found.") {
           set.status = 404;
           return fail(error.message);
         }
         set.status = 400;
-        return fail(error instanceof Error ? error.message : "ส่งข้อความทดสอบไม่สำเร็จ");
+        return fail(error instanceof Error ? error.message : "Failed to send test message.");
       }
     },
     { params: t.Object({ id: t.String() }) },
@@ -309,11 +309,11 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
       const existing = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
       if (!existing) {
         set.status = 404;
-        return fail("ไม่พบ notification channel");
+        return fail("Notification channel not found.");
       }
 
       await prisma.notificationChannel.delete({ where: { id: params.id } });
-      return ok({ message: "ลบ notification channel แล้ว" });
+      return ok({ message: "Notification channel deleted successfully." });
     },
     { params: t.Object({ id: t.String() }) },
   );

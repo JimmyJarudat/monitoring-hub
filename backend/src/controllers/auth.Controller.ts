@@ -54,11 +54,11 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       if (await authService.findByUsernameOrEmail(body.username)) {
         set.status = 409;
-        return fail("Username นี้ถูกใช้ไปแล้ว");
+        return fail("This username is already in use.");
       }
       if (await authService.findByUsernameOrEmail(body.email)) {
         set.status = 409;
-        return fail("Email นี้ถูกใช้ไปแล้ว");
+        return fail("This email is already in use.");
       }
       const policyError = await validatePasswordPolicy(body.password);
       if (policyError) {
@@ -76,7 +76,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       return ok({ accessToken, refreshToken, user });
     },
     {
-      use: [rateLimit({ max: config.rateLimit.register.max, duration: config.rateLimit.register.windowMs, errorResponse: JSON.stringify(fail("ลงทะเบียนบ่อยเกินไป กรุณารอสักครู่")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
+      use: [rateLimit({ max: config.rateLimit.register.max, duration: config.rateLimit.register.windowMs, errorResponse: JSON.stringify(fail("Too many registration attempts. Please wait a moment and try again.")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
       body: t.Object({
         username: t.String({ minLength: 3 }),
         email: t.String({ format: "email" }),
@@ -95,31 +95,31 @@ export const authController = new Elysia({ prefix: "/auth" })
       if (!user) {
         writeAudit({ userId: null, action: "LOGIN_FAILED", ipAddress, userAgent, meta: { reason: "user_not_found", identifier: body.identifier } });
         set.status = 401;
-        return fail("username/email หรือรหัสผ่านไม่ถูกต้อง");
+        return fail("Invalid username/email or password.");
       }
 
-      // ตรวจ account lockout
+      // check account lockout
       if (await authService.isLockedOut(user.id)) {
         const maxLoginAttempts = await authService.getMaxLoginAttempts();
         writeAudit({ userId: user.id, action: "LOGIN_LOCKED", ipAddress, userAgent });
         set.status = 423;
         return fail(
-          `บัญชีถูกล็อกชั่วคราวหลังเข้าสู่ระบบผิดพลาด ${maxLoginAttempts} ครั้ง กรุณารอ ${config.lockout.durationMinutes} นาที`,
+          `Your account has been temporarily locked after ${maxLoginAttempts} failed login attempts. Please try again in ${config.lockout.durationMinutes} minutes.`,
         );
       }
 
       const valid = await authService.verifyPassword(body.password, user.password);
 
-      // บันทึก login history
+      // record login history
       await authService.recordLogin(user.id, valid ? "SUCCESS" : "FAILED", ipAddress, userAgent);
 
       if (!valid) {
         writeAudit({ userId: user.id, action: "LOGIN_FAILED", ipAddress, userAgent, meta: { reason: "wrong_password" } });
         set.status = 401;
-        return fail("username/email หรือรหัสผ่านไม่ถูกต้อง");
+        return fail("Invalid username/email or password.");
       }
 
-      // revoke token เดิมทั้งหมด — ใช้ได้ทีละ 1 session
+      // revoke all existing tokens — single session only
       await tokenService.revokeAllByUser(user.id);
 
       const accessToken = await jwt.sign({ sub: user.id, role: user.role.name });
@@ -131,9 +131,9 @@ export const authController = new Elysia({ prefix: "/auth" })
       return ok({ accessToken, refreshToken, user: safeUser });
     },
     {
-      use: [rateLimit({ max: config.rateLimit.login.max, duration: config.rateLimit.login.windowMs, errorResponse: JSON.stringify(fail("พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
+      use: [rateLimit({ max: config.rateLimit.login.max, duration: config.rateLimit.login.windowMs, errorResponse: JSON.stringify(fail("Too many login attempts, please wait a moment")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
       body: t.Object({
-        identifier: t.String({ description: "username หรือ email" }),
+        identifier: t.String({ description: "username or email" }),
         password: t.String(),
       }),
     }
@@ -148,7 +148,7 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       if (!emailConfig.host || !emailConfig.port || !emailConfig.username || !emailConfig.password || !emailConfig.from) {
         set.status = 503;
-        return fail("ยังไม่ได้ตั้งค่า email สำหรับ reset password");
+        return fail("Email is not configured for password reset");
       }
 
       const user = await authService.findByUsernameOrEmail(identifier);
@@ -241,11 +241,11 @@ export const authController = new Elysia({ prefix: "/auth" })
       }
 
       return ok({
-        message: "ถ้าพบอีเมลนี้ในระบบ เราจะส่งรหัสยืนยันไปให้ รหัสมีอายุ 10 นาที",
+        message: "If this email exists in the system, a verification code has been sent. The code expires in 10 minutes.",
       });
     },
     {
-      use: [rateLimit({ max: 5, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("ขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอสักครู่")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
+      use: [rateLimit({ max: 5, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("Too many password reset requests, please wait a moment")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
       body: t.Object({
         email: t.String({ format: "email", maxLength: 255 }),
       }),
@@ -263,7 +263,7 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       if (!user) {
         set.status = 400;
-        return fail("รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว");
+        return fail("Invalid or expired verification code");
       }
 
       const candidates = await prisma.auditLog.findMany({
@@ -301,7 +301,7 @@ export const authController = new Elysia({ prefix: "/auth" })
         }
 
         set.status = 400;
-        return fail("รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว");
+        return fail("Invalid or expired verification code");
       }
 
       writeAudit({
@@ -312,10 +312,10 @@ export const authController = new Elysia({ prefix: "/auth" })
         meta: { email },
       });
 
-      return ok({ message: "ยืนยันรหัสสำเร็จ กรุณาตั้งรหัสผ่านใหม่" });
+      return ok({ message: "Code verified successfully, please set a new password" });
     },
     {
-      use: [rateLimit({ max: 10, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("พยายามยืนยันรหัสบ่อยเกินไป กรุณารอสักครู่")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
+      use: [rateLimit({ max: 10, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("Too many verification attempts, please wait a moment")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
       body: t.Object({
         email: t.String({ format: "email", maxLength: 255 }),
         code: t.String({ minLength: 6, maxLength: 6 }),
@@ -334,7 +334,7 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       if (!user) {
         set.status = 400;
-        return fail("รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว");
+        return fail("Invalid or expired verification code");
       }
 
       const candidates = await prisma.auditLog.findMany({
@@ -372,7 +372,7 @@ export const authController = new Elysia({ prefix: "/auth" })
         }
 
         set.status = 400;
-        return fail("รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว");
+        return fail("Invalid or expired verification code");
       }
 
       const policyError = await validatePasswordPolicy(body.password);
@@ -411,10 +411,10 @@ export const authController = new Elysia({ prefix: "/auth" })
         }),
       ]);
 
-      return ok({ message: "รีเซ็ตรหัสผ่านเรียบร้อยแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่" });
+      return ok({ message: "Password reset successful, please log in with your new password" });
     },
     {
-      use: [rateLimit({ max: 10, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("พยายามรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอสักครู่")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
+      use: [rateLimit({ max: 10, duration: 15 * 60_000, errorResponse: JSON.stringify(fail("Too many password reset attempts, please wait a moment")), generator: (req) => req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown" })],
       body: t.Object({
         email: t.String({ format: "email", maxLength: 255 }),
         code: t.String({ minLength: 6, maxLength: 6 }),
@@ -428,7 +428,7 @@ export const authController = new Elysia({ prefix: "/auth" })
       const record = await tokenService.findValid(body.refreshToken);
       if (!record) {
         set.status = 401;
-        return fail("Refresh token ไม่ถูกต้องหรือหมดอายุแล้ว");
+        return fail("Invalid or expired refresh token");
       }
 
       await tokenService.revoke(body.refreshToken);
@@ -456,7 +456,7 @@ export const authController = new Elysia({ prefix: "/auth" })
 
       writeAudit({ userId: record?.userId ?? null, action: "LOGOUT", ipAddress: ip, userAgent: ua });
 
-      return ok({ message: "ออกจากระบบแล้ว" });
+      return ok({ message: "Logged out successfully" });
     },
     {
       body: t.Object({ refreshToken: t.String() }),

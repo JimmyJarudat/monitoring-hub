@@ -75,7 +75,7 @@ export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
     const issues: string[] = [];
 
     if (res.status !== expectedStatus) {
-      issues.push(`ได้รับ HTTP ${res.status} คาดว่า ${expectedStatus}`);
+      issues.push(`Received HTTP ${res.status}, expected ${expectedStatus}.`);
     }
 
     let rawBody: string | undefined;
@@ -85,7 +85,7 @@ export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
 
     if (config.expectedBodyText && rawBody !== undefined) {
       if (!rawBody.includes(config.expectedBodyText)) {
-        issues.push(`ไม่พบข้อความ "${config.expectedBodyText}" ใน body`);
+        issues.push(`Expected text "${config.expectedBodyText}" not found in response body.`);
       }
     }
 
@@ -94,33 +94,33 @@ export async function httpCheck(config: HttpConfig): Promise<CheckResult> {
         const parsed: unknown = JSON.parse(rawBody);
         const value = resolveJsonPath(parsed, config.jsonPath);
         if (value === undefined) {
-          issues.push(`ไม่พบ JSON path "${config.jsonPath}"`);
+          issues.push(`JSON path "${config.jsonPath}" not found.`);
         } else if (config.jsonExpected !== undefined && config.jsonExpected !== "") {
           if (String(value) !== String(config.jsonExpected)) {
-            issues.push(`"${config.jsonPath}" ได้ "${value}" คาดว่า "${config.jsonExpected}"`);
+            issues.push(`"${config.jsonPath} returned "${value}", expected "${config.jsonExpected}"."`);
           }
         }
       } catch {
-        issues.push(`response ไม่ใช่ JSON`);
+        issues.push(`Response is not valid JSON.`);
       }
     }
 
     if (config.expectedHeaderKey) {
       const headerVal = res.headers.get(config.expectedHeaderKey);
       if (!headerVal) {
-        issues.push(`ไม่พบ header "${config.expectedHeaderKey}"`);
+        issues.push(`Header not found. "${config.expectedHeaderKey}"`);
       } else if (
         config.expectedHeaderValue &&
         !headerVal.toLowerCase().includes(config.expectedHeaderValue.toLowerCase())
       ) {
         issues.push(
-          `header "${config.expectedHeaderKey}" ได้ "${headerVal}" ไม่ตรงกับ "${config.expectedHeaderValue}"`,
+          `header "${config.expectedHeaderKey}" returned "${headerVal}" does not match expected "${config.expectedHeaderValue}"`,
         );
       }
     }
 
     if (config.latencyThresholdMs && responseTimeMs > config.latencyThresholdMs) {
-      issues.push(`ช้าเกิน ${config.latencyThresholdMs}ms (ได้ ${responseTimeMs}ms)`);
+      issues.push(`Too slow: ${config.latencyThresholdMs}ms (returned ${responseTimeMs}ms)`);
     }
 
     return {

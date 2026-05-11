@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type DiskInfo = {
@@ -213,6 +214,7 @@ const Gauge = ({
 );
 
 const DeviceCard = ({ device }: { device: Device }) => {
+  const { t, i18n } = useTranslation();
   const result = device.latestResult;
   const meta = result?.metadata as SystemMetadata | null;
   const status = result?.status ?? "UNKNOWN";
@@ -225,7 +227,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
       (Array.isArray(meta.disks) && meta.disks.length > 0));
   const loadDetail =
     isFiniteNumber(meta?.load1) && isFiniteNumber(meta?.load5) && isFiniteNumber(meta?.load15)
-      ? ` · load ${meta.load1.toFixed(2)} / ${meta.load5.toFixed(2)} / ${meta.load15.toFixed(2)}`
+      ? ` · ${t("devices.load")} ${meta.load1.toFixed(2)} / ${meta.load5.toFixed(2)} / ${meta.load15.toFixed(2)}`
       : "";
   const vendor = detectVendor(device, meta);
   const badgeText =
@@ -278,11 +280,11 @@ const DeviceCard = ({ device }: { device: Device }) => {
             </span>
           ) : (
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
-              UNKNOWN
+              {t("devices.unknown")}
             </span>
           )}
           {device.uptime24h !== null ? (
-            <span className="text-xs text-slate-400">{device.uptime24h}% uptime</span>
+            <span className="text-xs text-slate-400">{t("devices.uptime24h", { uptime: device.uptime24h })}</span>
           ) : null}
         </div>
       </div>
@@ -296,7 +298,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
           ) : null}
           {meta.uptimeSeconds !== undefined ? (
             <p className="text-xs text-slate-500">
-              Uptime <span className="font-medium text-slate-700">{fmtUptime(meta.uptimeSeconds)}</span>
+              {t("devices.uptime")} <span className="font-medium text-slate-700">{fmtUptime(meta.uptimeSeconds)}</span>
             </p>
           ) : null}
           {hasSystemMetrics ? (
@@ -304,7 +306,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
               <Gauge
                 label="CPU"
                 pct={meta.cpuUsedPct}
-                detail={`${fmt(meta.cpuUsedPct, "% used")}${loadDetail}`}
+                detail={`${fmt(meta.cpuUsedPct, t("devices.usedSuffix"))}${loadDetail}`}
               />
               <Gauge
                 label="RAM"
@@ -314,7 +316,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
               {meta.disks?.map((disk) => (
                 <Gauge
                   key={disk.mount}
-                  label={`Disk ${disk.mount}`}
+                  label={`${t("devices.disk")} ${disk.mount}`}
                   pct={disk.usedPct}
                   detail={`${fmtBytes(disk.usedKb)} / ${fmtBytes(disk.totalKb)}`}
                 />
@@ -322,12 +324,12 @@ const DeviceCard = ({ device }: { device: Device }) => {
             </>
           ) : (
             <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-400">
-              ยังไม่มี metrics CPU/RAM/Disk สำหรับอุปกรณ์นี้
+              {t("devices.noSystemMetrics")}
             </div>
           )}
           {meta.interfaces?.length ? (
             <div>
-              <p className="text-xs font-medium text-slate-700">Interfaces</p>
+              <p className="text-xs font-medium text-slate-700">{t("devices.interfaces")}</p>
               <div className="mt-2 space-y-1">
                 {meta.interfaces.slice(0, 3).map((iface) => (
                   <div
@@ -347,7 +349,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
         </div>
       ) : (
         <div className="mt-4 rounded-md bg-slate-50 px-3 py-4 text-center text-sm text-slate-400">
-          {result ? result.message ?? "ไม่มีข้อมูล metrics" : "ยังไม่เคยเช็ค"}
+          {result ? result.message ?? t("devices.noMetrics") : t("devices.neverChecked")}
         </div>
       )}
 
@@ -359,7 +361,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
 
       {checkedAt ? (
         <p className="mt-3 text-right text-[11px] text-slate-300">
-          checked {checkedAt.toLocaleString("th-TH")}
+          {t("devices.checkedAt", { time: checkedAt.toLocaleString(i18n.language === "th" ? "th-TH" : "en-US") })}
         </p>
       ) : null}
     </div>
@@ -367,6 +369,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
 };
 
 const DevicesPage = () => {
+  const { t } = useTranslation();
   const { api } = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -422,24 +425,24 @@ const DevicesPage = () => {
     <div className="min-h-full bg-slate-50 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-cyan-700">Monitoring</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Devices</h1>
+          <p className="text-sm font-medium text-cyan-700">{t("devices.subtitle")}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{t("devices.title")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            SNMP devices และ system monitors สำหรับดู CPU, RAM, Disk และ traffic counters
+            {t("devices.description")}
           </p>
         </div>
         <Link
           to="/monitors/new"
           className="inline-flex items-center justify-center rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
-          + Add Device
+          {t("devices.addDevice")}
         </Link>
       </div>
 
       {!loading && devices.length > 0 ? (
         <div className="mt-4 flex gap-4">
           {[
-            { label: "Total", value: devices.length, color: "text-slate-700" },
+            { label: t("devices.summaryTotal"), value: devices.length, color: "text-slate-700" },
             { label: "UP", value: up, color: "text-emerald-600" },
             { label: "DEGRADED", value: degraded, color: "text-amber-600" },
             { label: "DOWN", value: down, color: "text-red-600" },
@@ -455,13 +458,13 @@ const DevicesPage = () => {
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_1fr] lg:items-end">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Group</span>
+            <span className="text-sm font-medium text-slate-700">{t("devices.group")}</span>
             <select
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               value={groupFilter}
               onChange={(event) => setGroupFilter(event.target.value)}
             >
-              <option value="ALL">All groups</option>
+              <option value="ALL">{t("devices.allGroups")}</option>
               {groups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -470,26 +473,25 @@ const DevicesPage = () => {
             </select>
           </label>
           <p className="text-sm text-slate-500">
-            ใช้ group ช่วยแยกดูอุปกรณ์ตาม site, tenant, หรือบทบาทของระบบได้โดยไม่ต้องปนกันทั้ง inventory
+            {t("devices.groupHint")}
           </p>
         </div>
       </section>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {loading ? (
-          <p className="col-span-full text-sm text-slate-400">กำลังโหลด...</p>
+          <p className="col-span-full text-sm text-slate-400">{t("common.loading")}</p>
         ) : devices.length === 0 ? (
           <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
-            <p className="font-medium text-slate-700">ยังไม่มี device</p>
+            <p className="font-medium text-slate-700">{t("devices.noDevices")}</p>
             <p className="mt-1 text-sm text-slate-400">
-              สร้าง monitor ประเภท SYSTEM แล้วระบบจะดึงข้อมูล CPU/RAM/Disk ผ่าน SNMP
-              หรือใช้ SNMP monitor เพื่อเก็บข้อมูล device identity และ interface counters
+              {t("devices.emptyHint")}
             </p>
             <Link
               to="/monitors/new"
               className="mt-4 inline-flex items-center rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
             >
-              + Add Device
+              {t("devices.addDevice")}
             </Link>
           </div>
         ) : (

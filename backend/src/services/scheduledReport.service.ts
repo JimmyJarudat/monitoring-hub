@@ -130,7 +130,7 @@ export const sendScheduledAvailabilityReport = async (reason: "scheduled" | "man
   const { scheduledReport } = await getSystemConfig();
   const channels = await resolveChannels(scheduledReport);
   if (channels.length === 0) {
-    throw new Error("ยังไม่มี enabled notification channel สำหรับส่ง daily status report");
+    throw new Error("No enabled notification channels available for sending daily status reports.");
   }
 
   const report = await buildDailyStatusReport();
@@ -148,7 +148,7 @@ export const sendScheduledAvailabilityReport = async (reason: "scheduled" | "man
   );
 
   if (errors.length > 0) {
-    throw new Error(`ส่ง daily status report ไม่สำเร็จบางช่องทาง: ${errors.join(" | ")}`);
+    throw new Error(`Failed to send daily status report to some channels.: ${errors.join(" | ")}`);
   }
 
   await prisma.auditLog.create({
@@ -182,7 +182,7 @@ export const sendScheduledAvailabilityReport = async (reason: "scheduled" | "man
     entity: "ScheduledReport",
   });
 
-  return { message: "ส่ง daily status report แล้ว" };
+  return { message: "Daily status report sent successfully." };
 };
 
 const tick = async () => {

@@ -166,47 +166,118 @@
   - Manual clear history
 - [x] Sidebar footer — version badge from `package.json` (build-time injection)
 
-## i18n Translation Progress (EN/TH)
+## Developer Guidelines
 
-งาน: ไล่แปลทีละเพจ คอมมิตทีละเพจ
+> กฎที่ทุกคนที่พัฒนาต่อต้องรู้ก่อนแตะโค้ด
 
-### เสร็จแล้ว (committed)
-- [x] Sidebar + Navbar
-- [x] Dashboard (`/dashboard`)
-- [x] Monitors (`/monitors`)
-- [x] Incidents (`/incidents`)
-- [x] Results (`/results`)
+### Frontend — i18n (ภาษา)
 
-### เหลือ (ยังไม่ได้แปล)
-- [ ] Alerts (`/alerts`) ← **ถัดไป** — JSON keys มีแล้วใน en/th.json, แค่ยังไม่แก้ไฟล์ .tsx
-- [ ] Channels (`/channels`) ← JSON keys มีแล้วเช่นกัน
-- [ ] Devices (`/devices`)
-- [ ] Interfaces (`/interfaces`)
-- [ ] Groups (`/groups` + `/groups/:id`)
-- [ ] Credentials (`/credentials`)
-- [ ] Reports (`/reports`)
-- [ ] Status Map (`/status-map`)
-- [ ] System Logs (`/system-logs`)
-- [ ] Scheduled Reports (`/scheduled-reports`)
-- [ ] Settings (`/settings`)
-- [ ] Users (`/users`)
-- [ ] Audit Logs (`/audit-logs`)
-- [ ] Profile (`/profile`)
-- [ ] Login History (`/login-history`)
-- [ ] Change Password (`/change-password`)
-- [ ] Notifications (`/notifications`)
-- [ ] Domain (`/domain`)
-- [ ] API Tokens (`/api-tokens`)
-- [ ] Monitor Detail (`/monitors/:id`)
-- [ ] New Monitor (`/monitors/new`)
+- **ทุกเพจ** ต้องรองรับ 2 ภาษา: ไทย (`th`) และ อังกฤษ (`en`)
+- ใช้ `useTranslation()` จาก `react-i18next` และเรียก `t('key')` แทน hardcode string
+- เพิ่ม key ใหม่ลงทั้ง `frontend/src/i18n/locales/en.json` และ `frontend/src/i18n/locales/th.json` ควบคู่กันทุกครั้ง
+- i18n แปลครบทุกเพจแล้ว — เพจใหม่ที่เพิ่มต้องทำ i18n ตั้งแต่ต้น ไม่ hardcode
+
+### Frontend — Toast notifications
+
+- Toast (`toast.success`, `toast.error`, ฯลฯ) ต้องเป็น **ภาษาอังกฤษเท่านั้น**
+- ไม่ใช้ `t('key')` กับ toast — toast เป็น developer-facing message ไม่ใช่ UI label
+- เหตุผล: toast มักแสดงข้อความจาก error ที่มาจาก API ซึ่งเป็นภาษาอังกฤษอยู่แล้ว การผสมภาษาทำให้ดูไม่สอดคล้อง
+
+### Backend — API response messages
+
+- ข้อความใน `fail(...)`, `throw new Error(...)`, และ message fields ทุกจุดต้องเป็น **ภาษาอังกฤษเท่านั้น**
+- ห้าม hardcode ภาษาไทยใน backend ไม่ว่ากรณีใด
+- Frontend รับ message จาก API แล้วแสดงผ่าน toast — ถ้า backend เป็นไทยจะทำให้ toast เป็นไทยโดยไม่ตั้งใจ
+
+### Frontend — Dark mode
+
+- UI ต้องรองรับ **dark mode** — ยังไม่ได้ implement
+- ใช้ Tailwind dark mode (`dark:` prefix) และ class-based toggle (`class="dark"` บน `<html>`)
+- สี, background, border, text ทุกจุดต้องมี dark variant ครบ
+- toggle เก็บค่าใน `localStorage` และ respect `prefers-color-scheme` เป็น default
 
 ---
 
 ## Remaining Known Gaps
-
+- [ ] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
+- [ ] Monitor Active Window — เช็คเฉพาะช่วงเวลาทำงานที่กำหนด (ดูรายละเอียดด้านล่าง)
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
+
+---
+
+## Feature: Monitor Active Window
+
+> เพิ่มเงื่อนไขเวลาทำงานให้ monitor — ระบบจะเช็คเฉพาะช่วงที่กำหนด นอกเวลาหยุดเช็คทันที
+
+### แนวคิด
+
+อุปกรณ์บางอย่างทำงานเฉพาะช่วงเวลาทำการ เช่น เครื่องปริ้น, จอแสดงผล, workstation ถ้า monitor ตลอด 24 ชม. จะได้ alert ตอนกลางคืนหรือวันหยุดโดยไม่จำเป็น
+
+**พฤติกรรมที่ต้องการ:**
+- Default: ไม่กำหนดเวลา → เช็คตลอดเหมือนเดิม (ไม่กระทบ monitor ที่มีอยู่)
+- เมื่อเปิด Active Window: runner จะ **หยุดเช็คทันที** นอกช่วงเวลาที่กำหนด
+- นอกเวลา: ไม่บันทึก result, ไม่สร้าง incident, ไม่ส่ง notification
+- Open incidents ที่ค้างอยู่ก่อนหมดเวลา → ทิ้งไว้ เมื่อเข้าเวลาใหม่ ถ้าเช็คแล้ว UP จะ auto-resolve ตามปกติ
+
+### UI — ส่วน "Active Window" ในฟอร์ม monitor
+
+```
+[ ] Restrict monitoring to active window
+
+Days:  [✓] Mon  [✓] Tue  [✓] Wed  [✓] Thu  [✓] Fri  [ ] Sat  [ ] Sun
+
+Time:  [08:00] → [17:00]
+
+Timezone:  [Asia/Bangkok ▼]
+
+Note: Outside this window the monitor will not run.
+```
+
+- toggle off = ซ่อน section วัน/เวลาทั้งหมด (ไม่บังคับกรอก)
+- days เป็น multi-select checkbox อิสระ — เลือกได้ทุกวันหรือบางวัน
+- time เป็น HH:MM จาก/ถึง — รองรับข้ามคืน เช่น 22:00 → 06:00
+- timezone default ตาม system settings ของ backend
+
+### Schema
+
+เพิ่ม columns ใน `Monitor` table (nullable ทั้งหมด = ไม่กำหนด):
+
+```sql
+active_window_enabled   BOOLEAN   DEFAULT false
+active_window_days      INT[]     -- [1,2,3,4,5] = Mon-Fri (0=Sun, 6=Sat)
+active_window_from      TIME      -- "08:00"
+active_window_to        TIME      -- "17:00"
+active_window_timezone  TEXT      -- "Asia/Bangkok"
+```
+
+### Runner logic
+
+ใน `monitor.Runner.ts` ก่อน `runMonitorCheck()`:
+
+```ts
+if (monitor.activeWindowEnabled) {
+  const now = toZonedTime(new Date(), monitor.activeWindowTimezone)
+  const day = getDay(now)        // 0=Sun ... 6=Sat
+  const time = format(now, "HH:mm")
+  const inDay = monitor.activeWindowDays.includes(day)
+  const inTime = isWithinTimeRange(time, monitor.activeWindowFrom, monitor.activeWindowTo)
+  if (!inDay || !inTime) return  // skip — นอกเวลา
+}
+```
+
+- ใช้ `date-fns-tz` สำหรับ timezone conversion
+- `isWithinTimeRange` ต้องรองรับ overnight range (from > to)
+
+### Implementation order
+
+- [ ] Migration: เพิ่ม columns ใน Monitor table
+- [ ] Backend PATCH `/monitors/:id` รับและ validate active window fields
+- [ ] Runner: เพิ่ม active window check ก่อน runMonitorCheck
+- [ ] Frontend: เพิ่ม Active Window section ในฟอร์ม New/Edit Monitor
+- [ ] Frontend: แสดง badge "Active window" ใน monitor list/detail ถ้าเปิดใช้
+- [ ] i18n: เพิ่ม EN/TH keys สำหรับ Active Window UI
 
 ## Next Recommended Work
 
