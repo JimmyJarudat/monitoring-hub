@@ -616,13 +616,13 @@ const IncidentsPage = () => {
                         {incident.monitor.type} · {getTarget(incident.monitor)}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusStyles[incident.status]}`}
                       >
                         {t(`incidents.statusLabels.${incident.status}`)}
                       </span>
-                      {incident.status === "ACKNOWLEDGED" ? (
+                      {incident.acknowledgedAt ? (
                         <div className="mt-1 text-xs text-amber-700">
                           {t("incidents.acknowledgedBy", {
                             user: incident.acknowledgedBy?.username ?? "-",

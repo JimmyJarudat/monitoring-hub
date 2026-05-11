@@ -95,6 +95,7 @@
 - [x] Badge สี 3 state (🔴 Open / 🟡 Acknowledged / 🟢 Resolved)
 - [x] Filter tab: All / Open / Acknowledged / Resolved
 - [x] Runner skip escalation/reminder เมื่อ incident ถูก acknowledge แล้ว
+- [x] แสดง acknowledged by/at แม้ status ปัจจุบันจะเป็น Resolved แล้ว
 
 ### Inventory / Organization
 - [x] Devices page route
@@ -203,9 +204,9 @@
 ---
 
 ## Remaining Known Gaps
-- [ ] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
+- [x] Dark mode — implement แล้ว ใช้งานได้
 - [x] Monitor Active Window — เสร็จแล้ว (commit: feat: add monitor active windows)
-- [ ] Incident Acknowledge timeline — แสดง "acknowledged by / at" ใน incident timeline (เหลืออย่างเดียว)
+- [x] Incident Acknowledge timeline — แสดง "acknowledged by / at" แม้ incident จะ resolved แล้ว
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
