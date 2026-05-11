@@ -8,20 +8,21 @@ datasource db {
 }
 
 model User {
-  id            String                     @id @default(cuid())
-  username      String                     @unique
-  email         String                     @unique
-  password      String
-  roleId        String
-  role          Role                       @relation(fields: [roleId], references: [id])
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
-  auditLogs     AuditLog[]
-  loginHistory  LoginHistory[]
-  refreshTokens RefreshToken[]
-  domainScans   DomainScanHistory[]
-  notifications AppNotificationRecipient[]
-  apiTokens     ApiToken[]
+  id                    String                     @id @default(cuid())
+  username              String                     @unique
+  email                 String                     @unique
+  password              String
+  roleId                String
+  role                  Role                       @relation(fields: [roleId], references: [id])
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  auditLogs             AuditLog[]
+  loginHistory          LoginHistory[]
+  refreshTokens         RefreshToken[]
+  domainScans           DomainScanHistory[]
+  notifications         AppNotificationRecipient[]
+  apiTokens             ApiToken[]
+  acknowledgedIncidents Incident[]                 @relation("IncidentAcknowledgedBy")
 
   @@map("users")
 }
@@ -336,23 +337,28 @@ model AlertRuleChannel {
 }
 
 model Incident {
-  id          String         @id @default(cuid())
-  monitorId   String
-  monitor     Monitor        @relation(fields: [monitorId], references: [id], onDelete: Cascade)
-  alertRuleId String?
-  alertRule   AlertRule?     @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
-  status      IncidentStatus @default(OPEN)
-  message     String?
-  startedAt   DateTime       @default(now())
-  resolvedAt  DateTime?
+  id               String         @id @default(cuid())
+  monitorId        String
+  monitor          Monitor        @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  alertRuleId      String?
+  alertRule        AlertRule?     @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
+  status           IncidentStatus @default(OPEN)
+  message          String?
+  startedAt        DateTime       @default(now())
+  resolvedAt       DateTime?
+  acknowledgedById String?
+  acknowledgedBy   User?          @relation("IncidentAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt   DateTime?
 
   @@index([monitorId, status])
   @@index([status, startedAt])
+  @@index([acknowledgedById])
   @@map("incidents")
 }
 
 enum IncidentStatus {
   OPEN
+  ACKNOWLEDGED
   RESOLVED
 }
 

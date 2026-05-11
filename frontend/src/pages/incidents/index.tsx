@@ -7,7 +7,7 @@ import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
 
-type IncidentStatus = "OPEN" | "RESOLVED";
+type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type MonitorType =
   | "PING"
   | "TCP"
@@ -56,6 +56,8 @@ type IncidentRow = {
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: { id: string; username: string; email: string } | null;
   monitorId: string;
   alertRuleId: string | null;
   monitor: IncidentMonitor;
@@ -82,6 +84,7 @@ const presetDurationsMs: Record<Exclude<TimeRangePreset, "custom">, number> = {
 
 const statusStyles: Record<IncidentStatus, string> = {
   OPEN: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  ACKNOWLEDGED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 
@@ -185,6 +188,7 @@ const IncidentsPage = () => {
   const [appliedTo, setAppliedTo] = useState(() => new Date().toISOString());
   const [statusCounts, setStatusCounts] = useState<Record<IncidentStatus, number>>({
     OPEN: 0,
+    ACKNOWLEDGED: 0,
     RESOLVED: 0,
   });
   const [page, setPage] = useState(1);
@@ -202,8 +206,9 @@ const IncidentsPage = () => {
   const statusOptions = useMemo(
     () => [
       { label: t("incidents.statusAll"), value: "ALL" as "ALL" | IncidentStatus },
-      { label: "OPEN", value: "OPEN" as IncidentStatus },
-      { label: "RESOLVED", value: "RESOLVED" as IncidentStatus },
+      { label: t("incidents.statusOpen"), value: "OPEN" as IncidentStatus },
+      { label: t("incidents.statusAcknowledged"), value: "ACKNOWLEDGED" as IncidentStatus },
+      { label: t("incidents.statusResolved"), value: "RESOLVED" as IncidentStatus },
     ],
     [t],
   );
@@ -329,7 +334,13 @@ const IncidentsPage = () => {
         return;
       }
 
-      toast.success(status === "RESOLVED" ? t("incidents.resolveSuccess") : t("incidents.reopenSuccess"));
+      toast.success(
+        status === "RESOLVED"
+          ? "Incident resolved"
+          : status === "ACKNOWLEDGED"
+            ? "Incident acknowledged"
+            : "Incident reopened",
+      );
       await fetchIncidents(1, "replace");
     } catch {
       toast.error(t("incidents.updateError"));
@@ -368,6 +379,7 @@ const IncidentsPage = () => {
     return {
       total: incidents.length,
       open: incidents.filter((incident) => incident.status === "OPEN").length,
+      acknowledged: incidents.filter((incident) => incident.status === "ACKNOWLEDGED").length,
       resolved: incidents.filter((incident) => incident.status === "RESOLVED").length,
     };
   }, [incidents]);
@@ -411,12 +423,8 @@ const IncidentsPage = () => {
         {[
           { label: t("incidents.summaryDisplayed"), value: summary.total, tone: "text-slate-950" },
           { label: t("incidents.summaryOpen"), value: summary.open, tone: "text-rose-700" },
+          { label: t("incidents.summaryAcknowledged"), value: summary.acknowledged, tone: "text-amber-700" },
           { label: t("incidents.summaryResolved"), value: summary.resolved, tone: "text-emerald-700" },
-          {
-            label: t("incidents.summarySnapshot"),
-            value: `${statusCounts.OPEN} / ${statusCounts.RESOLVED}`,
-            tone: "text-cyan-700",
-          },
         ].map((item) => (
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={item.label}>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{item.label}</p>
@@ -542,6 +550,9 @@ const IncidentsPage = () => {
                   <p className="mt-2 text-sm text-slate-500">
                     {t("incidents.pageIncidents")}
                     <span className="ml-2 text-rose-700">OPEN {statusCounts.OPEN}</span>
+                    <span className="ml-3 text-amber-700">
+                      ACK {statusCounts.ACKNOWLEDGED}
+                    </span>
                     <span className="ml-3 text-emerald-700">RESOLVED {statusCounts.RESOLVED}</span>
                   </p>
                 </div>
@@ -609,8 +620,16 @@ const IncidentsPage = () => {
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusStyles[incident.status]}`}
                       >
-                        {incident.status}
+                        {t(`incidents.statusLabels.${incident.status}`)}
                       </span>
+                      {incident.status === "ACKNOWLEDGED" ? (
+                        <div className="mt-1 text-xs text-amber-700">
+                          {t("incidents.acknowledgedBy", {
+                            user: incident.acknowledgedBy?.username ?? "-",
+                            time: formatDateTime(incident.acknowledgedAt),
+                          })}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDuration(incident.startedAt, incident.resolvedAt)}
@@ -651,23 +670,45 @@ const IncidentsPage = () => {
                       {isAdmin ? (
                         <div className="flex justify-end gap-2">
                           {incident.status === "OPEN" ? (
-                            <button
-                              className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              type="button"
-                              onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
-                              disabled={isBusy}
-                            >
-                              {t("incidents.resolve")}
-                            </button>
+                            <>
+                              <button
+                                className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                type="button"
+                                onClick={() => void handleSetIncidentStatus(incident, "ACKNOWLEDGED")}
+                                disabled={isBusy}
+                              >
+                                {t("incidents.acknowledge")}
+                              </button>
+                              <button
+                                className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                type="button"
+                                onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
+                                disabled={isBusy}
+                              >
+                                {t("incidents.resolve")}
+                              </button>
+                            </>
                           ) : (
-                            <button
-                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              type="button"
-                              onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
-                              disabled={isBusy}
-                            >
-                              {t("incidents.reopen")}
-                            </button>
+                            <>
+                              {incident.status === "ACKNOWLEDGED" ? (
+                                <button
+                                  className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  type="button"
+                                  onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
+                                  disabled={isBusy}
+                                >
+                                  {t("incidents.resolve")}
+                                </button>
+                              ) : null}
+                              <button
+                                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                type="button"
+                                onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
+                                disabled={isBusy}
+                              >
+                                {t("incidents.reopen")}
+                              </button>
+                            </>
                           )}
 
                           <button
