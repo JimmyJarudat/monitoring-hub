@@ -4,6 +4,8 @@ export interface DockerConfig {
   endpointId: number;     // Portainer endpoint ID
   stackId?: number;       // Portainer stack ID (numeric) — ถ้าระบุจะ monitor stack แทน container
   containerId?: string;   // Docker container ID / ชื่อ container — ถ้าไม่ระบุทั้ง stack/container = เช็ค endpoint ภาพรวม
+  cfAccessClientId?: string;     // Cloudflare Access Client ID (optional)
+  cfAccessClientSecret?: string; // Cloudflare Access Client Secret (optional)
 }
 
 export interface CheckResult {
@@ -38,7 +40,22 @@ interface DockerContainerInspect {
 
 const apiBase = (cfg: DockerConfig) => `${cfg.portainerUrl.replace(/\/$/, "")}/api`;
 const dockerBase = (cfg: DockerConfig) => `${apiBase(cfg)}/endpoints/${cfg.endpointId}/docker`;
-const hdrs = (cfg: DockerConfig) => ({ "X-API-Key": cfg.apiKey });
+const hdrs = (cfg: DockerConfig) => {
+  const headers: Record<string, string> = { "X-API-Key": cfg.apiKey };
+
+  if (cfg.cfAccessClientId && cfg.cfAccessClientSecret) {
+    headers["CF-Access-Client-Id"] = cfg.cfAccessClientId;
+    headers["CF-Access-Client-Secret"] = cfg.cfAccessClientSecret;
+  }
+
+  return headers;
+};
+
+const portainerError = async (res: Response) => {
+  const body = await res.text().catch(() => "");
+  const detail = body.trim().slice(0, 240);
+  return `Portainer API error: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`;
+};
 
 // ── Stack check ───────────────────────────────────────────────────
 
@@ -51,7 +68,7 @@ async function checkStack(cfg: DockerConfig, stackId: number): Promise<CheckResu
       return {
         status: "DOWN",
         responseTimeMs: Date.now() - start,
-        message: `Portainer API error: ${res.status} ${res.statusText}`,
+        message: await portainerError(res),
       };
     }
 
@@ -137,7 +154,7 @@ async function checkEndpoint(cfg: DockerConfig): Promise<CheckResult> {
   try {
     const res = await fetch(`${dockerBase(cfg)}/containers/json?all=true`, { headers: hdrs(cfg) });
     if (!res.ok) {
-      return { status: "DOWN", responseTimeMs: Date.now() - start, message: `Portainer API error: ${res.status}` };
+      return { status: "DOWN", responseTimeMs: Date.now() - start, message: await portainerError(res) };
     }
     const containers = (await res.json()) as DockerContainerSummary[];
     const running = containers.filter((c) => c.State === "running").length;

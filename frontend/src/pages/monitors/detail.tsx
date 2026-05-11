@@ -30,7 +30,7 @@ type MonitorType =
   | "SYSTEM"
   | "DOCKER"
   | "DATABASE";
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 type IncidentStatus = "OPEN" | "RESOLVED";
 type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
 type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
@@ -266,11 +266,12 @@ const statusPriority: Record<MonitorStatus, number> = {
   UP: 1,
 };
 
-const credentialTypeLabels: Record<CredentialType, string> = {
-  SNMP_COMMUNITY: "SNMP Community",
-  USERNAME_PASSWORD: "Username / Password",
-  API_TOKEN: "API Token",
-  SSH_KEY: "SSH Key",
+const credentialTypeLabelKeys: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "credentials.typeSnmpCommunity",
+  USERNAME_PASSWORD: "credentials.typeUsernamePassword",
+  API_TOKEN: "credentials.typeApiToken",
+  SSH_KEY: "credentials.typeSshKey",
+  CLOUDFLARE_ACCESS: "credentials.typeCloudflareAccess",
 };
 
 const channelTypeLabels: Record<ChannelType, string> = {
@@ -2408,7 +2409,7 @@ const MonitorDetailPage = () => {
                         <option value="">{t("monitorDetail.noLinkedCredential")}</option>
                         {availableCredentials.map((credential) => (
                           <option key={credential.id} value={credential.id}>
-                            {credential.name} · {credentialTypeLabels[credential.type]}
+                            {credential.name} · {t(credentialTypeLabelKeys[credential.type])}
                           </option>
                         ))}
                       </select>
@@ -2418,7 +2419,7 @@ const MonitorDetailPage = () => {
                       <div className="font-semibold">{t("monitorDetail.compatibleTypes")}</div>
                       <div className="mt-1">
                         {compatibleCredentialTypes.length > 0
-                          ? compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")
+                          ? compatibleCredentialTypes.map((type) => t(credentialTypeLabelKeys[type])).join(", ")
                           : t("monitorDetail.noSharedCredentialNeeded")}
                       </div>
                     </div>

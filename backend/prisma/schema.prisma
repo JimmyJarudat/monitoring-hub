@@ -267,6 +267,7 @@ enum CredentialType {
   USERNAME_PASSWORD
   API_TOKEN
   SSH_KEY
+  CLOUDFLARE_ACCESS
 }
 
 model AlertRule {

@@ -340,6 +340,37 @@ const resolveConfigWithCredential = (
   return config;
 };
 
+const resolveDockerAccessCredential = async (config: Prisma.InputJsonObject) => {
+  const cfAccessCredentialId =
+    typeof config.cfAccessCredentialId === "string" && config.cfAccessCredentialId.trim()
+      ? config.cfAccessCredentialId
+      : null;
+
+  if (!cfAccessCredentialId) return config;
+
+  const credential = await prisma.credential.findUnique({
+    where: { id: cfAccessCredentialId },
+  });
+
+  if (!credential) {
+    throw new Error("The linked Cloudflare Access credential has been deleted or no longer exists");
+  }
+
+  if ((credential.type as string) !== "CLOUDFLARE_ACCESS") {
+    throw new Error("The linked Cloudflare Access credential has the wrong type");
+  }
+
+  if (!credential.username?.trim()) {
+    throw new Error("The linked Cloudflare Access credential is missing Client ID");
+  }
+
+  return {
+    ...config,
+    cfAccessClientId: credential.username,
+    cfAccessClientSecret: decryptCredentialSecret(credential.secret),
+  } satisfies Prisma.InputJsonObject;
+};
+
 const runChecker = async (
   type: MonitorType,
   config: Prisma.InputJsonObject,
@@ -704,12 +735,15 @@ export const runMonitorCheck = async (monitor: Monitor) => {
 
   try {
     resolvedConfig = resolveConfigWithCredential(monitor.type, monitor.config, credential);
-  } catch {
+    if (monitor.type === "DOCKER") {
+      resolvedConfig = await resolveDockerAccessCredential(resolvedConfig);
+    }
+  } catch (error) {
     const createdResult = await prisma.monitorResult.create({
       data: {
         monitorId: monitor.id,
         status: "DOWN",
-        message: "Failed to decrypt the linked credential",
+        message: error instanceof Error ? error.message : "Failed to resolve linked credential",
       },
     });
 

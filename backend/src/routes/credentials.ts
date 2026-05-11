@@ -10,6 +10,7 @@ const credentialTypeSchema = t.Union([
   t.Literal("USERNAME_PASSWORD"),
   t.Literal("API_TOKEN"),
   t.Literal("SSH_KEY"),
+  t.Literal("CLOUDFLARE_ACCESS"),
 ]);
 
 const credentialPayloadSchema = t.Object({
@@ -91,7 +92,7 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
       const credential = await prisma.credential.create({
         data: {
           name: body.name.trim(),
-          type: body.type,
+          type: body.type as any,
           username: normalizeOptionalText(body.username),
           secret: encryptCredentialSecret(body.secret),
           notes: normalizeOptionalText(body.notes),
@@ -122,7 +123,7 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
         where: { id: params.id },
         data: {
           name: body.name.trim(),
-          type: body.type,
+          type: body.type as any,
           username: normalizeOptionalText(body.username),
           secret: body.secret ? encryptCredentialSecret(body.secret) : existing.secret,
           notes: normalizeOptionalText(body.notes),

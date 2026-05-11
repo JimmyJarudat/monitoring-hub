@@ -29,7 +29,7 @@ type CheckedAtFilter = {
 };
 type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
 type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -162,7 +162,32 @@ const validateCredentialBinding = async (
   return null;
 };
 
-const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
+const validateDockerAccessCredential = async (type: MonitorType, config: MonitorConfig) => {
+  if (type !== "DOCKER" || typeof config.cfAccessCredentialId !== "string" || !config.cfAccessCredentialId.trim()) {
+    return null;
+  }
+
+  const credential = await prisma.credential.findUnique({
+    where: { id: config.cfAccessCredentialId },
+    select: { id: true, name: true, type: true, username: true },
+  });
+
+  if (!credential) {
+    return "The selected Cloudflare Access credential was not found.";
+  }
+
+  if ((credential.type as string) !== "CLOUDFLARE_ACCESS") {
+    return `Credential "${credential.name}" is not a Cloudflare Access credential`;
+  }
+
+  if (!credential.username?.trim()) {
+    return `Credential "${credential.name}" requires a Cloudflare Access Client ID in username`;
+  }
+
+  return null;
+};
+
+const validateMonitorConfig = (type: MonitorType, config: MonitorConfig, credentialId?: string) => {
   if (type === "PING" && !config.host) {
     return "PING monitor requires config.host";
   }
@@ -195,8 +220,8 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig) => {
     return "SYSTEM monitor requires config.host";
   }
 
-  if (type === "DOCKER" && (!config.portainerUrl || !config.apiKey || !config.endpointId)) {
-    return "DOCKER monitor requires config.portainerUrl, config.apiKey and config.endpointId";
+  if (type === "DOCKER" && (!config.portainerUrl || !config.endpointId || (!config.apiKey && !credentialId))) {
+    return "DOCKER monitor requires config.portainerUrl, config.endpointId and either config.apiKey or credentialId";
   }
 
   if (type === "DATABASE") {
@@ -609,7 +634,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail("config must be an object");
       }
 
-      const configError = validateMonitorConfig(body.type, body.config);
+      const configError = validateMonitorConfig(body.type, body.config, body.credentialId);
       if (configError) {
         set.status = 400;
         return fail(configError);
@@ -623,6 +648,12 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       if (credentialError) {
         set.status = 400;
         return fail(credentialError);
+      }
+
+      const dockerAccessCredentialError = await validateDockerAccessCredential(body.type, body.config);
+      if (dockerAccessCredentialError) {
+        set.status = 400;
+        return fail(dockerAccessCredentialError);
       }
 
       const data: Prisma.MonitorCreateInput = {
@@ -684,20 +715,27 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail("config must be an object");
       }
 
-      const configError = validateMonitorConfig(type, config);
+      const nextCredentialId = body.credentialId !== undefined
+        ? body.credentialId || undefined
+        : existing.credentialId || undefined;
+
+      const configError = validateMonitorConfig(type, config, nextCredentialId);
 
       if (configError) {
         set.status = 400;
         return fail(configError);
       }
 
-      const nextCredentialId = body.credentialId !== undefined
-        ? body.credentialId || undefined
-        : existing.credentialId || undefined;
       const credentialError = await validateCredentialBinding(nextCredentialId, type, config);
       if (credentialError) {
         set.status = 400;
         return fail(credentialError);
+      }
+
+      const dockerAccessCredentialError = await validateDockerAccessCredential(type, config);
+      if (dockerAccessCredentialError) {
+        set.status = 400;
+        return fail(dockerAccessCredentialError);
       }
 
       const data: Prisma.MonitorUpdateInput = {};

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/contexts/session.context";
 
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 type MonitorType =
   | "PING"
   | "TCP"
@@ -62,6 +62,7 @@ const credentialTypeLabelKeys: Record<CredentialType, string> = {
   USERNAME_PASSWORD: "credentials.typeUsernamePassword",
   API_TOKEN: "credentials.typeApiToken",
   SSH_KEY: "credentials.typeSshKey",
+  CLOUDFLARE_ACCESS: "credentials.typeCloudflareAccess",
 };
 
 const monitorTypeLabelKeys: Record<MonitorType, string> = {
@@ -81,6 +82,7 @@ const typeBadgeStyles: Record<CredentialType, string> = {
   USERNAME_PASSWORD: "bg-violet-50 text-violet-700 ring-violet-600/20",
   API_TOKEN: "bg-amber-50 text-amber-700 ring-amber-600/20",
   SSH_KEY: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  CLOUDFLARE_ACCESS: "bg-orange-50 text-orange-700 ring-orange-600/20",
 };
 
 const credentialTypeGuides: Record<
@@ -116,6 +118,12 @@ const credentialTypeGuides: Record<
     optionalFields: ["credentials.fieldUsername", "credentials.guideFieldNotes", "credentials.guideFieldSshMetadata"],
     usedFor: ["credentials.usedForSsh", "credentials.usedForAgent"],
   },
+  CLOUDFLARE_ACCESS: {
+    summary: "credentials.guideCloudflareAccessSummary",
+    requiredFields: ["credentials.guideFieldName", "credentials.fieldCloudflareClientId", "credentials.fieldCloudflareClientSecret"],
+    optionalFields: ["credentials.guideFieldNotes"],
+    usedFor: ["credentials.usedForDockerCloudflareAccess"],
+  },
 };
 
 const secretFieldLabels: Record<
@@ -150,6 +158,12 @@ const secretFieldLabels: Record<
     tableLabel: "credentials.fieldPrivateKey",
     requiredText: "credentials.validationPrivateKey",
   },
+  CLOUDFLARE_ACCESS: {
+    label: "credentials.fieldCloudflareClientSecret",
+    placeholder: "credentials.fieldCloudflareClientSecret",
+    tableLabel: "credentials.fieldCloudflareClientSecret",
+    requiredText: "credentials.validationCloudflareClientSecret",
+  },
 };
 
 const formatDate = (value: string, locale: string) =>
@@ -162,6 +176,12 @@ const maskSecretValue = (value: string) => {
   if (value.includes("•")) return value;
   if (value.length <= 6) return "•".repeat(value.length);
   return `${value.slice(0, 2)}${"•".repeat(Math.max(value.length - 4, 4))}${value.slice(-2)}`;
+};
+
+const maskVisibleValue = (value: string | null) => {
+  if (!value) return "-";
+  if (value.length <= 8) return "•".repeat(value.length);
+  return `${value.slice(0, 4)}${"•".repeat(8)}${value.slice(-6)}`;
 };
 
 const emptyForm = (): CredentialForm => ({
@@ -231,7 +251,7 @@ const CredentialsPage = () => {
       total: credentials.length,
       snmp: credentials.filter((item) => item.type === "SNMP_COMMUNITY").length,
       auth: credentials.filter((item) => item.type === "USERNAME_PASSWORD").length,
-      token: credentials.filter((item) => item.type === "API_TOKEN" || item.type === "SSH_KEY")
+      token: credentials.filter((item) => item.type === "API_TOKEN" || item.type === "SSH_KEY" || item.type === "CLOUDFLARE_ACCESS")
         .length,
       linked: credentials.filter((item) => item.usageCount > 0).length,
     };
@@ -241,7 +261,7 @@ const CredentialsPage = () => {
   const modalGuide = credentialTypeGuides[form.type];
   const secretField = secretFieldLabels[form.type];
   const parsedMetadata = useMemo(() => parseMetadataObject(form.metadataText), [form.metadataText]);
-  const showUsernameField = form.type === "USERNAME_PASSWORD" || form.type === "SSH_KEY";
+  const showUsernameField = form.type === "USERNAME_PASSWORD" || form.type === "SSH_KEY" || form.type === "CLOUDFLARE_ACCESS";
   const showSnmpSettings = form.type === "SNMP_COMMUNITY";
 
   const updateMetadataField = (key: string, value: unknown) => {
@@ -308,6 +328,11 @@ const CredentialsPage = () => {
 
     if (form.type === "USERNAME_PASSWORD" && !form.username.trim()) {
       toast.error(t("credentials.validationUsername"));
+      return;
+    }
+
+    if (form.type === "CLOUDFLARE_ACCESS" && !form.username.trim()) {
+      toast.error(t("credentials.validationCloudflareClientId"));
       return;
     }
 
@@ -468,7 +493,7 @@ const CredentialsPage = () => {
               <tr>
                 <th className="px-4 py-3">{t("common.name")}</th>
                 <th className="px-4 py-3">{t("common.type")}</th>
-                <th className="px-4 py-3">{t("credentials.fieldUsername")}</th>
+                <th className="px-4 py-3">{t("credentials.colIdentity")}</th>
                 <th className="px-4 py-3">{t("credentials.colValue")}</th>
                 <th className="px-4 py-3">{t("credentials.colUsedBy")}</th>
                 <th className="px-4 py-3">{t("credentials.fieldNotes")}</th>
@@ -510,7 +535,9 @@ const CredentialsPage = () => {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {credential.username || "-"}
+                      {credential.type === "CLOUDFLARE_ACCESS"
+                        ? maskVisibleValue(credential.username)
+                        : credential.username || "-"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       <div className="flex items-center gap-2">
@@ -716,8 +743,10 @@ const CredentialsPage = () => {
               {showUsernameField ? (
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    {t("credentials.fieldUsername")}
-                    {form.type === "USERNAME_PASSWORD" ? (
+                    {form.type === "CLOUDFLARE_ACCESS"
+                      ? t("credentials.fieldCloudflareClientId")
+                      : t("credentials.fieldUsername")}
+                    {form.type === "USERNAME_PASSWORD" || form.type === "CLOUDFLARE_ACCESS" ? (
                       <span className="ml-1 text-rose-500">*</span>
                     ) : (
                       <span className="ml-1 font-normal text-slate-400">{t("credentials.optionalSuffix")}</span>
@@ -782,7 +811,7 @@ const CredentialsPage = () => {
                 </span>
                 <textarea
                   className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  placeholder={editingCredential ? t("credentials.keepExistingPlaceholder") : secretField.placeholder}
+                  placeholder={editingCredential ? t("credentials.keepExistingPlaceholder") : t(secretField.placeholder)}
                   value={form.secret}
                   onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
                 />

@@ -47,6 +47,7 @@ type FormState = {
   trustServerCertificate: boolean;
   portainerUrl: string;
   apiKey: string;
+  cfAccessCredentialId: string;
   endpointId: string;
   stackId: string;
   containerId: string;
@@ -61,7 +62,7 @@ type MonitorPayload = {
   credentialId?: string;
 };
 
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 
 type CredentialRow = {
   id: string;
@@ -171,6 +172,7 @@ const initialForm: FormState = {
   trustServerCertificate: true,
   portainerUrl: "",
   apiKey: "",
+  cfAccessCredentialId: "",
   endpointId: "1",
   stackId: "",
   containerId: "",
@@ -178,6 +180,12 @@ const initialForm: FormState = {
 
 const toOptionalNumber = (value: string) => {
   return value.trim() ? Number(value) : undefined;
+};
+
+const maskCredentialValue = (value?: string | null) => {
+  if (!value) return "";
+  if (value.length <= 8) return "•".repeat(value.length);
+  return `${value.slice(0, 4)}${"•".repeat(8)}${value.slice(-6)}`;
 };
 
 const compactConfig = (config: Record<string, unknown>) => {
@@ -267,6 +275,7 @@ const buildConfig = (form: FormState) => {
     return compactConfig({
       portainerUrl: form.portainerUrl,
       apiKey: form.apiKey,
+      cfAccessCredentialId: form.cfAccessCredentialId,
       endpointId: Number(form.endpointId),
       ...(form.stackId ? { stackId: Number(form.stackId) } : {}),
       ...(form.containerId ? { containerId: form.containerId } : {}),
@@ -424,11 +433,12 @@ const getRequiredHintKey = (type: MonitorType) => {
   return "newMonitor.requiredHints.DATABASE";
 };
 
-const credentialTypeLabels: Record<CredentialType, string> = {
-  SNMP_COMMUNITY: "SNMP Community",
-  USERNAME_PASSWORD: "Username / Password",
-  API_TOKEN: "API Token",
-  SSH_KEY: "SSH Key",
+const credentialTypeLabelKeys: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "credentials.typeSnmpCommunity",
+  USERNAME_PASSWORD: "credentials.typeUsernamePassword",
+  API_TOKEN: "credentials.typeApiToken",
+  SSH_KEY: "credentials.typeSshKey",
+  CLOUDFLARE_ACCESS: "credentials.typeCloudflareAccess",
 };
 
 const getCompatibleCredentialTypes = (
@@ -470,6 +480,14 @@ const AddMonitorPage = () => {
     () => credentials.filter((credential) => compatibleCredentialTypes.includes(credential.type)),
     [compatibleCredentialTypes, credentials],
   );
+  const cloudflareAccessCredentials = useMemo(
+    () => credentials.filter((credential) => credential.type === "CLOUDFLARE_ACCESS"),
+    [credentials],
+  );
+  const selectedCloudflareAccessCredential = useMemo(
+    () => cloudflareAccessCredentials.find((credential) => credential.id === form.cfAccessCredentialId) ?? null,
+    [cloudflareAccessCredentials, form.cfAccessCredentialId],
+  );
   const selectedCredential = useMemo(
     () => availableCredentials.find((credential) => credential.id === selectedCredentialId) ?? null,
     [availableCredentials, selectedCredentialId],
@@ -496,6 +514,7 @@ const AddMonitorPage = () => {
 
   useEffect(() => {
     setSelectedCredentialId("");
+    setForm((current) => current.type === "DOCKER" ? current : { ...current, cfAccessCredentialId: "" });
   }, [form.type, form.httpAuthType, form.databaseType]);
 
   const applyCredential = (credentialId: string) => {
@@ -690,7 +709,7 @@ const AddMonitorPage = () => {
                     <h3 className="text-sm font-semibold text-violet-950">{t("newMonitor.credentialLink")}</h3>
                     <p className="mt-1 text-sm text-violet-800">
                       {t("newMonitor.compatibleCredentialOnly", {
-                        types: compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", "),
+                        types: compatibleCredentialTypes.map((type) => t(credentialTypeLabelKeys[type])).join(", "),
                       })}
                     </p>
                   </div>
@@ -713,7 +732,7 @@ const AddMonitorPage = () => {
                       <option value="">{t("newMonitor.dontUsePreset")}</option>
                       {availableCredentials.map((credential) => (
                         <option key={credential.id} value={credential.id}>
-                          {credential.name} · {credentialTypeLabels[credential.type]}
+                          {credential.name} · {t(credentialTypeLabelKeys[credential.type])}
                         </option>
                       ))}
                     </select>
@@ -1223,9 +1242,44 @@ const AddMonitorPage = () => {
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.apiKey}
                       onChange={(event) => updateField("apiKey", event.target.value)}
-                      required
+                      required={!selectedCredentialId}
                     />
                   </label>
+                  <div className="md:col-span-2 rounded-md border border-orange-100 bg-orange-50 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <label className="block flex-1">
+                        <span className="text-sm font-medium text-slate-700">{t("newMonitor.cloudflareAccessCredential")}</span>
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          value={form.cfAccessCredentialId}
+                          onChange={(event) => updateField("cfAccessCredentialId", event.target.value)}
+                        >
+                          <option value="">{t("newMonitor.dontUseCloudflareAccess")}</option>
+                          {cloudflareAccessCredentials.map((credential) => (
+                            <option key={credential.id} value={credential.id}>
+                              {credential.name} · {credential.username ? maskCredentialValue(credential.username) : t("newMonitor.noClientId")}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Link
+                        className="shrink-0 rounded-md border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                        to="/credentials"
+                      >
+                        {t("newMonitor.manageCredentials")}
+                      </Link>
+                    </div>
+                    <p className="mt-2 text-xs text-orange-800">
+                      {selectedCloudflareAccessCredential ? (
+                        <>
+                          <span className="font-semibold">{maskCredentialValue(selectedCloudflareAccessCredential.username)}</span>
+                          <span> · {selectedCloudflareAccessCredential.notes || t("newMonitor.cloudflareAccessSelectedHint")}</span>
+                        </>
+                      ) : (
+                        t("newMonitor.cloudflareAccessOptionalHint")
+                      )}
+                    </p>
+                  </div>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">{t("newMonitor.endpointId")}</span>
                     <input
