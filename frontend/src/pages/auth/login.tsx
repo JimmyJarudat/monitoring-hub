@@ -16,7 +16,6 @@ type ApiFailure = {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const RESET_CODE_LENGTH = 6;
 
 const getErrorMessage = (error: unknown) => {
@@ -80,7 +79,7 @@ const Login = () => {
     setIsResetSubmitting(true);
     try {
       const response = await axios.post<ApiResponse<{ message: string }>>(
-        `${API_BASE_URL}/auth/password-reset/request`,
+        "/auth/password-reset/request",
         { email: value },
       );
 
@@ -141,7 +140,7 @@ const Login = () => {
     setIsCodeVerifying(true);
     try {
       const response = await axios.post<ApiResponse<{ message: string }>>(
-        `${API_BASE_URL}/auth/password-reset/verify`,
+        "/auth/password-reset/verify",
         { email: resetEmail.trim().toLowerCase(), code: resetCodeValue },
       );
 
@@ -185,7 +184,7 @@ const Login = () => {
     setIsPasswordResetting(true);
     try {
       const response = await axios.post<ApiResponse<{ message: string }>>(
-        `${API_BASE_URL}/auth/password-reset/confirm`,
+        "/auth/password-reset/confirm",
         { email: resetEmail.trim().toLowerCase(), code: resetCodeValue, password: newPassword },
       );
 

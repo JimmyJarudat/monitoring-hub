@@ -94,7 +94,7 @@ const refreshAccessToken = async () => {
 
     try {
       const response = await axios.post<RefreshResponse>(
-        `${API_BASE_URL}${REFRESH_ENDPOINT}`,
+        REFRESH_ENDPOINT,
         { refreshToken },
         {
           headers: {
