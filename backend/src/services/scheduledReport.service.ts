@@ -73,7 +73,7 @@ const buildDailyStatusReport = async (now = new Date()): Promise<DailyStatusRepo
       },
     }),
     prisma.incident.count({ where: { startedAt: { gte: windowStart, lte: windowEnd } } }),
-    prisma.incident.count({ where: { status: "OPEN" } }),
+    prisma.incident.count({ where: { status: { in: ["OPEN", "ACKNOWLEDGED"] } } }),
   ]);
 
   const rows = monitors.map((monitor) => {

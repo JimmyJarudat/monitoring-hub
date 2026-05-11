@@ -38,7 +38,7 @@ type AlertRuleRow = {
   channels: Array<{ channel: ChannelOption }>;
   openIncident: {
     id: string;
-    status: "OPEN" | "RESOLVED";
+    status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
     message: string;
     startedAt: string;
   } | null;

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
-type IncidentStatus = "OPEN" | "RESOLVED";
+type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type MonitorType =
   | "PING"
   | "TCP"
@@ -103,6 +103,7 @@ const statusStyles: Record<MonitorStatus, string> = {
 
 const incidentStyles: Record<IncidentStatus, string> = {
   OPEN: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  ACKNOWLEDGED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 

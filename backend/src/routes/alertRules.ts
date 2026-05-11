@@ -51,7 +51,7 @@ export const alertRuleRoutes = new Elysia({ prefix: "/alert-rules" })
             },
           },
           incidents: {
-            where: { status: "OPEN" },
+            where: { status: { in: ["OPEN", "ACKNOWLEDGED"] } },
             orderBy: { startedAt: "desc" },
             take: 1,
             select: {

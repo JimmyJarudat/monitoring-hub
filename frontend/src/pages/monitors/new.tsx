@@ -11,6 +11,11 @@ type FormState = {
   type: MonitorType;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[];
+  activeWindowFrom: string;
+  activeWindowTo: string;
+  activeWindowTimezone: string;
   host: string;
   port: string;
   url: string;
@@ -34,6 +39,9 @@ type FormState = {
   snmpVersion: "1" | "2c";
   snmpPort: string;
   snmpOids: string;
+  snmpPreset: "none" | "printer_status" | "printer_toner" | "printer_paper" | "printer_full";
+  snmpTonerThreshold: string;
+  snmpPaperThreshold: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
   dnsServer: string;
@@ -47,6 +55,7 @@ type FormState = {
   trustServerCertificate: boolean;
   portainerUrl: string;
   apiKey: string;
+  cfAccessCredentialId: string;
   endpointId: string;
   stackId: string;
   containerId: string;
@@ -57,11 +66,16 @@ type MonitorPayload = {
   type: MonitorType;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled?: boolean;
+  activeWindowDays?: number[];
+  activeWindowFrom?: string;
+  activeWindowTo?: string;
+  activeWindowTimezone?: string;
   config: Record<string, unknown>;
   credentialId?: string;
 };
 
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 
 type CredentialRow = {
   id: string;
@@ -130,11 +144,37 @@ const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [
   { label: "MongoDB", value: "mongodb", port: "27017" },
 ];
 
+const ACTIVE_WINDOW_DAYS = [
+  { value: 1, key: "common.days.mon" },
+  { value: 2, key: "common.days.tue" },
+  { value: 3, key: "common.days.wed" },
+  { value: 4, key: "common.days.thu" },
+  { value: 5, key: "common.days.fri" },
+  { value: 6, key: "common.days.sat" },
+  { value: 0, key: "common.days.sun" },
+];
+
+const ACTIVE_WINDOW_TIMEZONES = [
+  "Asia/Bangkok",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Ho_Chi_Minh",
+  "Asia/Jakarta",
+  "Europe/London",
+  "America/New_York",
+];
+
 const initialForm: FormState = {
   name: "",
   type: "HTTP",
   interval: 60,
   enabled: true,
+  activeWindowEnabled: false,
+  activeWindowDays: [1, 2, 3, 4, 5],
+  activeWindowFrom: "08:00",
+  activeWindowTo: "17:00",
+  activeWindowTimezone: "Asia/Bangkok",
   host: "",
   port: "",
   url: "",
@@ -147,6 +187,9 @@ const initialForm: FormState = {
   snmpVersion: "2c",
   snmpPort: "161",
   snmpOids: "",
+  snmpPreset: "none",
+  snmpTonerThreshold: "15",
+  snmpPaperThreshold: "10",
   httpFollowRedirect: true,
   httpAuthType: "none",
   httpAuthUsername: "",
@@ -171,6 +214,7 @@ const initialForm: FormState = {
   trustServerCertificate: true,
   portainerUrl: "",
   apiKey: "",
+  cfAccessCredentialId: "",
   endpointId: "1",
   stackId: "",
   containerId: "",
@@ -178,6 +222,12 @@ const initialForm: FormState = {
 
 const toOptionalNumber = (value: string) => {
   return value.trim() ? Number(value) : undefined;
+};
+
+const maskCredentialValue = (value?: string | null) => {
+  if (!value) return "";
+  if (value.length <= 8) return "•".repeat(value.length);
+  return `${value.slice(0, 4)}${"•".repeat(8)}${value.slice(-6)}`;
 };
 
 const compactConfig = (config: Record<string, unknown>) => {
@@ -243,12 +293,22 @@ const buildConfig = (form: FormState) => {
   }
 
   if (form.type === "SNMP") {
+    const printerPresetMap: Record<string, string> = {
+      printer_status: "status",
+      printer_toner: "toner",
+      printer_paper: "paper",
+      printer_full: "full",
+    };
+    const printerPreset = printerPresetMap[form.snmpPreset];
     return compactConfig({
       host: form.host,
       port: toOptionalNumber(form.snmpPort),
       community: form.snmpCommunity,
       version: form.snmpVersion,
-      oids: form.snmpOids.trim() ? form.snmpOids.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+      oids: !printerPreset && form.snmpOids.trim() ? form.snmpOids.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+      printerPreset: printerPreset ?? undefined,
+      tonerAlertThreshold: printerPreset ? toOptionalNumber(form.snmpTonerThreshold) : undefined,
+      paperAlertThreshold: printerPreset ? toOptionalNumber(form.snmpPaperThreshold) : undefined,
       timeoutMs,
     });
   }
@@ -267,6 +327,7 @@ const buildConfig = (form: FormState) => {
     return compactConfig({
       portainerUrl: form.portainerUrl,
       apiKey: form.apiKey,
+      cfAccessCredentialId: form.cfAccessCredentialId,
       endpointId: Number(form.endpointId),
       ...(form.stackId ? { stackId: Number(form.stackId) } : {}),
       ...(form.containerId ? { containerId: form.containerId } : {}),
@@ -424,11 +485,12 @@ const getRequiredHintKey = (type: MonitorType) => {
   return "newMonitor.requiredHints.DATABASE";
 };
 
-const credentialTypeLabels: Record<CredentialType, string> = {
-  SNMP_COMMUNITY: "SNMP Community",
-  USERNAME_PASSWORD: "Username / Password",
-  API_TOKEN: "API Token",
-  SSH_KEY: "SSH Key",
+const credentialTypeLabelKeys: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "credentials.typeSnmpCommunity",
+  USERNAME_PASSWORD: "credentials.typeUsernamePassword",
+  API_TOKEN: "credentials.typeApiToken",
+  SSH_KEY: "credentials.typeSshKey",
+  CLOUDFLARE_ACCESS: "credentials.typeCloudflareAccess",
 };
 
 const getCompatibleCredentialTypes = (
@@ -470,6 +532,14 @@ const AddMonitorPage = () => {
     () => credentials.filter((credential) => compatibleCredentialTypes.includes(credential.type)),
     [compatibleCredentialTypes, credentials],
   );
+  const cloudflareAccessCredentials = useMemo(
+    () => credentials.filter((credential) => credential.type === "CLOUDFLARE_ACCESS"),
+    [credentials],
+  );
+  const selectedCloudflareAccessCredential = useMemo(
+    () => cloudflareAccessCredentials.find((credential) => credential.id === form.cfAccessCredentialId) ?? null,
+    [cloudflareAccessCredentials, form.cfAccessCredentialId],
+  );
   const selectedCredential = useMemo(
     () => availableCredentials.find((credential) => credential.id === selectedCredentialId) ?? null,
     [availableCredentials, selectedCredentialId],
@@ -477,6 +547,15 @@ const AddMonitorPage = () => {
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const toggleActiveWindowDay = (day: number) => {
+    setForm((current) => {
+      const days = current.activeWindowDays.includes(day)
+        ? current.activeWindowDays.filter((item) => item !== day)
+        : [...current.activeWindowDays, day].sort((a, b) => a - b);
+      return { ...current, activeWindowDays: days };
+    });
   };
 
   useEffect(() => {
@@ -496,6 +575,7 @@ const AddMonitorPage = () => {
 
   useEffect(() => {
     setSelectedCredentialId("");
+    setForm((current) => current.type === "DOCKER" ? current : { ...current, cfAccessCredentialId: "" });
   }, [form.type, form.httpAuthType, form.databaseType]);
 
   const applyCredential = (credentialId: string) => {
@@ -552,6 +632,11 @@ const AddMonitorPage = () => {
       type: form.type,
       interval: Number(form.interval),
       enabled: form.enabled,
+      activeWindowEnabled: form.activeWindowEnabled,
+      activeWindowDays: form.activeWindowDays,
+      activeWindowFrom: form.activeWindowFrom,
+      activeWindowTo: form.activeWindowTo,
+      activeWindowTimezone: form.activeWindowTimezone,
       config: buildConfig(form),
       credentialId: selectedCredentialId || undefined,
     };
@@ -639,6 +724,81 @@ const AddMonitorPage = () => {
                 />
                 <span className="text-sm font-medium text-slate-700">{t("newMonitor.enableAfterCreate")}</span>
               </label>
+
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                <label className="flex items-center gap-3">
+                  <input
+                    checked={form.activeWindowEnabled}
+                    className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                    type="checkbox"
+                    onChange={(event) => updateField("activeWindowEnabled", event.target.checked)}
+                  />
+                  <span className="text-sm font-medium text-slate-700">{t("activeWindow.restrict")}</span>
+                </label>
+
+                {form.activeWindowEnabled ? (
+                  <div className="mt-4 grid gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">{t("activeWindow.days")}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {ACTIVE_WINDOW_DAYS.map((day) => (
+                          <label
+                            className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                            key={day.value}
+                          >
+                            <input
+                              checked={form.activeWindowDays.includes(day.value)}
+                              className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                              type="checkbox"
+                              onChange={() => toggleActiveWindowDay(day.value)}
+                            />
+                            {t(day.key)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.from")}</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          type="time"
+                          value={form.activeWindowFrom}
+                          onChange={(event) => updateField("activeWindowFrom", event.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.to")}</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          type="time"
+                          value={form.activeWindowTo}
+                          onChange={(event) => updateField("activeWindowTo", event.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.timezone")}</span>
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          value={form.activeWindowTimezone}
+                          onChange={(event) => updateField("activeWindowTimezone", event.target.value)}
+                        >
+                          {ACTIVE_WINDOW_TIMEZONES.map((timezone) => (
+                            <option key={timezone} value={timezone}>
+                              {timezone}
+                            </option>
+                          ))}
+                          {!ACTIVE_WINDOW_TIMEZONES.includes(form.activeWindowTimezone) ? (
+                            <option value={form.activeWindowTimezone}>{form.activeWindowTimezone}</option>
+                          ) : null}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500">{t("activeWindow.note")}</p>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -690,7 +850,7 @@ const AddMonitorPage = () => {
                     <h3 className="text-sm font-semibold text-violet-950">{t("newMonitor.credentialLink")}</h3>
                     <p className="mt-1 text-sm text-violet-800">
                       {t("newMonitor.compatibleCredentialOnly", {
-                        types: compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", "),
+                        types: compatibleCredentialTypes.map((type) => t(credentialTypeLabelKeys[type])).join(", "),
                       })}
                     </p>
                   </div>
@@ -713,7 +873,7 @@ const AddMonitorPage = () => {
                       <option value="">{t("newMonitor.dontUsePreset")}</option>
                       {availableCredentials.map((credential) => (
                         <option key={credential.id} value={credential.id}>
-                          {credential.name} · {credentialTypeLabels[credential.type]}
+                          {credential.name} · {t(credentialTypeLabelKeys[credential.type])}
                         </option>
                       ))}
                     </select>
@@ -952,14 +1112,67 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.customOids")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
-                    <input
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.printerPreset")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
+                    <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                      value={form.snmpOids}
-                      onChange={(event) => updateField("snmpOids", event.target.value)}
-                      placeholder={t("newMonitor.customOidsPlaceholder")}
-                    />
+                      value={form.snmpPreset}
+                      onChange={(event) => updateField("snmpPreset", event.target.value as FormState["snmpPreset"])}
+                    >
+                      <option value="none">{t("newMonitor.printerPresetNone")}</option>
+                      <option value="printer_full">{t("newMonitor.printerPresetFull")}</option>
+                      <option value="printer_status">{t("newMonitor.printerPresetStatus")}</option>
+                      <option value="printer_toner">{t("newMonitor.printerPresetToner")}</option>
+                      <option value="printer_paper">{t("newMonitor.printerPresetPaper")}</option>
+                    </select>
                   </label>
+                  {form.snmpPreset !== "none" ? (
+                    <>
+                      {(form.snmpPreset === "printer_toner" || form.snmpPreset === "printer_full") ? (
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("newMonitor.tonerThreshold")}</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={form.snmpTonerThreshold}
+                              onChange={(event) => updateField("snmpTonerThreshold", event.target.value)}
+                              placeholder="15"
+                            />
+                            <span className="text-sm text-slate-500">%</span>
+                          </div>
+                        </label>
+                      ) : null}
+                      {(form.snmpPreset === "printer_paper" || form.snmpPreset === "printer_full") ? (
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("newMonitor.paperThreshold")}</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={form.snmpPaperThreshold}
+                              onChange={(event) => updateField("snmpPaperThreshold", event.target.value)}
+                              placeholder="10"
+                            />
+                            <span className="text-sm text-slate-500">%</span>
+                          </div>
+                        </label>
+                      ) : null}
+                    </>
+                  ) : (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.customOids")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.snmpOids}
+                        onChange={(event) => updateField("snmpOids", event.target.value)}
+                        placeholder={t("newMonitor.customOidsPlaceholder")}
+                      />
+                    </label>
+                  )}
                 </>
               ) : null}
 
@@ -1223,9 +1436,44 @@ const AddMonitorPage = () => {
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                       value={form.apiKey}
                       onChange={(event) => updateField("apiKey", event.target.value)}
-                      required
+                      required={!selectedCredentialId}
                     />
                   </label>
+                  <div className="md:col-span-2 rounded-md border border-orange-100 bg-orange-50 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <label className="block flex-1">
+                        <span className="text-sm font-medium text-slate-700">{t("newMonitor.cloudflareAccessCredential")}</span>
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          value={form.cfAccessCredentialId}
+                          onChange={(event) => updateField("cfAccessCredentialId", event.target.value)}
+                        >
+                          <option value="">{t("newMonitor.dontUseCloudflareAccess")}</option>
+                          {cloudflareAccessCredentials.map((credential) => (
+                            <option key={credential.id} value={credential.id}>
+                              {credential.name} · {credential.username ? maskCredentialValue(credential.username) : t("newMonitor.noClientId")}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Link
+                        className="shrink-0 rounded-md border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                        to="/credentials"
+                      >
+                        {t("newMonitor.manageCredentials")}
+                      </Link>
+                    </div>
+                    <p className="mt-2 text-xs text-orange-800">
+                      {selectedCloudflareAccessCredential ? (
+                        <>
+                          <span className="font-semibold">{maskCredentialValue(selectedCloudflareAccessCredential.username)}</span>
+                          <span> · {selectedCloudflareAccessCredential.notes || t("newMonitor.cloudflareAccessSelectedHint")}</span>
+                        </>
+                      ) : (
+                        t("newMonitor.cloudflareAccessOptionalHint")
+                      )}
+                    </p>
+                  </div>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">{t("newMonitor.endpointId")}</span>
                     <input
@@ -1285,6 +1533,11 @@ const AddMonitorPage = () => {
                   type: form.type,
                   interval: Number(form.interval),
                   enabled: form.enabled,
+                  activeWindowEnabled: form.activeWindowEnabled,
+                  activeWindowDays: form.activeWindowDays,
+                  activeWindowFrom: form.activeWindowFrom,
+                  activeWindowTo: form.activeWindowTo,
+                  activeWindowTimezone: form.activeWindowTimezone,
                   credentialId: selectedCredentialId || undefined,
                   config: buildConfig(form),
                 },

@@ -8,32 +8,33 @@ datasource db {
 }
 
 model User {
-  id             String         @id @default(cuid())
-  username       String         @unique
-  email          String         @unique
-  password       String
-  roleId         String
-  role           Role           @relation(fields: [roleId], references: [id])
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  auditLogs      AuditLog[]
-  loginHistory   LoginHistory[]
-  refreshTokens  RefreshToken[]
-  domainScans    DomainScanHistory[]
-  notifications  AppNotificationRecipient[]
-  apiTokens      ApiToken[]
+  id                    String                     @id @default(cuid())
+  username              String                     @unique
+  email                 String                     @unique
+  password              String
+  roleId                String
+  role                  Role                       @relation(fields: [roleId], references: [id])
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  auditLogs             AuditLog[]
+  loginHistory          LoginHistory[]
+  refreshTokens         RefreshToken[]
+  domainScans           DomainScanHistory[]
+  notifications         AppNotificationRecipient[]
+  apiTokens             ApiToken[]
+  acknowledgedIncidents Incident[]                 @relation("IncidentAcknowledgedBy")
 
   @@map("users")
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([token])
@@ -70,7 +71,7 @@ model AuditLog {
 }
 
 model AppNotification {
-  id         String                       @id @default(cuid())
+  id         String                     @id @default(cuid())
   type       AppNotificationType
   severity   AppNotificationSeverity
   title      String
@@ -79,7 +80,7 @@ model AppNotification {
   entity     String?
   entityId   String?
   metadata   Json?
-  createdAt  DateTime                     @default(now())
+  createdAt  DateTime                   @default(now())
   recipients AppNotificationRecipient[]
 
   @@index([type, createdAt])
@@ -145,21 +146,26 @@ enum LoginStatus {
 // ─── Monitoring ───────────────────────────────────────────────
 
 model Monitor {
-  id          String        @id @default(cuid())
-  name        String
-  type        MonitorType
-  config      Json          // host/url/port/credentials ฯลฯ
-  credentialId String?
-  credential  Credential?   @relation(fields: [credentialId], references: [id], onDelete: SetNull)
-  interval    Int           @default(60) // วินาที
-  enabled     Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  results     MonitorResult[]
-  deviceMetrics DeviceMetricSample[]
-  groups      MonitorGroupMember[]
-  alertRules  AlertRule[]
-  incidents   Incident[]
+  id                   String               @id @default(cuid())
+  name                 String
+  type                 MonitorType
+  config               Json // host/url/port/credentials ฯลฯ
+  credentialId         String?
+  credential           Credential?          @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  interval             Int                  @default(60) // วินาที
+  enabled              Boolean              @default(true)
+  activeWindowEnabled  Boolean              @default(false)
+  activeWindowDays     Json?
+  activeWindowFrom     String?
+  activeWindowTo       String?
+  activeWindowTimezone String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  results              MonitorResult[]
+  deviceMetrics        DeviceMetricSample[]
+  groups               MonitorGroupMember[]
+  alertRules           AlertRule[]
+  incidents            Incident[]
 
   @@index([credentialId])
   @@index([type, enabled])
@@ -185,7 +191,7 @@ model MonitorResult {
   status         MonitorStatus
   responseTimeMs Int?
   message        String?
-  metadata       Json?         // raw metrics เพิ่มเติม
+  metadata       Json? // raw metrics เพิ่มเติม
   checkedAt      DateTime      @default(now())
 
   @@index([monitorId, checkedAt])
@@ -223,23 +229,23 @@ enum DeviceMetricGroup {
 }
 
 model MonitorGroup {
-  id          String             @id @default(cuid())
-  name        String             @unique
+  id          String               @id @default(cuid())
+  name        String               @unique
   description String?
   color       String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   monitors    MonitorGroupMember[]
 
   @@map("monitor_groups")
 }
 
 model MonitorGroupMember {
-  groupId    String
-  monitorId  String
-  group      MonitorGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  monitor    Monitor      @relation(fields: [monitorId], references: [id], onDelete: Cascade)
-  createdAt  DateTime     @default(now())
+  groupId   String
+  monitorId String
+  group     MonitorGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  monitor   Monitor      @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
 
   @@id([groupId, monitorId])
   @@index([monitorId])
@@ -247,16 +253,16 @@ model MonitorGroupMember {
 }
 
 model Credential {
-  id          String         @id @default(cuid())
-  name        String
-  type        CredentialType
-  username    String?
-  secret      String
-  notes       String?
-  metadata    Json?
-  monitors    Monitor[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id        String         @id @default(cuid())
+  name      String
+  type      CredentialType
+  username  String?
+  secret    String
+  notes     String?
+  metadata  Json?
+  monitors  Monitor[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
   @@index([type, createdAt])
   @@map("credentials")
@@ -267,20 +273,21 @@ enum CredentialType {
   USERNAME_PASSWORD
   API_TOKEN
   SSH_KEY
+  CLOUDFLARE_ACCESS
 }
 
 model AlertRule {
-  id          String             @id @default(cuid())
-  monitorId   String
-  monitor     Monitor            @relation(fields: [monitorId], references: [id], onDelete: Cascade)
-  metric      String             // "status" | "response_time"
-  operator    AlertOperator
-  threshold   Float
-  severity    AlertSeverity
-  enabled     Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  channels    AlertRuleChannel[]
-  incidents   Incident[]
+  id        String             @id @default(cuid())
+  monitorId String
+  monitor   Monitor            @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  metric    String // "status" | "response_time"
+  operator  AlertOperator
+  threshold Float
+  severity  AlertSeverity
+  enabled   Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  channels  AlertRuleChannel[]
+  incidents Incident[]
 
   @@map("alert_rules")
 }
@@ -302,7 +309,7 @@ model NotificationChannel {
   id        String             @id @default(cuid())
   name      String
   type      ChannelType
-  config    Json               // token/webhookUrl/smtp — เข้ารหัสก่อนเก็บ
+  config    Json // token/webhookUrl/smtp — เข้ารหัสก่อนเก็บ
   enabled   Boolean            @default(true)
   createdAt DateTime           @default(now())
   rules     AlertRuleChannel[]
@@ -330,23 +337,28 @@ model AlertRuleChannel {
 }
 
 model Incident {
-  id          String         @id @default(cuid())
-  monitorId   String
-  monitor     Monitor        @relation(fields: [monitorId], references: [id], onDelete: Cascade)
-  alertRuleId String?
-  alertRule   AlertRule?     @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
-  status      IncidentStatus @default(OPEN)
-  message     String?
-  startedAt   DateTime       @default(now())
-  resolvedAt  DateTime?
+  id               String         @id @default(cuid())
+  monitorId        String
+  monitor          Monitor        @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  alertRuleId      String?
+  alertRule        AlertRule?     @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
+  status           IncidentStatus @default(OPEN)
+  message          String?
+  startedAt        DateTime       @default(now())
+  resolvedAt       DateTime?
+  acknowledgedById String?
+  acknowledgedBy   User?          @relation("IncidentAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt   DateTime?
 
   @@index([monitorId, status])
   @@index([status, startedAt])
+  @@index([acknowledgedById])
   @@map("incidents")
 }
 
 enum IncidentStatus {
   OPEN
+  ACKNOWLEDGED
   RESOLVED
 }
 
@@ -404,7 +416,7 @@ model ApiToken {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   tokenHash  String    @unique
-  prefix     String    // "mh_" + first 8 hex chars — แสดงแทน token จริง
+  prefix     String // "mh_" + first 8 hex chars — แสดงแทน token จริง
   expiresAt  DateTime?
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -412,4 +424,24 @@ model ApiToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("api_tokens")
+}
+
+model Fail2BanEvent {
+  id        String           @id @default(cuid())
+  ip        String
+  action    Fail2BanAction
+  jail      String
+  timestamp DateTime
+  failures  Int
+  createdAt DateTime         @default(now())
+
+  @@index([ip, createdAt])
+  @@index([action, createdAt])
+  @@index([jail, createdAt])
+  @@map("fail2ban_events")
+}
+
+enum Fail2BanAction {
+  BAN
+  UNBAN
 }

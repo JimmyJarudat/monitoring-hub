@@ -33,7 +33,7 @@ type MonitorResult = {
 
 type ActiveIncident = {
   id: string;
-  status: "OPEN" | "RESOLVED";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
@@ -86,7 +86,7 @@ type MonitorSummary = {
 
 type IncidentRow = {
   id: string;
-  status: "OPEN" | "RESOLVED";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;

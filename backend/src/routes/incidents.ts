@@ -5,7 +5,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
 
-type IncidentStatusFilter = "OPEN" | "RESOLVED";
+type IncidentStatusFilter = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type CheckedAtFilter = {
   gte?: Date;
   lte?: Date;
@@ -75,6 +75,13 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
               enabled: true,
             },
           },
+          acknowledgedBy: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          },
         },
       });
 
@@ -85,7 +92,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
           counts[incident.status] += 1;
           return counts;
         },
-        { OPEN: 0, RESOLVED: 0 } as Record<IncidentStatusFilter, number>,
+        { OPEN: 0, ACKNOWLEDGED: 0, RESOLVED: 0 } as Record<IncidentStatusFilter, number>,
       );
 
       return ok({
@@ -102,7 +109,7 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 200 })),
         from: t.Optional(t.String()),
         to: t.Optional(t.String()),
-        status: t.Optional(t.Union([t.Literal("OPEN"), t.Literal("RESOLVED")])),
+        status: t.Optional(t.Union([t.Literal("OPEN"), t.Literal("ACKNOWLEDGED"), t.Literal("RESOLVED")])),
         monitorId: t.Optional(t.String()),
         groupId: t.Optional(t.String()),
         type: t.Optional(
@@ -138,6 +145,10 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
       const data: Prisma.IncidentUpdateInput = {
         status: body.status,
         resolvedAt: body.status === "RESOLVED" ? new Date() : null,
+        acknowledgedAt: body.status === "ACKNOWLEDGED" ? (existing.acknowledgedAt ?? new Date()) : null,
+        acknowledgedBy: body.status === "ACKNOWLEDGED"
+          ? { connect: { id: currentUser.id } }
+          : { disconnect: true },
       };
 
       if (body.message !== undefined) {
@@ -168,6 +179,13 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
               enabled: true,
             },
           },
+          acknowledgedBy: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          },
         },
       });
 
@@ -176,9 +194,72 @@ export const incidentRoutes = new Elysia({ prefix: "/incidents" })
     {
       params: t.Object({ id: t.String() }),
       body: t.Object({
-        status: t.Union([t.Literal("OPEN"), t.Literal("RESOLVED")]),
+        status: t.Union([t.Literal("OPEN"), t.Literal("ACKNOWLEDGED"), t.Literal("RESOLVED")]),
         message: t.Optional(t.String()),
       }),
+    },
+  )
+  .patch(
+    "/:id/acknowledge",
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const existing = await prisma.incident.findUnique({
+        where: { id: params.id },
+      });
+
+      if (!existing) {
+        set.status = 404;
+        return fail("Incident not found.");
+      }
+
+      if (existing.status === "RESOLVED") {
+        set.status = 400;
+        return fail("Resolved incidents cannot be acknowledged.");
+      }
+
+      const incident = await prisma.incident.update({
+        where: { id: params.id },
+        data: {
+          status: "ACKNOWLEDGED",
+          acknowledgedAt: existing.acknowledgedAt ?? new Date(),
+          acknowledgedBy: { connect: { id: currentUser.id } },
+        },
+        include: {
+          monitor: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              enabled: true,
+              interval: true,
+              config: true,
+            },
+          },
+          alertRule: {
+            select: {
+              id: true,
+              metric: true,
+              operator: true,
+              threshold: true,
+              severity: true,
+              enabled: true,
+            },
+          },
+          acknowledgedBy: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return ok(incident);
+    },
+    {
+      params: t.Object({ id: t.String() }),
     },
   )
   .delete(

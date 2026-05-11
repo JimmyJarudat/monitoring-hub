@@ -1,6 +1,7 @@
 import * as snmp from "net-snmp";
 import type { DeviceMetricSample } from "./metric.types";
 import { collectInterfaceMetrics, snmpGet, snmpVersion } from "./snmp.shared";
+import type { PrinterConfig } from "./printer.Checker";
 
 const SYS_OIDS = {
   sysDescr: "1.3.6.1.2.1.1.1.0",
@@ -15,6 +16,9 @@ export interface SnmpConfig {
   version?: "1" | "2c";
   timeoutMs?: number;
   oids?: string[];
+  printerPreset?: PrinterConfig["printerPreset"];
+  tonerAlertThreshold?: number;
+  paperAlertThreshold?: number;
 }
 
 export interface CheckResult {
@@ -34,6 +38,20 @@ const formatUptime = (timeticks: number) => {
 };
 
 export async function snmpCheck(config: SnmpConfig): Promise<CheckResult> {
+  if (config.printerPreset) {
+    const { printerCheck } = await import("./printer.Checker");
+    return printerCheck({
+      host: config.host,
+      port: config.port,
+      community: config.community,
+      version: config.version,
+      timeoutMs: config.timeoutMs,
+      printerPreset: config.printerPreset,
+      tonerAlertThreshold: config.tonerAlertThreshold,
+      paperAlertThreshold: config.paperAlertThreshold,
+    });
+  }
+
   const timeout = config.timeoutMs ?? 5000;
   const start = Date.now();
   const targetOids = config.oids?.length

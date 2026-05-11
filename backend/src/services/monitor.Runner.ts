@@ -1,5 +1,5 @@
 import type { AlertRule, Credential, Monitor } from "../generated/prisma/client";
-import type { MonitorStatus, MonitorType } from "../generated/prisma/enums";
+import type { IncidentStatus, MonitorStatus, MonitorType } from "../generated/prisma/enums";
 import type { Prisma } from "../generated/prisma/client";
 import { decryptCredentialSecret } from "../lib/credentialSecret";
 import prisma from "../lib/prisma";
@@ -49,9 +49,65 @@ const isConfigObject = (value: unknown): value is Prisma.InputJsonObject => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const getZonedDayAndTime = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(date);
+  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "Sun";
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+  return {
+    day: dayMap[weekday] ?? 0,
+    time: `${hour}:${minute}`,
+  };
+};
+
+const isWithinTimeRange = (time: string, from: string, to: string) => {
+  if (from <= to) return time >= from && time <= to;
+  return time >= from || time <= to;
+};
+
+const isWithinActiveWindowDays = (days: number[], day: number, time: string, from: string, to: string) => {
+  if (from <= to) return days.includes(day) && isWithinTimeRange(time, from, to);
+
+  if (time >= from) return days.includes(day);
+  if (time <= to) return days.includes((day + 6) % 7);
+
+  return false;
+};
+
+const parseActiveWindowDays = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6);
+};
+
+const isInsideActiveWindow = (monitor: Monitor, now = new Date()) => {
+  if (!monitor.activeWindowEnabled) return true;
+
+  const days = parseActiveWindowDays(monitor.activeWindowDays);
+  const from = monitor.activeWindowFrom;
+  const to = monitor.activeWindowTo;
+  const timeZone = monitor.activeWindowTimezone || "Asia/Bangkok";
+
+  if (!days.length || !from || !to || !TIME_RE.test(from) || !TIME_RE.test(to)) return false;
+
+  const current = getZonedDayAndTime(now, timeZone);
+  return isWithinActiveWindowDays(days, current.day, current.time, from, to);
+};
+
 const STATUS_INCIDENT_PREFIX = "[STATUS]";
 const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
 const RULE_INCIDENT_PREFIX = "[RULE]";
+const ACTIVE_INCIDENT_STATUSES: IncidentStatus[] = ["OPEN", "ACKNOWLEDGED"];
 const INCIDENT_ESCALATION_ACTION = "INCIDENT_ESCALATION_SENT";
 const INCIDENT_REMINDER_ACTION = "INCIDENT_REMINDER_SENT";
 const ESCALATION_LEVELS = [
@@ -340,6 +396,37 @@ const resolveConfigWithCredential = (
   return config;
 };
 
+const resolveDockerAccessCredential = async (config: Prisma.InputJsonObject) => {
+  const cfAccessCredentialId =
+    typeof config.cfAccessCredentialId === "string" && config.cfAccessCredentialId.trim()
+      ? config.cfAccessCredentialId
+      : null;
+
+  if (!cfAccessCredentialId) return config;
+
+  const credential = await prisma.credential.findUnique({
+    where: { id: cfAccessCredentialId },
+  });
+
+  if (!credential) {
+    throw new Error("The linked Cloudflare Access credential has been deleted or no longer exists");
+  }
+
+  if ((credential.type as string) !== "CLOUDFLARE_ACCESS") {
+    throw new Error("The linked Cloudflare Access credential has the wrong type");
+  }
+
+  if (!credential.username?.trim()) {
+    throw new Error("The linked Cloudflare Access credential is missing Client ID");
+  }
+
+  return {
+    ...config,
+    cfAccessClientId: credential.username,
+    cfAccessClientSecret: decryptCredentialSecret(credential.secret),
+  } satisfies Prisma.InputJsonObject;
+};
+
 const runChecker = async (
   type: MonitorType,
   config: Prisma.InputJsonObject,
@@ -379,7 +466,7 @@ const reconcileIncident = async (
   const openStatusIncident = await prisma.incident.findFirst({
     where: {
       monitorId: monitor.id,
-      status: "OPEN",
+      status: { in: ACTIVE_INCIDENT_STATUSES },
       message: {
         startsWith: STATUS_INCIDENT_PREFIX,
       },
@@ -464,7 +551,7 @@ const reconcileAlertRuleIncidents = async (monitor: Monitor, result: RuleEvaluat
         where: {
           monitorId: monitor.id,
           alertRuleId: rule.id,
-          status: "OPEN",
+          status: { in: ACTIVE_INCIDENT_STATUSES },
         },
         orderBy: { startedAt: "desc" },
       });
@@ -594,7 +681,7 @@ const reconcileThresholdIncident = async (
   const openThresholdIncident = await prisma.incident.findFirst({
     where: {
       monitorId: monitor.id,
-      status: "OPEN",
+      status: { in: ACTIVE_INCIDENT_STATUSES },
       message: {
         startsWith: THRESHOLD_INCIDENT_PREFIX,
       },
@@ -658,6 +745,11 @@ const reconcileThresholdIncident = async (
 };
 
 export const runMonitorCheck = async (monitor: Monitor) => {
+  if (!isInsideActiveWindow(monitor)) {
+    logger.info("monitor", `skipped outside active window: ${monitor.id}`, { monitorName: monitor.name });
+    return null;
+  }
+
   if (!isConfigObject(monitor.config)) {
     const createdResult = await prisma.monitorResult.create({
       data: {
@@ -704,12 +796,15 @@ export const runMonitorCheck = async (monitor: Monitor) => {
 
   try {
     resolvedConfig = resolveConfigWithCredential(monitor.type, monitor.config, credential);
-  } catch {
+    if (monitor.type === "DOCKER") {
+      resolvedConfig = await resolveDockerAccessCredential(resolvedConfig);
+    }
+  } catch (error) {
     const createdResult = await prisma.monitorResult.create({
       data: {
         monitorId: monitor.id,
         status: "DOWN",
-        message: "Failed to decrypt the linked credential",
+        message: error instanceof Error ? error.message : "Failed to resolve linked credential",
       },
     });
 
@@ -791,6 +886,10 @@ const shouldRun = (monitor: Monitor, now: number) => {
 
 const checkDueMonitor = async (monitor: Monitor, now: number) => {
   if (inFlight.has(monitor.id) || !shouldRun(monitor, now)) {
+    return;
+  }
+
+  if (!isInsideActiveWindow(monitor, new Date(now))) {
     return;
   }
 

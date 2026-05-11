@@ -30,8 +30,8 @@ type MonitorType =
   | "SYSTEM"
   | "DOCKER"
   | "DATABASE";
-type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY";
-type IncidentStatus = "OPEN" | "RESOLVED";
+type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
+type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
 type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
 type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM";
@@ -80,6 +80,8 @@ type Incident = {
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: { id: string; username: string; email: string } | null;
 };
 
 type MonitorDetail = {
@@ -94,12 +96,25 @@ type MonitorDetail = {
   config: Record<string, unknown>;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[] | null;
+  activeWindowFrom: string | null;
+  activeWindowTo: string | null;
+  activeWindowTimezone: string | null;
   results: MonitorResult[];
   hasMoreResults: boolean;
   alertRules: AlertRule[];
   incidents: Incident[];
   createdAt: string;
   updatedAt: string;
+};
+
+type PrinterInfo = {
+  printerStatus?: number;
+  printerStatusLabel?: string;
+  errorBits?: string[];
+  toners?: Array<{ name: string; level: number; max: number; percent: number | null }>;
+  papers?: Array<{ name: string; level: number; max: number; percent: number | null }>;
 };
 
 type DeviceMetadata = {
@@ -167,6 +182,11 @@ type EditForm = {
   type: MonitorType;
   interval: string;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[];
+  activeWindowFrom: string;
+  activeWindowTo: string;
+  activeWindowTimezone: string;
   configText: string;
 };
 type ThresholdForm = {
@@ -199,6 +219,27 @@ const timeRangeOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
   { labelKey: "monitorDetail.rangeWeek", value: "7d" },
   { labelKey: "monitorDetail.rangeMonth", value: "30d" },
   { labelKey: "monitorDetail.rangeCustom", value: "custom" },
+];
+
+const ACTIVE_WINDOW_DAYS = [
+  { value: 1, key: "common.days.mon" },
+  { value: 2, key: "common.days.tue" },
+  { value: 3, key: "common.days.wed" },
+  { value: 4, key: "common.days.thu" },
+  { value: 5, key: "common.days.fri" },
+  { value: 6, key: "common.days.sat" },
+  { value: 0, key: "common.days.sun" },
+];
+
+const ACTIVE_WINDOW_TIMEZONES = [
+  "Asia/Bangkok",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Ho_Chi_Minh",
+  "Asia/Jakarta",
+  "Europe/London",
+  "America/New_York",
 ];
 
 const deviceAnalysisOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
@@ -238,6 +279,7 @@ const statusStyles: Record<MonitorStatus | "PENDING" | "DISABLED", string> = {
 
 const incidentStyles: Record<IncidentStatus, string> = {
   OPEN: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  ACKNOWLEDGED: "bg-amber-50 text-amber-700 ring-amber-600/20",
   RESOLVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 
@@ -266,11 +308,12 @@ const statusPriority: Record<MonitorStatus, number> = {
   UP: 1,
 };
 
-const credentialTypeLabels: Record<CredentialType, string> = {
-  SNMP_COMMUNITY: "SNMP Community",
-  USERNAME_PASSWORD: "Username / Password",
-  API_TOKEN: "API Token",
-  SSH_KEY: "SSH Key",
+const credentialTypeLabelKeys: Record<CredentialType, string> = {
+  SNMP_COMMUNITY: "credentials.typeSnmpCommunity",
+  USERNAME_PASSWORD: "credentials.typeUsernamePassword",
+  API_TOKEN: "credentials.typeApiToken",
+  SSH_KEY: "credentials.typeSshKey",
+  CLOUDFLARE_ACCESS: "credentials.typeCloudflareAccess",
 };
 
 const channelTypeLabels: Record<ChannelType, string> = {
@@ -583,6 +626,11 @@ const MonitorDetailPage = () => {
     type: "HTTP",
     interval: "60",
     enabled: true,
+    activeWindowEnabled: false,
+    activeWindowDays: [1, 2, 3, 4, 5],
+    activeWindowFrom: "08:00",
+    activeWindowTo: "17:00",
+    activeWindowTimezone: "Asia/Bangkok",
     configText: "{}",
   });
   const [metricSeries, setMetricSeries] = useState<DeviceMetricSeries[]>([]);
@@ -827,7 +875,11 @@ const MonitorDetailPage = () => {
   }, [locale, monitor]);
 
   const isDeviceMonitor = monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
+  const isPrinterMonitor = monitor?.type === "SNMP" && Boolean(monitor?.config?.printerPreset);
   const latestMetadata = (latestResult?.metadata as DeviceMetadata | null) ?? null;
+  const latestPrinterInfo = isPrinterMonitor
+    ? (latestResult?.metadata?.printer as PrinterInfo | null | undefined) ?? null
+    : null;
   const fallbackCredentialConfig = monitor?.config ?? {};
   const parsedEditConfig = useMemo(() => {
     try {
@@ -1115,11 +1167,27 @@ const MonitorDetailPage = () => {
       type: monitor.type,
       interval: String(monitor.interval),
       enabled: monitor.enabled,
+      activeWindowEnabled: monitor.activeWindowEnabled,
+      activeWindowDays: Array.isArray(monitor.activeWindowDays) && monitor.activeWindowDays.length
+        ? monitor.activeWindowDays
+        : [1, 2, 3, 4, 5],
+      activeWindowFrom: monitor.activeWindowFrom ?? "08:00",
+      activeWindowTo: monitor.activeWindowTo ?? "17:00",
+      activeWindowTimezone: monitor.activeWindowTimezone ?? "Asia/Bangkok",
       configText: toConfigText(monitor.config),
     });
     setSelectedEditCredentialId(monitor.credential?.id ?? "");
     setThresholdForm(parseThresholdConfig(monitor.config));
     setIsEditing(true);
+  };
+
+  const toggleEditActiveWindowDay = (day: number) => {
+    setEditForm((current) => {
+      const days = current.activeWindowDays.includes(day)
+        ? current.activeWindowDays.filter((item) => item !== day)
+        : [...current.activeWindowDays, day].sort((a, b) => a - b);
+      return { ...current, activeWindowDays: days };
+    });
   };
 
   const handleCheckNow = async () => {
@@ -1128,14 +1196,18 @@ const MonitorDetailPage = () => {
     setIsBusy(true);
 
     try {
-      const response = await api.post<ApiResponse<MonitorResult>>(`/monitors/${monitor.id}/check`);
+      const response = await api.post<ApiResponse<MonitorResult | null>>(`/monitors/${monitor.id}/check`);
 
       if (!response.data.success) {
         toast.error(response.data.message);
         return;
       }
 
-      toast.success(t("monitorDetail.checkSuccess", { name: monitor.name }));
+      if (response.data.data === null) {
+        toast.info("Skipped because monitor is outside active window");
+      } else {
+        toast.success(t("monitorDetail.checkSuccess", { name: monitor.name }));
+      }
       await fetchMonitor();
     } catch {
       toast.error(t("monitorDetail.checkError"));
@@ -1163,6 +1235,32 @@ const MonitorDetailPage = () => {
       await fetchMonitor();
     } catch {
       toast.error(t("monitorDetail.toggleError"));
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleSetIncidentStatus = async (incident: Incident, status: IncidentStatus) => {
+    setIsBusy(true);
+
+    try {
+      const response = await api.patch<ApiResponse<Incident>>(`/incidents/${incident.id}`, { status });
+
+      if (!response.data.success) {
+        toast.error(response.data.message);
+        return;
+      }
+
+      toast.success(
+        status === "RESOLVED"
+          ? "Incident resolved"
+          : status === "ACKNOWLEDGED"
+            ? "Incident acknowledged"
+            : "Incident reopened",
+      );
+      await fetchMonitor();
+    } catch {
+      toast.error("Failed to update incident");
     } finally {
       setIsBusy(false);
     }
@@ -1237,6 +1335,11 @@ const MonitorDetailPage = () => {
         type: editForm.type,
         interval,
         enabled: editForm.enabled,
+        activeWindowEnabled: editForm.activeWindowEnabled,
+        activeWindowDays: editForm.activeWindowDays,
+        activeWindowFrom: editForm.activeWindowFrom,
+        activeWindowTo: editForm.activeWindowTo,
+        activeWindowTimezone: editForm.activeWindowTimezone,
         config,
         credentialId: selectedEditCredentialId,
       });
@@ -1441,6 +1544,13 @@ const MonitorDetailPage = () => {
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             {t("monitorDetail.targetSummary", { type: monitor.type, target: getTarget(monitor), interval: monitor.interval })}
           </p>
+          {monitor.activeWindowEnabled ? (
+            <div className="mt-2">
+              <span className="inline-flex rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700 ring-1 ring-inset ring-cyan-600/20">
+                {t("activeWindow.badge")}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -1539,9 +1649,101 @@ const MonitorDetailPage = () => {
         </div>
       </section>
 
+      {isPrinterMonitor ? (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.printerStatus")}</h2>
+          <p className="mt-1 text-xs text-slate-500">{t("monitorDetail.printerStatusDesc")}</p>
+
+          {latestPrinterInfo ? (
+            <div className="mt-4 space-y-5">
+              {latestPrinterInfo.printerStatusLabel !== undefined ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={[
+                    "inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
+                    latestPrinterInfo.printerStatus === 5
+                      ? "bg-rose-50 text-rose-700 ring-rose-600/20"
+                      : latestPrinterInfo.printerStatus === 4
+                        ? "bg-cyan-50 text-cyan-700 ring-cyan-600/20"
+                        : "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+                  ].join(" ")}>
+                    {latestPrinterInfo.printerStatusLabel}
+                  </span>
+                  {(latestPrinterInfo.errorBits ?? []).map((bit) => (
+                    <span key={bit} className="inline-flex rounded-full bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20">
+                      {bit}
+                    </span>
+                  ))}
+                  {(latestPrinterInfo.errorBits ?? []).length === 0 && latestPrinterInfo.printerStatus !== 5 ? (
+                    <span className="text-xs text-slate-400">{t("monitorDetail.printerNoErrors")}</span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {(latestPrinterInfo.toners ?? []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("monitorDetail.printerToner")}</p>
+                  <div className="space-y-2">
+                    {(latestPrinterInfo.toners ?? []).map((toner) => {
+                      const pct = toner.percent ?? 0;
+                      const isLow = toner.percent !== null && pct < 15;
+                      return (
+                        <div key={toner.name}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700">{toner.name}</span>
+                            <span className={isLow ? "font-semibold text-rose-600" : "text-slate-500"}>
+                              {toner.percent !== null ? `${pct}%` : `${toner.level} / unknown`}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-2 rounded-full transition-all ${isLow ? "bg-rose-500" : "bg-slate-700"}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {(latestPrinterInfo.papers ?? []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("monitorDetail.printerPaper")}</p>
+                  <div className="space-y-2">
+                    {(latestPrinterInfo.papers ?? []).map((paper) => {
+                      const pct = paper.percent ?? 0;
+                      const isLow = paper.percent !== null && pct < 10;
+                      return (
+                        <div key={paper.name}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700">{paper.name}</span>
+                            <span className={isLow ? "font-semibold text-amber-600" : "text-slate-500"}>
+                              {paper.percent !== null ? `${pct}%` : `${paper.level} sheets`}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-2 rounded-full transition-all ${isLow ? "bg-amber-500" : "bg-cyan-500"}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400">{t("monitorDetail.printerNoData")}</p>
+          )}
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
-          {isDeviceMonitor ? (
+          {isDeviceMonitor && !isPrinterMonitor ? (
             <>
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -2178,17 +2380,60 @@ const MonitorDetailPage = () => {
                 <div className="px-4 py-8 text-center text-sm text-slate-500">{t("monitorDetail.noIncidents")}</div>
               ) : null}
               {monitor.incidents.map((incident) => (
-                <div className="grid gap-2 px-4 py-3 md:grid-cols-[120px_1fr_180px]" key={incident.id}>
+                <div className="grid gap-2 px-4 py-3 md:grid-cols-[120px_1fr_180px_auto]" key={incident.id}>
                   <span
                     className={`w-fit rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset ${incidentStyles[incident.status]}`}
                   >
-                    {incident.status}
+                    {t(`incidents.statusLabels.${incident.status}`)}
                   </span>
-                  <div className="text-sm text-slate-700">{incident.message ?? "-"}</div>
+                  <div className="text-sm text-slate-700">
+                    {incident.message ?? "-"}
+                    {incident.status === "ACKNOWLEDGED" ? (
+                      <div className="mt-1 text-xs text-amber-700">
+                        {t("incidents.acknowledgedBy", {
+                          user: incident.acknowledgedBy?.username ?? "-",
+                          time: formatDateTime(incident.acknowledgedAt, locale),
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="text-xs text-slate-500">
                     {formatDateTime(incident.startedAt, locale)}
                     {incident.resolvedAt ? ` - ${formatDateTime(incident.resolvedAt, locale)}` : ""}
                   </div>
+                  {isAdmin ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {incident.status === "OPEN" ? (
+                        <button
+                          className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "ACKNOWLEDGED")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.acknowledge")}
+                        </button>
+                      ) : null}
+                      {incident.status !== "RESOLVED" ? (
+                        <button
+                          className="rounded-md border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "RESOLVED")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.resolve")}
+                        </button>
+                      ) : (
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleSetIncidentStatus(incident, "OPEN")}
+                          disabled={isBusy}
+                        >
+                          {t("incidents.reopen")}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -2408,7 +2653,7 @@ const MonitorDetailPage = () => {
                         <option value="">{t("monitorDetail.noLinkedCredential")}</option>
                         {availableCredentials.map((credential) => (
                           <option key={credential.id} value={credential.id}>
-                            {credential.name} · {credentialTypeLabels[credential.type]}
+                            {credential.name} · {t(credentialTypeLabelKeys[credential.type])}
                           </option>
                         ))}
                       </select>
@@ -2418,7 +2663,7 @@ const MonitorDetailPage = () => {
                       <div className="font-semibold">{t("monitorDetail.compatibleTypes")}</div>
                       <div className="mt-1">
                         {compatibleCredentialTypes.length > 0
-                          ? compatibleCredentialTypes.map((type) => credentialTypeLabels[type]).join(", ")
+                          ? compatibleCredentialTypes.map((type) => t(credentialTypeLabelKeys[type])).join(", ")
                           : t("monitorDetail.noSharedCredentialNeeded")}
                       </div>
                     </div>
@@ -2442,6 +2687,103 @@ const MonitorDetailPage = () => {
                   />
                   <span className="text-sm font-medium text-slate-700">{t("common.enabled")}</span>
                 </label>
+
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                  <label className="flex items-center gap-3">
+                    <input
+                      checked={editForm.activeWindowEnabled}
+                      className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                      type="checkbox"
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          activeWindowEnabled: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm font-medium text-slate-700">{t("activeWindow.restrict")}</span>
+                  </label>
+
+                  {editForm.activeWindowEnabled ? (
+                    <div className="mt-4 grid gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-slate-700">{t("activeWindow.days")}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {ACTIVE_WINDOW_DAYS.map((day) => (
+                            <label
+                              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                              key={day.value}
+                            >
+                              <input
+                                checked={editForm.activeWindowDays.includes(day.value)}
+                                className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                                type="checkbox"
+                                onChange={() => toggleEditActiveWindowDay(day.value)}
+                              />
+                              {t(day.key)}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.from")}</span>
+                          <input
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            type="time"
+                            value={editForm.activeWindowFrom}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowFrom: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.to")}</span>
+                          <input
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            type="time"
+                            value={editForm.activeWindowTo}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowTo: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.timezone")}</span>
+                          <select
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            value={editForm.activeWindowTimezone}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowTimezone: event.target.value,
+                              }))
+                            }
+                          >
+                            {ACTIVE_WINDOW_TIMEZONES.map((timezone) => (
+                              <option key={timezone} value={timezone}>
+                                {timezone}
+                              </option>
+                            ))}
+                            {!ACTIVE_WINDOW_TIMEZONES.includes(editForm.activeWindowTimezone) ? (
+                              <option value={editForm.activeWindowTimezone}>
+                                {editForm.activeWindowTimezone}
+                              </option>
+                            ) : null}
+                          </select>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500">{t("activeWindow.note")}</p>
+                    </div>
+                  ) : null}
+                </div>
 
                 {editForm.type === "SYSTEM" || editForm.type === "SNMP" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">

@@ -91,6 +91,11 @@
 - [x] Resolve / Reopen / Delete incident
 - [x] Runner auto-create incident เมื่อ DOWN / DEGRADED
 - [x] Runner auto-resolve incident เมื่อกลับมา UP
+- [x] Incident Acknowledge — flow: Open → Acknowledged → Resolved
+- [x] Badge สี 3 state (🔴 Open / 🟡 Acknowledged / 🟢 Resolved)
+- [x] Filter tab: All / Open / Acknowledged / Resolved
+- [x] Runner skip escalation/reminder เมื่อ incident ถูก acknowledge แล้ว
+- [x] แสดง acknowledged by/at แม้ status ปัจจุบันจะเป็น Resolved แล้ว
 
 ### Inventory / Organization
 - [x] Devices page route
@@ -199,8 +204,9 @@
 ---
 
 ## Remaining Known Gaps
-- [ ] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
-- [ ] Monitor Active Window — เช็คเฉพาะช่วงเวลาทำงานที่กำหนด (ดูรายละเอียดด้านล่าง)
+- [x] Dark mode — implement แล้ว ใช้งานได้
+- [x] Monitor Active Window — เสร็จแล้ว (commit: feat: add monitor active windows)
+- [x] Incident Acknowledge timeline — แสดง "acknowledged by / at" แม้ incident จะ resolved แล้ว
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
@@ -272,12 +278,12 @@ if (monitor.activeWindowEnabled) {
 
 ### Implementation order
 
-- [ ] Migration: เพิ่ม columns ใน Monitor table
-- [ ] Backend PATCH `/monitors/:id` รับและ validate active window fields
-- [ ] Runner: เพิ่ม active window check ก่อน runMonitorCheck
-- [ ] Frontend: เพิ่ม Active Window section ในฟอร์ม New/Edit Monitor
-- [ ] Frontend: แสดง badge "Active window" ใน monitor list/detail ถ้าเปิดใช้
-- [ ] i18n: เพิ่ม EN/TH keys สำหรับ Active Window UI
+- [x] Migration: เพิ่ม columns ใน Monitor table
+- [x] Backend PATCH `/monitors/:id` รับและ validate active window fields
+- [x] Runner: เพิ่ม active window check ก่อน runMonitorCheck
+- [x] Frontend: เพิ่ม Active Window section ในฟอร์ม New/Edit Monitor
+- [x] Frontend: แสดง badge "Active window" ใน monitor list/detail ถ้าเปิดใช้
+- [x] i18n: เพิ่ม EN/TH keys สำหรับ Active Window UI
 
 ## Next Recommended Work
 
