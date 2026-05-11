@@ -425,3 +425,23 @@ model ApiToken {
   @@index([tokenHash])
   @@map("api_tokens")
 }
+
+model Fail2BanEvent {
+  id        String           @id @default(cuid())
+  ip        String
+  action    Fail2BanAction
+  jail      String
+  timestamp DateTime
+  failures  Int
+  createdAt DateTime         @default(now())
+
+  @@index([ip, createdAt])
+  @@index([action, createdAt])
+  @@index([jail, createdAt])
+  @@map("fail2ban_events")
+}
+
+enum Fail2BanAction {
+  BAN
+  UNBAN
+}
