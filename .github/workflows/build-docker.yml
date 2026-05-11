@@ -133,14 +133,20 @@ jobs:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
           PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+          CF_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           STACK_CONTENT=$(curl -s -X GET "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}/file" \
-            -H "X-API-Key: ${PORTAINER_API_KEY}" | jq '.StackFileContent')
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            -H "CF-Access-Client-Id: ${CF_CLIENT_ID}" \
+            -H "CF-Access-Client-Secret: ${CF_CLIENT_SECRET}" | jq '.StackFileContent')
 
           echo "Stack fetched OK"
 
           RESPONSE=$(curl -s -X PUT "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID}" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            -H "CF-Access-Client-Id: ${CF_CLIENT_ID}" \
+            -H "CF-Access-Client-Secret: ${CF_CLIENT_SECRET}" \
             -H "Content-Type: application/json" \
             --data-binary "{\"stackFileContent\": ${STACK_CONTENT}, \"pullImage\": true, \"prune\": true}")
 
