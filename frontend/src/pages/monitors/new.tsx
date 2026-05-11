@@ -39,6 +39,9 @@ type FormState = {
   snmpVersion: "1" | "2c";
   snmpPort: string;
   snmpOids: string;
+  snmpPreset: "none" | "printer_status" | "printer_toner" | "printer_paper" | "printer_full";
+  snmpTonerThreshold: string;
+  snmpPaperThreshold: string;
   dnsRecordType: string;
   dnsExpectedValue: string;
   dnsServer: string;
@@ -184,6 +187,9 @@ const initialForm: FormState = {
   snmpVersion: "2c",
   snmpPort: "161",
   snmpOids: "",
+  snmpPreset: "none",
+  snmpTonerThreshold: "15",
+  snmpPaperThreshold: "10",
   httpFollowRedirect: true,
   httpAuthType: "none",
   httpAuthUsername: "",
@@ -287,12 +293,22 @@ const buildConfig = (form: FormState) => {
   }
 
   if (form.type === "SNMP") {
+    const printerPresetMap: Record<string, string> = {
+      printer_status: "status",
+      printer_toner: "toner",
+      printer_paper: "paper",
+      printer_full: "full",
+    };
+    const printerPreset = printerPresetMap[form.snmpPreset];
     return compactConfig({
       host: form.host,
       port: toOptionalNumber(form.snmpPort),
       community: form.snmpCommunity,
       version: form.snmpVersion,
-      oids: form.snmpOids.trim() ? form.snmpOids.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+      oids: !printerPreset && form.snmpOids.trim() ? form.snmpOids.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+      printerPreset: printerPreset ?? undefined,
+      tonerAlertThreshold: printerPreset ? toOptionalNumber(form.snmpTonerThreshold) : undefined,
+      paperAlertThreshold: printerPreset ? toOptionalNumber(form.snmpPaperThreshold) : undefined,
       timeoutMs,
     });
   }
@@ -1096,14 +1112,67 @@ const AddMonitorPage = () => {
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.customOids")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
-                    <input
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.printerPreset")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
+                    <select
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                      value={form.snmpOids}
-                      onChange={(event) => updateField("snmpOids", event.target.value)}
-                      placeholder={t("newMonitor.customOidsPlaceholder")}
-                    />
+                      value={form.snmpPreset}
+                      onChange={(event) => updateField("snmpPreset", event.target.value as FormState["snmpPreset"])}
+                    >
+                      <option value="none">{t("newMonitor.printerPresetNone")}</option>
+                      <option value="printer_full">{t("newMonitor.printerPresetFull")}</option>
+                      <option value="printer_status">{t("newMonitor.printerPresetStatus")}</option>
+                      <option value="printer_toner">{t("newMonitor.printerPresetToner")}</option>
+                      <option value="printer_paper">{t("newMonitor.printerPresetPaper")}</option>
+                    </select>
                   </label>
+                  {form.snmpPreset !== "none" ? (
+                    <>
+                      {(form.snmpPreset === "printer_toner" || form.snmpPreset === "printer_full") ? (
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("newMonitor.tonerThreshold")}</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={form.snmpTonerThreshold}
+                              onChange={(event) => updateField("snmpTonerThreshold", event.target.value)}
+                              placeholder="15"
+                            />
+                            <span className="text-sm text-slate-500">%</span>
+                          </div>
+                        </label>
+                      ) : null}
+                      {(form.snmpPreset === "printer_paper" || form.snmpPreset === "printer_full") ? (
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("newMonitor.paperThreshold")}</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={form.snmpPaperThreshold}
+                              onChange={(event) => updateField("snmpPaperThreshold", event.target.value)}
+                              placeholder="10"
+                            />
+                            <span className="text-sm text-slate-500">%</span>
+                          </div>
+                        </label>
+                      ) : null}
+                    </>
+                  ) : (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">{t("newMonitor.customOids")} <span className="font-normal text-slate-400">({t("newMonitor.optional")})</span></span>
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={form.snmpOids}
+                        onChange={(event) => updateField("snmpOids", event.target.value)}
+                        placeholder={t("newMonitor.customOidsPlaceholder")}
+                      />
+                    </label>
+                  )}
                 </>
               ) : null}
 

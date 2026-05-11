@@ -109,6 +109,14 @@ type MonitorDetail = {
   updatedAt: string;
 };
 
+type PrinterInfo = {
+  printerStatus?: number;
+  printerStatusLabel?: string;
+  errorBits?: string[];
+  toners?: Array<{ name: string; level: number; max: number; percent: number | null }>;
+  papers?: Array<{ name: string; level: number; max: number; percent: number | null }>;
+};
+
 type DeviceMetadata = {
   host?: string;
   cpuUsedPct?: number;
@@ -867,7 +875,11 @@ const MonitorDetailPage = () => {
   }, [locale, monitor]);
 
   const isDeviceMonitor = monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
+  const isPrinterMonitor = monitor?.type === "SNMP" && Boolean(monitor?.config?.printerPreset);
   const latestMetadata = (latestResult?.metadata as DeviceMetadata | null) ?? null;
+  const latestPrinterInfo = isPrinterMonitor
+    ? (latestResult?.metadata?.printer as PrinterInfo | null | undefined) ?? null
+    : null;
   const fallbackCredentialConfig = monitor?.config ?? {};
   const parsedEditConfig = useMemo(() => {
     try {
@@ -1637,9 +1649,101 @@ const MonitorDetailPage = () => {
         </div>
       </section>
 
+      {isPrinterMonitor ? (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-950">{t("monitorDetail.printerStatus")}</h2>
+          <p className="mt-1 text-xs text-slate-500">{t("monitorDetail.printerStatusDesc")}</p>
+
+          {latestPrinterInfo ? (
+            <div className="mt-4 space-y-5">
+              {latestPrinterInfo.printerStatusLabel !== undefined ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={[
+                    "inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
+                    latestPrinterInfo.printerStatus === 5
+                      ? "bg-rose-50 text-rose-700 ring-rose-600/20"
+                      : latestPrinterInfo.printerStatus === 4
+                        ? "bg-cyan-50 text-cyan-700 ring-cyan-600/20"
+                        : "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+                  ].join(" ")}>
+                    {latestPrinterInfo.printerStatusLabel}
+                  </span>
+                  {(latestPrinterInfo.errorBits ?? []).map((bit) => (
+                    <span key={bit} className="inline-flex rounded-full bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20">
+                      {bit}
+                    </span>
+                  ))}
+                  {(latestPrinterInfo.errorBits ?? []).length === 0 && latestPrinterInfo.printerStatus !== 5 ? (
+                    <span className="text-xs text-slate-400">{t("monitorDetail.printerNoErrors")}</span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {(latestPrinterInfo.toners ?? []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("monitorDetail.printerToner")}</p>
+                  <div className="space-y-2">
+                    {(latestPrinterInfo.toners ?? []).map((toner) => {
+                      const pct = toner.percent ?? 0;
+                      const isLow = toner.percent !== null && pct < 15;
+                      return (
+                        <div key={toner.name}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700">{toner.name}</span>
+                            <span className={isLow ? "font-semibold text-rose-600" : "text-slate-500"}>
+                              {toner.percent !== null ? `${pct}%` : `${toner.level} / unknown`}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-2 rounded-full transition-all ${isLow ? "bg-rose-500" : "bg-slate-700"}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {(latestPrinterInfo.papers ?? []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("monitorDetail.printerPaper")}</p>
+                  <div className="space-y-2">
+                    {(latestPrinterInfo.papers ?? []).map((paper) => {
+                      const pct = paper.percent ?? 0;
+                      const isLow = paper.percent !== null && pct < 10;
+                      return (
+                        <div key={paper.name}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700">{paper.name}</span>
+                            <span className={isLow ? "font-semibold text-amber-600" : "text-slate-500"}>
+                              {paper.percent !== null ? `${pct}%` : `${paper.level} sheets`}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-2 rounded-full transition-all ${isLow ? "bg-amber-500" : "bg-cyan-500"}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400">{t("monitorDetail.printerNoData")}</p>
+          )}
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
-          {isDeviceMonitor ? (
+          {isDeviceMonitor && !isPrinterMonitor ? (
             <>
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
