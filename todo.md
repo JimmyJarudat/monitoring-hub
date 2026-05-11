@@ -204,6 +204,9 @@
 ---
 
 ## Remaining Known Gaps
+- [ ] Docker monitor: รองรับ external stack (lookup by name แทน numeric stackId) — URL รูปแบบ `/stacks/name?type=1&external=true` ยังเช็คไม่ได้ ต้องเพิ่ม `stackName` field และ `checkStackByName` ใน docker.Checker.ts
+
+
 - [x] Dark mode — implement แล้ว ใช้งานได้
 - [x] Monitor Active Window — เสร็จแล้ว (commit: feat: add monitor active windows)
 - [x] Incident Acknowledge timeline — แสดง "acknowledged by / at" แม้ incident จะ resolved แล้ว
