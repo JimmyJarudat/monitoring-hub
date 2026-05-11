@@ -811,7 +811,7 @@ const CredentialsPage = () => {
                 </span>
                 <textarea
                   className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  placeholder={editingCredential ? t("credentials.keepExistingPlaceholder") : t(secretField.placeholder)}
+                  placeholder={editingCredential ? t("credentials.keepExistingPlaceholder") : secretField.placeholder ? t(secretField.placeholder) : undefined}
                   value={form.secret}
                   onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))}
                 />
