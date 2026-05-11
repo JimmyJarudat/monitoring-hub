@@ -93,7 +93,25 @@
     "back": "ย้อนกลับ",
     "createdAt": "สร้างเมื่อ",
     "noData": "ไม่มีข้อมูล",
-    "notAvailable": "ไม่มีข้อมูล"
+    "notAvailable": "ไม่มีข้อมูล",
+    "days": {
+      "mon": "จ.",
+      "tue": "อ.",
+      "wed": "พ.",
+      "thu": "พฤ.",
+      "fri": "ศ.",
+      "sat": "ส.",
+      "sun": "อา."
+    }
+  },
+  "activeWindow": {
+    "restrict": "จำกัดการตรวจสอบตามช่วงเวลา",
+    "days": "วันที่เปิดตรวจสอบ",
+    "from": "เริ่ม",
+    "to": "ถึง",
+    "timezone": "Timezone",
+    "note": "นอกช่วงเวลานี้ monitor จะไม่รัน และจะไม่สร้างผลตรวจ incident หรือ notification",
+    "badge": "มีช่วงเวลา"
   },
   "dashboard": {
     "title": "แดชบอร์ด",

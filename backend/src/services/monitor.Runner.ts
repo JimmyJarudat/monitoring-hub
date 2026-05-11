@@ -49,6 +49,61 @@ const isConfigObject = (value: unknown): value is Prisma.InputJsonObject => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const getZonedDayAndTime = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(date);
+  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "Sun";
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+  return {
+    day: dayMap[weekday] ?? 0,
+    time: `${hour}:${minute}`,
+  };
+};
+
+const isWithinTimeRange = (time: string, from: string, to: string) => {
+  if (from <= to) return time >= from && time <= to;
+  return time >= from || time <= to;
+};
+
+const isWithinActiveWindowDays = (days: number[], day: number, time: string, from: string, to: string) => {
+  if (from <= to) return days.includes(day) && isWithinTimeRange(time, from, to);
+
+  if (time >= from) return days.includes(day);
+  if (time <= to) return days.includes((day + 6) % 7);
+
+  return false;
+};
+
+const parseActiveWindowDays = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6);
+};
+
+const isInsideActiveWindow = (monitor: Monitor, now = new Date()) => {
+  if (!monitor.activeWindowEnabled) return true;
+
+  const days = parseActiveWindowDays(monitor.activeWindowDays);
+  const from = monitor.activeWindowFrom;
+  const to = monitor.activeWindowTo;
+  const timeZone = monitor.activeWindowTimezone || "Asia/Bangkok";
+
+  if (!days.length || !from || !to || !TIME_RE.test(from) || !TIME_RE.test(to)) return false;
+
+  const current = getZonedDayAndTime(now, timeZone);
+  return isWithinActiveWindowDays(days, current.day, current.time, from, to);
+};
+
 const STATUS_INCIDENT_PREFIX = "[STATUS]";
 const THRESHOLD_INCIDENT_PREFIX = "[THRESHOLD]";
 const RULE_INCIDENT_PREFIX = "[RULE]";
@@ -689,6 +744,11 @@ const reconcileThresholdIncident = async (
 };
 
 export const runMonitorCheck = async (monitor: Monitor) => {
+  if (!isInsideActiveWindow(monitor)) {
+    logger.info("monitor", `skipped outside active window: ${monitor.id}`, { monitorName: monitor.name });
+    return null;
+  }
+
   if (!isConfigObject(monitor.config)) {
     const createdResult = await prisma.monitorResult.create({
       data: {
@@ -825,6 +885,10 @@ const shouldRun = (monitor: Monitor, now: number) => {
 
 const checkDueMonitor = async (monitor: Monitor, now: number) => {
   if (inFlight.has(monitor.id) || !shouldRun(monitor, now)) {
+    return;
+  }
+
+  if (!isInsideActiveWindow(monitor, new Date(now))) {
     return;
   }
 

@@ -200,7 +200,7 @@
 
 ## Remaining Known Gaps
 - [ ] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
-- [ ] Monitor Active Window — เช็คเฉพาะช่วงเวลาทำงานที่กำหนด (ดูรายละเอียดด้านล่าง)
+- [x] Monitor Active Window — เช็คเฉพาะช่วงเวลาทำงานที่กำหนด (ดูรายละเอียดด้านล่าง)
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context
 - [ ] Rollup summaries สำหรับ long-term charts
@@ -272,12 +272,12 @@ if (monitor.activeWindowEnabled) {
 
 ### Implementation order
 
-- [ ] Migration: เพิ่ม columns ใน Monitor table
-- [ ] Backend PATCH `/monitors/:id` รับและ validate active window fields
-- [ ] Runner: เพิ่ม active window check ก่อน runMonitorCheck
-- [ ] Frontend: เพิ่ม Active Window section ในฟอร์ม New/Edit Monitor
-- [ ] Frontend: แสดง badge "Active window" ใน monitor list/detail ถ้าเปิดใช้
-- [ ] i18n: เพิ่ม EN/TH keys สำหรับ Active Window UI
+- [x] Migration: เพิ่ม columns ใน Monitor table
+- [x] Backend PATCH `/monitors/:id` รับและ validate active window fields
+- [x] Runner: เพิ่ม active window check ก่อน runMonitorCheck
+- [x] Frontend: เพิ่ม Active Window section ในฟอร์ม New/Edit Monitor
+- [x] Frontend: แสดง badge "Active window" ใน monitor list/detail ถ้าเปิดใช้
+- [x] i18n: เพิ่ม EN/TH keys สำหรับ Active Window UI
 
 ## Next Recommended Work
 

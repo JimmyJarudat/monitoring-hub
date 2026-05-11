@@ -30,6 +30,13 @@ type CheckedAtFilter = {
 type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
 type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
+type ActiveWindowInput = {
+  activeWindowEnabled?: boolean;
+  activeWindowDays?: number[];
+  activeWindowFrom?: string | null;
+  activeWindowTo?: string | null;
+  activeWindowTimezone?: string | null;
+};
 
 const monitorBody = t.Object({
   name: t.String({ minLength: 1 }),
@@ -48,6 +55,11 @@ const monitorBody = t.Object({
   credentialId: t.Optional(t.String()),
   interval: t.Optional(t.Number({ minimum: 10 })),
   enabled: t.Optional(t.Boolean()),
+  activeWindowEnabled: t.Optional(t.Boolean()),
+  activeWindowDays: t.Optional(t.Array(t.Number({ minimum: 0, maximum: 6 }))),
+  activeWindowFrom: t.Optional(t.String()),
+  activeWindowTo: t.Optional(t.String()),
+  activeWindowTimezone: t.Optional(t.String()),
 });
 
 const alertRuleBody = t.Object({
@@ -61,6 +73,77 @@ const alertRuleBody = t.Object({
 
 const isMonitorConfig = (value: unknown): value is MonitorConfig => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const isValidTimeZone = (value: string) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeActiveWindowPatch = (
+  body: ActiveWindowInput,
+  existing?: ActiveWindowInput,
+) => {
+  const enabled = body.activeWindowEnabled ?? existing?.activeWindowEnabled ?? false;
+
+  if (!enabled) {
+    return {
+      activeWindowEnabled: false,
+      activeWindowDays: [],
+      activeWindowFrom: null,
+      activeWindowTo: null,
+      activeWindowTimezone: null,
+    };
+  }
+
+  const days = body.activeWindowDays ?? existing?.activeWindowDays ?? [];
+  const from = body.activeWindowFrom ?? existing?.activeWindowFrom ?? "";
+  const to = body.activeWindowTo ?? existing?.activeWindowTo ?? "";
+  const timezone = body.activeWindowTimezone ?? existing?.activeWindowTimezone ?? "Asia/Bangkok";
+
+  return {
+    activeWindowEnabled: true,
+    activeWindowDays: days,
+    activeWindowFrom: from,
+    activeWindowTo: to,
+    activeWindowTimezone: timezone,
+  };
+};
+
+const validateActiveWindow = (window: ReturnType<typeof normalizeActiveWindowPatch>) => {
+  if (!window.activeWindowEnabled) return null;
+
+  if (!Array.isArray(window.activeWindowDays) || window.activeWindowDays.length === 0) {
+    return "Active window requires at least one day.";
+  }
+
+  const uniqueDays = new Set(window.activeWindowDays);
+  if (
+    uniqueDays.size !== window.activeWindowDays.length ||
+    window.activeWindowDays.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
+  ) {
+    return "Active window days must be unique integers between 0 and 6.";
+  }
+
+  if (!window.activeWindowFrom || !TIME_RE.test(window.activeWindowFrom)) {
+    return "Active window start time must be in HH:mm format.";
+  }
+
+  if (!window.activeWindowTo || !TIME_RE.test(window.activeWindowTo)) {
+    return "Active window end time must be in HH:mm format.";
+  }
+
+  if (!window.activeWindowTimezone || !isValidTimeZone(window.activeWindowTimezone)) {
+    return "Active window timezone is invalid.";
+  }
+
+  return null;
 };
 
 const allowedAlertMetrics = new Set([
@@ -656,6 +739,13 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail(dockerAccessCredentialError);
       }
 
+      const activeWindow = normalizeActiveWindowPatch(body);
+      const activeWindowError = validateActiveWindow(activeWindow);
+      if (activeWindowError) {
+        set.status = 400;
+        return fail(activeWindowError);
+      }
+
       const data: Prisma.MonitorCreateInput = {
         name: body.name.trim(),
         type: body.type as any,
@@ -663,6 +753,11 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         ...(body.credentialId ? { credential: { connect: { id: body.credentialId } } } : {}),
         interval: body.interval ?? 60,
         enabled: body.enabled ?? true,
+        activeWindowEnabled: activeWindow.activeWindowEnabled,
+        activeWindowDays: activeWindow.activeWindowDays,
+        activeWindowFrom: activeWindow.activeWindowFrom,
+        activeWindowTo: activeWindow.activeWindowTo,
+        activeWindowTimezone: activeWindow.activeWindowTimezone,
       };
 
       const monitor = await prisma.monitor.create({ data });
@@ -738,6 +833,19 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
         return fail(dockerAccessCredentialError);
       }
 
+      const activeWindow = normalizeActiveWindowPatch(body, {
+        activeWindowEnabled: existing.activeWindowEnabled,
+        activeWindowDays: Array.isArray(existing.activeWindowDays) ? existing.activeWindowDays.filter((day): day is number => typeof day === "number") : [],
+        activeWindowFrom: existing.activeWindowFrom,
+        activeWindowTo: existing.activeWindowTo,
+        activeWindowTimezone: existing.activeWindowTimezone,
+      });
+      const activeWindowError = validateActiveWindow(activeWindow);
+      if (activeWindowError) {
+        set.status = 400;
+        return fail(activeWindowError);
+      }
+
       const data: Prisma.MonitorUpdateInput = {};
 
       if (body.name !== undefined) data.name = body.name.trim();
@@ -750,6 +858,19 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       }
       if (body.interval !== undefined) data.interval = body.interval;
       if (body.enabled !== undefined) data.enabled = body.enabled;
+      if (
+        body.activeWindowEnabled !== undefined ||
+        body.activeWindowDays !== undefined ||
+        body.activeWindowFrom !== undefined ||
+        body.activeWindowTo !== undefined ||
+        body.activeWindowTimezone !== undefined
+      ) {
+        data.activeWindowEnabled = activeWindow.activeWindowEnabled;
+        data.activeWindowDays = activeWindow.activeWindowDays;
+        data.activeWindowFrom = activeWindow.activeWindowFrom;
+        data.activeWindowTo = activeWindow.activeWindowTo;
+        data.activeWindowTimezone = activeWindow.activeWindowTimezone;
+      }
 
       const monitor = await prisma.monitor.update({
         where: { id: params.id },

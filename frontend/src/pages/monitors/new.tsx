@@ -11,6 +11,11 @@ type FormState = {
   type: MonitorType;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[];
+  activeWindowFrom: string;
+  activeWindowTo: string;
+  activeWindowTimezone: string;
   host: string;
   port: string;
   url: string;
@@ -58,6 +63,11 @@ type MonitorPayload = {
   type: MonitorType;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled?: boolean;
+  activeWindowDays?: number[];
+  activeWindowFrom?: string;
+  activeWindowTo?: string;
+  activeWindowTimezone?: string;
   config: Record<string, unknown>;
   credentialId?: string;
 };
@@ -131,11 +141,37 @@ const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [
   { label: "MongoDB", value: "mongodb", port: "27017" },
 ];
 
+const ACTIVE_WINDOW_DAYS = [
+  { value: 1, key: "common.days.mon" },
+  { value: 2, key: "common.days.tue" },
+  { value: 3, key: "common.days.wed" },
+  { value: 4, key: "common.days.thu" },
+  { value: 5, key: "common.days.fri" },
+  { value: 6, key: "common.days.sat" },
+  { value: 0, key: "common.days.sun" },
+];
+
+const ACTIVE_WINDOW_TIMEZONES = [
+  "Asia/Bangkok",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Ho_Chi_Minh",
+  "Asia/Jakarta",
+  "Europe/London",
+  "America/New_York",
+];
+
 const initialForm: FormState = {
   name: "",
   type: "HTTP",
   interval: 60,
   enabled: true,
+  activeWindowEnabled: false,
+  activeWindowDays: [1, 2, 3, 4, 5],
+  activeWindowFrom: "08:00",
+  activeWindowTo: "17:00",
+  activeWindowTimezone: "Asia/Bangkok",
   host: "",
   port: "",
   url: "",
@@ -497,6 +533,15 @@ const AddMonitorPage = () => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const toggleActiveWindowDay = (day: number) => {
+    setForm((current) => {
+      const days = current.activeWindowDays.includes(day)
+        ? current.activeWindowDays.filter((item) => item !== day)
+        : [...current.activeWindowDays, day].sort((a, b) => a - b);
+      return { ...current, activeWindowDays: days };
+    });
+  };
+
   useEffect(() => {
     const loadCredentials = async () => {
       try {
@@ -571,6 +616,11 @@ const AddMonitorPage = () => {
       type: form.type,
       interval: Number(form.interval),
       enabled: form.enabled,
+      activeWindowEnabled: form.activeWindowEnabled,
+      activeWindowDays: form.activeWindowDays,
+      activeWindowFrom: form.activeWindowFrom,
+      activeWindowTo: form.activeWindowTo,
+      activeWindowTimezone: form.activeWindowTimezone,
       config: buildConfig(form),
       credentialId: selectedCredentialId || undefined,
     };
@@ -658,6 +708,81 @@ const AddMonitorPage = () => {
                 />
                 <span className="text-sm font-medium text-slate-700">{t("newMonitor.enableAfterCreate")}</span>
               </label>
+
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                <label className="flex items-center gap-3">
+                  <input
+                    checked={form.activeWindowEnabled}
+                    className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                    type="checkbox"
+                    onChange={(event) => updateField("activeWindowEnabled", event.target.checked)}
+                  />
+                  <span className="text-sm font-medium text-slate-700">{t("activeWindow.restrict")}</span>
+                </label>
+
+                {form.activeWindowEnabled ? (
+                  <div className="mt-4 grid gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">{t("activeWindow.days")}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {ACTIVE_WINDOW_DAYS.map((day) => (
+                          <label
+                            className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                            key={day.value}
+                          >
+                            <input
+                              checked={form.activeWindowDays.includes(day.value)}
+                              className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                              type="checkbox"
+                              onChange={() => toggleActiveWindowDay(day.value)}
+                            />
+                            {t(day.key)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.from")}</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          type="time"
+                          value={form.activeWindowFrom}
+                          onChange={(event) => updateField("activeWindowFrom", event.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.to")}</span>
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          type="time"
+                          value={form.activeWindowTo}
+                          onChange={(event) => updateField("activeWindowTo", event.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-700">{t("activeWindow.timezone")}</span>
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                          value={form.activeWindowTimezone}
+                          onChange={(event) => updateField("activeWindowTimezone", event.target.value)}
+                        >
+                          {ACTIVE_WINDOW_TIMEZONES.map((timezone) => (
+                            <option key={timezone} value={timezone}>
+                              {timezone}
+                            </option>
+                          ))}
+                          {!ACTIVE_WINDOW_TIMEZONES.includes(form.activeWindowTimezone) ? (
+                            <option value={form.activeWindowTimezone}>{form.activeWindowTimezone}</option>
+                          ) : null}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500">{t("activeWindow.note")}</p>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -1339,6 +1464,11 @@ const AddMonitorPage = () => {
                   type: form.type,
                   interval: Number(form.interval),
                   enabled: form.enabled,
+                  activeWindowEnabled: form.activeWindowEnabled,
+                  activeWindowDays: form.activeWindowDays,
+                  activeWindowFrom: form.activeWindowFrom,
+                  activeWindowTo: form.activeWindowTo,
+                  activeWindowTimezone: form.activeWindowTimezone,
                   credentialId: selectedCredentialId || undefined,
                   config: buildConfig(form),
                 },

@@ -93,7 +93,25 @@
     "back": "Back",
     "createdAt": "Created",
     "noData": "No data",
-    "notAvailable": "N/A"
+    "notAvailable": "N/A",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    }
+  },
+  "activeWindow": {
+    "restrict": "Restrict monitoring to active window",
+    "days": "Active days",
+    "from": "From",
+    "to": "To",
+    "timezone": "Timezone",
+    "note": "Outside this window, the monitor will not run and will not create results, incidents, or notifications.",
+    "badge": "Active window"
   },
   "dashboard": {
     "title": "Dashboard",

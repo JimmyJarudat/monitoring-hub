@@ -94,6 +94,11 @@ type MonitorDetail = {
   config: Record<string, unknown>;
   interval: number;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[] | null;
+  activeWindowFrom: string | null;
+  activeWindowTo: string | null;
+  activeWindowTimezone: string | null;
   results: MonitorResult[];
   hasMoreResults: boolean;
   alertRules: AlertRule[];
@@ -167,6 +172,11 @@ type EditForm = {
   type: MonitorType;
   interval: string;
   enabled: boolean;
+  activeWindowEnabled: boolean;
+  activeWindowDays: number[];
+  activeWindowFrom: string;
+  activeWindowTo: string;
+  activeWindowTimezone: string;
   configText: string;
 };
 type ThresholdForm = {
@@ -199,6 +209,27 @@ const timeRangeOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
   { labelKey: "monitorDetail.rangeWeek", value: "7d" },
   { labelKey: "monitorDetail.rangeMonth", value: "30d" },
   { labelKey: "monitorDetail.rangeCustom", value: "custom" },
+];
+
+const ACTIVE_WINDOW_DAYS = [
+  { value: 1, key: "common.days.mon" },
+  { value: 2, key: "common.days.tue" },
+  { value: 3, key: "common.days.wed" },
+  { value: 4, key: "common.days.thu" },
+  { value: 5, key: "common.days.fri" },
+  { value: 6, key: "common.days.sat" },
+  { value: 0, key: "common.days.sun" },
+];
+
+const ACTIVE_WINDOW_TIMEZONES = [
+  "Asia/Bangkok",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Ho_Chi_Minh",
+  "Asia/Jakarta",
+  "Europe/London",
+  "America/New_York",
 ];
 
 const deviceAnalysisOptions: Array<{ labelKey: string; value: TimeRangePreset }> = [
@@ -584,6 +615,11 @@ const MonitorDetailPage = () => {
     type: "HTTP",
     interval: "60",
     enabled: true,
+    activeWindowEnabled: false,
+    activeWindowDays: [1, 2, 3, 4, 5],
+    activeWindowFrom: "08:00",
+    activeWindowTo: "17:00",
+    activeWindowTimezone: "Asia/Bangkok",
     configText: "{}",
   });
   const [metricSeries, setMetricSeries] = useState<DeviceMetricSeries[]>([]);
@@ -1116,11 +1152,27 @@ const MonitorDetailPage = () => {
       type: monitor.type,
       interval: String(monitor.interval),
       enabled: monitor.enabled,
+      activeWindowEnabled: monitor.activeWindowEnabled,
+      activeWindowDays: Array.isArray(monitor.activeWindowDays) && monitor.activeWindowDays.length
+        ? monitor.activeWindowDays
+        : [1, 2, 3, 4, 5],
+      activeWindowFrom: monitor.activeWindowFrom ?? "08:00",
+      activeWindowTo: monitor.activeWindowTo ?? "17:00",
+      activeWindowTimezone: monitor.activeWindowTimezone ?? "Asia/Bangkok",
       configText: toConfigText(monitor.config),
     });
     setSelectedEditCredentialId(monitor.credential?.id ?? "");
     setThresholdForm(parseThresholdConfig(monitor.config));
     setIsEditing(true);
+  };
+
+  const toggleEditActiveWindowDay = (day: number) => {
+    setEditForm((current) => {
+      const days = current.activeWindowDays.includes(day)
+        ? current.activeWindowDays.filter((item) => item !== day)
+        : [...current.activeWindowDays, day].sort((a, b) => a - b);
+      return { ...current, activeWindowDays: days };
+    });
   };
 
   const handleCheckNow = async () => {
@@ -1129,14 +1181,18 @@ const MonitorDetailPage = () => {
     setIsBusy(true);
 
     try {
-      const response = await api.post<ApiResponse<MonitorResult>>(`/monitors/${monitor.id}/check`);
+      const response = await api.post<ApiResponse<MonitorResult | null>>(`/monitors/${monitor.id}/check`);
 
       if (!response.data.success) {
         toast.error(response.data.message);
         return;
       }
 
-      toast.success(t("monitorDetail.checkSuccess", { name: monitor.name }));
+      if (response.data.data === null) {
+        toast.info("Skipped because monitor is outside active window");
+      } else {
+        toast.success(t("monitorDetail.checkSuccess", { name: monitor.name }));
+      }
       await fetchMonitor();
     } catch {
       toast.error(t("monitorDetail.checkError"));
@@ -1238,6 +1294,11 @@ const MonitorDetailPage = () => {
         type: editForm.type,
         interval,
         enabled: editForm.enabled,
+        activeWindowEnabled: editForm.activeWindowEnabled,
+        activeWindowDays: editForm.activeWindowDays,
+        activeWindowFrom: editForm.activeWindowFrom,
+        activeWindowTo: editForm.activeWindowTo,
+        activeWindowTimezone: editForm.activeWindowTimezone,
         config,
         credentialId: selectedEditCredentialId,
       });
@@ -1442,6 +1503,13 @@ const MonitorDetailPage = () => {
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             {t("monitorDetail.targetSummary", { type: monitor.type, target: getTarget(monitor), interval: monitor.interval })}
           </p>
+          {monitor.activeWindowEnabled ? (
+            <div className="mt-2">
+              <span className="inline-flex rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700 ring-1 ring-inset ring-cyan-600/20">
+                {t("activeWindow.badge")}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -2443,6 +2511,103 @@ const MonitorDetailPage = () => {
                   />
                   <span className="text-sm font-medium text-slate-700">{t("common.enabled")}</span>
                 </label>
+
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                  <label className="flex items-center gap-3">
+                    <input
+                      checked={editForm.activeWindowEnabled}
+                      className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                      type="checkbox"
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          activeWindowEnabled: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm font-medium text-slate-700">{t("activeWindow.restrict")}</span>
+                  </label>
+
+                  {editForm.activeWindowEnabled ? (
+                    <div className="mt-4 grid gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-slate-700">{t("activeWindow.days")}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {ACTIVE_WINDOW_DAYS.map((day) => (
+                            <label
+                              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                              key={day.value}
+                            >
+                              <input
+                                checked={editForm.activeWindowDays.includes(day.value)}
+                                className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                                type="checkbox"
+                                onChange={() => toggleEditActiveWindowDay(day.value)}
+                              />
+                              {t(day.key)}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.from")}</span>
+                          <input
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            type="time"
+                            value={editForm.activeWindowFrom}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowFrom: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.to")}</span>
+                          <input
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            type="time"
+                            value={editForm.activeWindowTo}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowTo: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-700">{t("activeWindow.timezone")}</span>
+                          <select
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                            value={editForm.activeWindowTimezone}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                activeWindowTimezone: event.target.value,
+                              }))
+                            }
+                          >
+                            {ACTIVE_WINDOW_TIMEZONES.map((timezone) => (
+                              <option key={timezone} value={timezone}>
+                                {timezone}
+                              </option>
+                            ))}
+                            {!ACTIVE_WINDOW_TIMEZONES.includes(editForm.activeWindowTimezone) ? (
+                              <option value={editForm.activeWindowTimezone}>
+                                {editForm.activeWindowTimezone}
+                              </option>
+                            ) : null}
+                          </select>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500">{t("activeWindow.note")}</p>
+                    </div>
+                  ) : null}
+                </div>
 
                 {editForm.type === "SYSTEM" || editForm.type === "SNMP" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
