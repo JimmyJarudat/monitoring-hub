@@ -199,7 +199,7 @@
 ---
 
 ## Remaining Known Gaps
-- [ ] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
+- [x] Dark mode — UI ยังรองรับเฉพาะ light mode, ต้องเพิ่ม dark variant ทุก component
 - [x] Monitor Active Window — เช็คเฉพาะช่วงเวลาทำงานที่กำหนด (ดูรายละเอียดด้านล่าง)
 - [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
 - [ ] Bind credential usage ให้เห็นจาก group / device context

@@ -200,13 +200,13 @@ if (incident.status === 'acknowledged') {
 
 ### Implementation Order
 
-- [ ] Schema: เพิ่ม `status`, `acknowledged_by`, `acknowledged_at` ใน incidents
-- [ ] Backend: PATCH `/incidents/:id/acknowledge`
-- [ ] Alert runner: skip reminder ถ้า incident ถูก acknowledge แล้ว
-- [ ] Frontend: ปุ่ม Acknowledge ใน incident detail + list
-- [ ] Frontend: badge สี 3 state, filter tab
+- [x] Schema: เพิ่ม `status`, `acknowledged_by`, `acknowledged_at` ใน incidents
+- [x] Backend: PATCH `/incidents/:id/acknowledge`
+- [x] Alert runner: skip reminder ถ้า incident ถูก acknowledge แล้ว
+- [x] Frontend: ปุ่ม Acknowledge ใน incident detail + list
+- [x] Frontend: badge สี 3 state, filter tab
 - [ ] Frontend: แสดง acknowledged by/at ใน timeline
-- [ ] i18n: EN/TH keys
+- [x] i18n: EN/TH keys
 
 ---
 
