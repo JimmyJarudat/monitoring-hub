@@ -23,6 +23,7 @@ type MonitorOption = {
   name: string;
   type: MonitorType;
   enabled: boolean;
+  config?: { printerPreset?: string };
 };
 
 type AlertRuleRow = {
@@ -72,6 +73,12 @@ const deviceMetrics: MetricOption[] = [
   { value: "disk.used_pct", labelKey: "alerts.metricDisk", defaultThreshold: 90, defaultOperator: "GT" },
 ];
 
+const printerMetrics: MetricOption[] = [
+  { value: "printer.toner_pct", labelKey: "alerts.metricPrinterToner", defaultThreshold: 15, defaultOperator: "LT" },
+  { value: "printer.paper_pct", labelKey: "alerts.metricPrinterPaper", defaultThreshold: 10, defaultOperator: "LT" },
+  { value: "printer.error_count", labelKey: "alerts.metricPrinterErrors", defaultThreshold: 0, defaultOperator: "GT" },
+];
+
 const operatorLabels: Record<AlertOperator, string> = {
   GT: ">",
   LT: "<",
@@ -97,8 +104,15 @@ const channelTypeLabels: Record<ChannelType, string> = {
 const isDeviceMonitor = (monitor?: MonitorOption | null) =>
   monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
 
+const isPrinterMonitor = (monitor?: MonitorOption | null) =>
+  monitor?.type === "SNMP" && Boolean(monitor.config?.printerPreset);
+
 const getMetricOptions = (monitor?: MonitorOption | null) =>
-  isDeviceMonitor(monitor) ? [...baseMetrics, ...deviceMetrics] : baseMetrics;
+  isPrinterMonitor(monitor)
+    ? [...baseMetrics, ...printerMetrics]
+    : isDeviceMonitor(monitor)
+      ? [...baseMetrics, ...deviceMetrics]
+      : baseMetrics;
 
 const emptyForm = (monitors: MonitorOption[]): RuleForm => {
   const monitor = monitors[0] ?? null;
@@ -122,6 +136,7 @@ const formatThreshold = (metric: string, threshold: number) => {
   }
   if (metric === "response_time") return `${threshold} ms`;
   if (metric.endsWith("_pct")) return `${threshold}%`;
+  if (metric === "printer.error_count") return `${threshold} errors`;
   return String(threshold);
 };
 
@@ -179,7 +194,7 @@ const AlertsPage = () => {
       total: rules.length,
       enabled: rules.filter((rule) => rule.enabled).length,
       open: rules.filter((rule) => rule.openIncident).length,
-      device: rules.filter((rule) => rule.metric.endsWith("_pct")).length,
+      device: rules.filter((rule) => rule.metric.endsWith("_pct") || rule.metric.startsWith("printer.")).length,
     }),
     [rules],
   );
@@ -192,17 +207,25 @@ const AlertsPage = () => {
   const metricOptions = useMemo(() => getMetricOptions(selectedMonitor), [selectedMonitor]);
   const metricLabel = useCallback(
     (metric: string) => {
-      const option = [...baseMetrics, ...deviceMetrics].find((item) => item.value === metric);
+      const option = [...baseMetrics, ...deviceMetrics, ...printerMetrics].find((item) => item.value === metric);
       return option ? t(option.labelKey) : metric;
     },
     [t],
   );
 
   const openCreate = (metricValue?: string) => {
+    const needsPrinterMonitor = Boolean(metricValue?.startsWith("printer."));
     const needsDeviceMonitor = Boolean(metricValue?.endsWith("_pct"));
-    const preferredMonitor = needsDeviceMonitor
+    const preferredMonitor = needsPrinterMonitor
+      ? monitors.find((item) => isPrinterMonitor(item))
+      : needsDeviceMonitor
       ? monitors.find((item) => isDeviceMonitor(item))
       : monitors[0];
+
+    if (needsPrinterMonitor && !preferredMonitor) {
+      toast.error(t("alerts.validationPrinterMonitor"));
+      return;
+    }
 
     if (needsDeviceMonitor && !preferredMonitor) {
       toast.error(t("alerts.validationDeviceMonitor"));
@@ -293,6 +316,10 @@ const AlertsPage = () => {
     }
     if (form.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
       toast.error(t("alerts.validationPctThreshold"));
+      return false;
+    }
+    if (form.metric === "printer.error_count" && threshold < 0) {
+      toast.error(t("alerts.validationPrinterErrors"));
       return false;
     }
     if (form.metric === "response_time" && threshold < 0) {
@@ -449,7 +476,7 @@ const AlertsPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {deviceMetrics.map((metric) => (
+            {[...deviceMetrics, ...printerMetrics].map((metric) => (
               <button
                 key={metric.value}
                 type="button"
@@ -678,7 +705,7 @@ const AlertsPage = () => {
                   <input
                     type="number"
                     value={form.threshold}
-                    min={form.metric.endsWith("_pct") ? 0 : undefined}
+                    min={form.metric.endsWith("_pct") || form.metric === "printer.error_count" ? 0 : undefined}
                     max={form.metric.endsWith("_pct") ? 100 : undefined}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, threshold: event.target.value }))

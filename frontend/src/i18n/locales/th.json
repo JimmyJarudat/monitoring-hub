@@ -223,7 +223,7 @@
     "summaryOpenIncidents": "Incident ที่เปิด",
     "summaryDevice": "กฎอุปกรณ์",
     "deviceThresholds": "เกณฑ์อุปกรณ์ด่วน",
-    "deviceThresholdsDesc": "ใช้กับ SYSTEM/SNMP monitor สำหรับ CPU, RAM และ Disk",
+    "deviceThresholdsDesc": "ใช้กับ SYSTEM/SNMP monitor สำหรับ CPU, RAM, Disk และเครื่องพิมพ์",
     "rulesTitle": "กฎแจ้งเตือนที่ตั้งค่าไว้",
     "rulesCount": "{{count}} กฎ",
     "noRules": "ยังไม่มี alert rule",
@@ -275,11 +275,16 @@
     "validationPctThreshold": "percent threshold ต้องอยู่ระหว่าง 0-100",
     "validationResponseTime": "response time ต้องมากกว่าหรือเท่ากับ 0",
     "validationDeviceMonitor": "CPU/RAM/Disk rule ต้องใช้ SYSTEM หรือ SNMP monitor",
+    "validationPrinterMonitor": "Printer rule ต้องใช้ SNMP monitor ที่ตั้งค่า Printer preset",
+    "validationPrinterErrors": "จำนวน error ของเครื่องพิมพ์ต้องมากกว่าหรือเท่ากับ 0",
     "metricStatus": "สถานะ",
     "metricResponseTime": "เวลา response",
     "metricCpu": "เกณฑ์ CPU",
     "metricMemory": "เกณฑ์ RAM",
-    "metricDisk": "เกณฑ์ Disk"
+    "metricDisk": "เกณฑ์ Disk",
+    "metricPrinterToner": "เกณฑ์หมึกเครื่องพิมพ์",
+    "metricPrinterPaper": "เกณฑ์กระดาษเครื่องพิมพ์",
+    "metricPrinterErrors": "ข้อผิดพลาดเครื่องพิมพ์"
   },
   "channels": {
     "title": "ช่องทางแจ้งเตือน",
@@ -361,6 +366,16 @@
     "noDevices": "ยังไม่มี device",
     "emptyHint": "สร้าง monitor ประเภท SYSTEM แล้วระบบจะดึงข้อมูล CPU/RAM/Disk ผ่าน SNMP หรือใช้ SNMP monitor เพื่อเก็บข้อมูล device identity และ interface counters",
     "noSystemMetrics": "ยังไม่มี metrics CPU/RAM/Disk สำหรับอุปกรณ์นี้",
+    "noPrinterMetrics": "ยังไม่มีข้อมูลหมึก/กระดาษสำหรับเครื่องพิมพ์นี้",
+    "printer": "เครื่องพิมพ์",
+    "printerStatusUnknown": "ยังไม่ทราบสถานะ",
+    "printerReady": "พร้อมใช้งาน",
+    "printerHasErrors": "มีข้อผิดพลาด",
+    "printerToner": "ระดับหมึก",
+    "printerPaper": "กระดาษในถาด",
+    "printerLevelUnknown": "ไม่ทราบค่า",
+    "printerTonerUnavailable": "เครื่องนี้ยังไม่ส่งข้อมูลหมึกผ่าน SNMP",
+    "printerPaperUnavailable": "เครื่องนี้ยังไม่ส่งข้อมูลกระดาษผ่าน SNMP",
     "interfaces": "Interfaces",
     "noMetrics": "ไม่มีข้อมูล metrics",
     "neverChecked": "ยังไม่เคยเช็ค",
@@ -1300,6 +1315,7 @@
     "validationMetricUnsupported": "metric นี้ใช้กับ monitor นี้ไม่ได้",
     "validationStatusThreshold": "เลือก status threshold ให้ถูกต้อง",
     "validationPercentThreshold": "threshold เปอร์เซ็นต์ต้องอยู่ระหว่าง 0-100",
+    "validationPrinterErrors": "จำนวน error ของเครื่องพิมพ์ต้องมากกว่าหรือเท่ากับ 0",
     "ruleCreateSuccess": "สร้าง alert rule แล้ว",
     "ruleUpdateSuccess": "อัปเดต alert rule แล้ว",
     "ruleSaveError": "บันทึก alert rule ไม่สำเร็จ",
@@ -1314,7 +1330,10 @@
       "response_time": "Response time",
       "cpu.used_pct": "CPU usage",
       "memory.used_pct": "RAM usage",
-      "disk.used_pct": "Disk usage"
+      "disk.used_pct": "Disk usage",
+      "printer.toner_pct": "Printer toner",
+      "printer.paper_pct": "Printer paper",
+      "printer.error_count": "Printer errors"
     }
   },
   "newMonitor": {

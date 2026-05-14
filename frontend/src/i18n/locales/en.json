@@ -223,7 +223,7 @@
     "summaryOpenIncidents": "Open incidents",
     "summaryDevice": "Device rules",
     "deviceThresholds": "Quick device thresholds",
-    "deviceThresholdsDesc": "For SYSTEM/SNMP monitors: CPU, RAM and Disk",
+    "deviceThresholdsDesc": "For SYSTEM/SNMP monitors: CPU, RAM, Disk, and printer supplies",
     "rulesTitle": "Configured alert rules",
     "rulesCount": "{{count}} rules",
     "noRules": "No alert rules yet",
@@ -275,11 +275,16 @@
     "validationPctThreshold": "Percent threshold must be between 0-100",
     "validationResponseTime": "Response time must be >= 0",
     "validationDeviceMonitor": "CPU/RAM/Disk rules require a SYSTEM or SNMP monitor",
+    "validationPrinterMonitor": "Printer rules require an SNMP monitor with a Printer preset",
+    "validationPrinterErrors": "Printer error count must be >= 0",
     "metricStatus": "Status",
     "metricResponseTime": "Response time",
     "metricCpu": "CPU threshold",
     "metricMemory": "RAM threshold",
-    "metricDisk": "Disk threshold"
+    "metricDisk": "Disk threshold",
+    "metricPrinterToner": "Printer toner threshold",
+    "metricPrinterPaper": "Printer paper threshold",
+    "metricPrinterErrors": "Printer errors"
   },
   "channels": {
     "title": "Notification Channels",
@@ -361,6 +366,16 @@
     "noDevices": "No devices yet",
     "emptyHint": "Create a SYSTEM monitor to collect CPU/RAM/Disk via SNMP, or use an SNMP monitor for device identity and interface counters.",
     "noSystemMetrics": "No CPU/RAM/Disk metrics for this device yet",
+    "noPrinterMetrics": "No toner or paper metrics for this printer yet",
+    "printer": "Printer",
+    "printerStatusUnknown": "Status unknown",
+    "printerReady": "Ready",
+    "printerHasErrors": "Has errors",
+    "printerToner": "Toner levels",
+    "printerPaper": "Paper trays",
+    "printerLevelUnknown": "Unknown",
+    "printerTonerUnavailable": "This printer is not reporting toner data via SNMP yet",
+    "printerPaperUnavailable": "This printer is not reporting paper data via SNMP yet",
     "interfaces": "Interfaces",
     "noMetrics": "No metrics data",
     "neverChecked": "Never checked",
@@ -1300,6 +1315,7 @@
     "validationMetricUnsupported": "This metric is not supported for this monitor",
     "validationStatusThreshold": "Select a valid status threshold",
     "validationPercentThreshold": "Percentage threshold must be between 0-100",
+    "validationPrinterErrors": "Printer error count must be >= 0",
     "ruleCreateSuccess": "Alert rule created",
     "ruleUpdateSuccess": "Alert rule updated",
     "ruleSaveError": "Failed to save alert rule",
@@ -1314,7 +1330,10 @@
       "response_time": "Response time",
       "cpu.used_pct": "CPU usage",
       "memory.used_pct": "RAM usage",
-      "disk.used_pct": "Disk usage"
+      "disk.used_pct": "Disk usage",
+      "printer.toner_pct": "Printer toner",
+      "printer.paper_pct": "Printer paper",
+      "printer.error_count": "Printer errors"
     }
   },
   "newMonitor": {

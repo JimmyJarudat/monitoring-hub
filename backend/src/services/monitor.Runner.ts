@@ -146,6 +146,9 @@ const formatMetricLabel = (metric: string) => {
     "cpu.used_pct": "CPU",
     "memory.used_pct": "RAM",
     "disk.used_pct": "Disk",
+    "printer.toner_pct": "Printer toner",
+    "printer.paper_pct": "Printer paper",
+    "printer.error_count": "Printer errors",
   };
   return labels[metric] ?? metric;
 };
@@ -158,7 +161,26 @@ const formatRuleValue = (metric: string, value: number) => {
   }
   if (metric === "response_time") return `${Math.round(value)} ms`;
   if (metric.endsWith("_pct")) return `${value.toFixed(1)}%`;
+  if (metric === "printer.error_count") return `${Math.round(value)} errors`;
   return String(value);
+};
+
+const lowestPrinterSupplyPercent = (metadata: Record<string, unknown>, supplyKey: "toners" | "papers") => {
+  const printer = isConfigObject(metadata.printer) ? metadata.printer : null;
+  const supplies = printer && Array.isArray(printer[supplyKey]) ? printer[supplyKey] : [];
+  const percentages = supplies
+    .map((item) => (isConfigObject(item) && typeof item.percent === "number" ? item.percent : null))
+    .filter((percent): percent is number => percent !== null && Number.isFinite(percent));
+
+  if (percentages.length === 0) return null;
+  return Math.min(...percentages);
+};
+
+const printerErrorCount = (metadata: Record<string, unknown>) => {
+  const printer = isConfigObject(metadata.printer) ? metadata.printer : null;
+  const errors = printer && Array.isArray(printer.errorBits) ? printer.errorBits : [];
+  const status = printer && typeof printer.printerStatus === "number" ? printer.printerStatus : null;
+  return errors.length + (status === 5 ? 1 : 0);
 };
 
 const getMetricValue = (rule: AlertRule, input: RuleEvaluationInput) => {
@@ -183,6 +205,18 @@ const getMetricValue = (rule: AlertRule, input: RuleEvaluationInput) => {
       return usedPct !== null && usedPct > max ? usedPct : max;
     }, -1);
     return highestDisk >= 0 ? highestDisk : null;
+  }
+
+  if (rule.metric === "printer.toner_pct") {
+    return lowestPrinterSupplyPercent(metadata, "toners");
+  }
+
+  if (rule.metric === "printer.paper_pct") {
+    return lowestPrinterSupplyPercent(metadata, "papers");
+  }
+
+  if (rule.metric === "printer.error_count") {
+    return printerErrorCount(metadata);
   }
 
   return null;

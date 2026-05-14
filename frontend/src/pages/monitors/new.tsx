@@ -114,12 +114,12 @@ const monitorTypes: Array<{ label: string; value: MonitorType; descriptionKey: s
     descriptionKey: "newMonitor.typeDescriptions.DNS",
   },
   {
-    label: "SNMP",
+    label: "Network / Printer / Custom SNMP",
     value: "SNMP",
     descriptionKey: "newMonitor.typeDescriptions.SNMP",
   },
   {
-    label: "System",
+    label: "System (SNMP)",
     value: "SYSTEM",
     descriptionKey: "newMonitor.typeDescriptions.SYSTEM",
   },

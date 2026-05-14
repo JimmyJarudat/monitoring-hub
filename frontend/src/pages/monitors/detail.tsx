@@ -113,7 +113,7 @@ type PrinterInfo = {
   printerStatus?: number;
   printerStatusLabel?: string;
   errorBits?: string[];
-  toners?: Array<{ name: string; level: number; max: number; percent: number | null }>;
+  toners?: Array<{ name: string; color?: string; level: number; max: number; percent: number | null }>;
   papers?: Array<{ name: string; level: number; max: number; percent: number | null }>;
 };
 
@@ -330,6 +330,18 @@ const alertMetricLabels: Record<string, string> = {
   "cpu.used_pct": "CPU usage",
   "memory.used_pct": "RAM usage",
   "disk.used_pct": "Disk usage",
+  "printer.toner_pct": "Printer toner",
+  "printer.paper_pct": "Printer paper",
+  "printer.error_count": "Printer errors",
+};
+
+const alertRuleDefaults = (metric: string): Pick<AlertRuleForm, "operator" | "threshold" | "severity"> => {
+  if (metric === "status") return { operator: "NEQ", threshold: "3", severity: "CRITICAL" };
+  if (metric === "response_time") return { operator: "GT", threshold: "2000", severity: "WARNING" };
+  if (metric === "printer.toner_pct") return { operator: "LT", threshold: "15", severity: "WARNING" };
+  if (metric === "printer.paper_pct") return { operator: "LT", threshold: "10", severity: "WARNING" };
+  if (metric === "printer.error_count") return { operator: "GT", threshold: "0", severity: "CRITICAL" };
+  return { operator: "GT", threshold: "90", severity: metric === "disk.used_pct" ? "CRITICAL" : "WARNING" };
 };
 
 const statusThresholdLabels: Record<number, string> = {
@@ -433,6 +445,19 @@ const toConfigText = (config: Record<string, unknown>) => {
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+const supplyColorHex = (color?: string) => {
+  const normalized = color?.trim().toLowerCase();
+  if (!normalized) return "#64748b";
+  if (normalized.includes("black")) return "#111827";
+  if (normalized.includes("cyan")) return "#06b6d4";
+  if (normalized.includes("magenta")) return "#d946ef";
+  if (normalized.includes("yellow")) return "#facc15";
+  if (normalized.includes("red")) return "#ef4444";
+  if (normalized.includes("green")) return "#22c55e";
+  if (normalized.includes("blue")) return "#3b82f6";
+  return "#64748b";
+};
 
 const WARN_PCT = 75;
 const CRITICAL_PCT = 90;
@@ -903,11 +928,14 @@ const MonitorDetailPage = () => {
   );
   const availableAlertMetrics = useMemo(() => {
     const base = ["status", "response_time"];
+    if (isPrinterMonitor) {
+      return [...base, "printer.toner_pct", "printer.paper_pct", "printer.error_count"];
+    }
     if (monitor?.type === "SYSTEM" || monitor?.type === "SNMP") {
       return [...base, "cpu.used_pct", "memory.used_pct", "disk.used_pct"];
     }
     return base;
-  }, [monitor?.type]);
+  }, [isPrinterMonitor, monitor?.type]);
 
   useEffect(() => {
     if (!credentialsLoaded) return;
@@ -1361,20 +1389,11 @@ const MonitorDetailPage = () => {
 
   const openCreateRule = (metric = "status") => {
     const next = emptyAlertRuleForm();
+    const defaults = alertRuleDefaults(metric);
     next.metric = metric;
-    if (metric === "status") {
-      next.operator = "NEQ";
-      next.threshold = "3";
-      next.severity = "CRITICAL";
-    } else if (metric === "response_time") {
-      next.operator = "GT";
-      next.threshold = "2000";
-      next.severity = "WARNING";
-    } else {
-      next.operator = "GT";
-      next.threshold = "90";
-      next.severity = metric === "disk.used_pct" ? "CRITICAL" : "WARNING";
-    }
+    next.operator = defaults.operator;
+    next.threshold = defaults.threshold;
+    next.severity = defaults.severity;
     setEditingRule(null);
     setAlertRuleForm(next);
     setIsRuleModalOpen(true);
@@ -1395,13 +1414,8 @@ const MonitorDetailPage = () => {
 
   const handleRuleMetricChange = (metric: string) => {
     setAlertRuleForm((current) => {
-      if (metric === "status") {
-        return { ...current, metric, operator: "NEQ", threshold: "3" };
-      }
-      if (metric === "response_time") {
-        return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "2000" : current.threshold };
-      }
-      return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "90" : current.threshold };
+      const defaults = alertRuleDefaults(metric);
+      return { ...current, metric, ...defaults };
     });
   };
 
@@ -1432,6 +1446,10 @@ const MonitorDetailPage = () => {
     }
     if (alertRuleForm.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
       toast.error(t("monitorDetail.validationPercentThreshold"));
+      return;
+    }
+    if (alertRuleForm.metric === "printer.error_count" && threshold < 0) {
+      toast.error(t("monitorDetail.validationPrinterErrors"));
       return;
     }
 
@@ -1689,7 +1707,13 @@ const MonitorDetailPage = () => {
                       return (
                         <div key={toner.name}>
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-700">{toner.name}</span>
+                            <span className="flex min-w-0 items-center gap-2 text-slate-700">
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-slate-900/10"
+                                style={{ backgroundColor: supplyColorHex(toner.color) }}
+                              />
+                              <span className="truncate">{toner.name}</span>
+                            </span>
                             <span className={isLow ? "font-semibold text-rose-600" : "text-slate-500"}>
                               {toner.percent !== null ? `${pct}%` : `${toner.level} / unknown`}
                             </span>

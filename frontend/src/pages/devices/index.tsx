@@ -10,6 +10,22 @@ type DiskInfo = {
   usedPct: number;
 };
 
+type SupplyInfo = {
+  name: string;
+  color?: string;
+  level: number;
+  max: number;
+  percent: number | null;
+};
+
+type PrinterInfo = {
+  printerStatus?: number;
+  printerStatusLabel?: string;
+  errorBits?: string[];
+  toners?: SupplyInfo[];
+  papers?: SupplyInfo[];
+};
+
 type SystemMetadata = {
   host: string;
   cpuUsedPct: number;
@@ -30,6 +46,7 @@ type SystemMetadata = {
     inErrors: number;
     outErrors: number;
   }>;
+  printer?: PrinterInfo;
 };
 
 type LatestResult = {
@@ -46,7 +63,7 @@ type Device = {
   type: "SNMP" | "SYSTEM";
   enabled: boolean;
   interval: number;
-  config: { host?: string; community?: string };
+  config: { host?: string; community?: string; printerPreset?: string };
   latestResult: LatestResult | null;
   uptime24h: number | null;
 };
@@ -163,6 +180,16 @@ const vendorLogos: Array<{
     matchers: [/centos/i],
     logoUrl: "https://cdn.simpleicons.org/centos/8a2be2",
   },
+  {
+    name: "Ricoh",
+    matchers: [/ricoh/i, /\bmp\s?\d+/i],
+    logoUrl: "https://cdn.simpleicons.org/ricoh/c8102e",
+  },
+  {
+    name: "Printer",
+    matchers: [/printer/i, /print/i, /toner/i, /paper tray/i],
+    logoUrl: "https://api.iconify.design/lucide:printer.svg?color=%232563eb",
+  },
 ];
 
 const fmtUptime = (seconds: number) => {
@@ -175,7 +202,13 @@ const fmtUptime = (seconds: number) => {
 };
 
 const detectVendor = (device: Device, meta: SystemMetadata | null) => {
-  const candidates = [device.name, device.config.host, meta?.osDescr]
+  const candidates = [
+    device.name,
+    device.config.host,
+    device.config.printerPreset ? "printer" : null,
+    device.config.printerPreset,
+    meta?.osDescr,
+  ]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
 
@@ -187,6 +220,19 @@ const gaugeColor = (pct: number | null | undefined) => {
   if (pct >= 90) return "bg-red-500";
   if (pct >= 75) return "bg-amber-400";
   return "bg-emerald-400";
+};
+
+const supplyColorHex = (color?: string) => {
+  const normalized = color?.trim().toLowerCase();
+  if (!normalized) return "#64748b";
+  if (normalized.includes("black")) return "#111827";
+  if (normalized.includes("cyan")) return "#06b6d4";
+  if (normalized.includes("magenta")) return "#d946ef";
+  if (normalized.includes("yellow")) return "#facc15";
+  if (normalized.includes("red")) return "#ef4444";
+  if (normalized.includes("green")) return "#22c55e";
+  if (normalized.includes("blue")) return "#3b82f6";
+  return "#64748b";
 };
 
 const Gauge = ({
@@ -213,14 +259,60 @@ const Gauge = ({
   </div>
 );
 
+const SupplyGauge = ({
+  item,
+  lowAt,
+  unknownLabel,
+}: {
+  item: SupplyInfo;
+  lowAt: number;
+  unknownLabel: string;
+}) => {
+  const pct = item.percent;
+  const pctLabel = pct !== null ? `${pct}%` : item.level >= 0 && item.max > 0 ? `${item.level} / ${item.max}` : unknownLabel;
+  const color = pct !== null && pct <= lowAt ? "bg-amber-400" : "bg-emerald-400";
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-slate-700" title={item.name}>
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-slate-900/10"
+            style={{ backgroundColor: supplyColorHex(item.color) }}
+          />
+          <span className="truncate">{item.name}</span>
+        </span>
+        <span className="shrink-0">{pctLabel}</span>
+      </div>
+      <div className="mt-1.5 h-2 w-full rounded-full bg-slate-100">
+        <div
+          className={`h-2 rounded-full transition-all ${color}`}
+          style={{ width: `${pct !== null ? Math.min(Math.max(pct, 0), 100) : 0}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
 const DeviceCard = ({ device }: { device: Device }) => {
   const { t, i18n } = useTranslation();
   const result = device.latestResult;
   const meta = result?.metadata as SystemMetadata | null;
+  const printer = meta?.printer;
+  const isPrinterMonitor = device.type === "SNMP" && Boolean(device.config.printerPreset);
+  const expectsToner = ["toner", "full"].includes(device.config.printerPreset ?? "");
+  const expectsPaper = ["paper", "full"].includes(device.config.printerPreset ?? "");
+  const hasPrinterData =
+    !!printer &&
+    ((printer.toners?.length ?? 0) > 0 ||
+      (printer.papers?.length ?? 0) > 0 ||
+      printer.printerStatusLabel !== undefined ||
+      (printer.errorBits?.length ?? 0) > 0);
   const status = result?.status ?? "UNKNOWN";
   const checkedAt = result?.checkedAt ? new Date(result.checkedAt) : null;
   const host = device.config.host ?? "";
   const hasSystemMetrics =
+    !hasPrinterData &&
     !!meta &&
     (isFiniteNumber(meta.cpuUsedPct) ||
       isFiniteNumber(meta.memUsedPct) ||
@@ -232,6 +324,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
   const vendor = detectVendor(device, meta);
   const badgeText =
     vendor?.name?.slice(0, 2).toUpperCase() ||
+    (isPrinterMonitor ? "PR" : null) ||
     (device.type === "SYSTEM" ? "SV" : "NW");
 
   return (
@@ -322,6 +415,76 @@ const DeviceCard = ({ device }: { device: Device }) => {
                 />
               ))}
             </>
+          ) : hasPrinterData ? (
+            <div className="space-y-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">{t("devices.printer")}</p>
+                  <p className="mt-0.5 text-sm font-medium text-slate-800">
+                    {printer?.printerStatusLabel ?? t("devices.printerStatusUnknown")}
+                  </p>
+                </div>
+                {(printer?.errorBits ?? []).length > 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                    {t("devices.printerHasErrors")}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                    {t("devices.printerReady")}
+                  </span>
+                )}
+              </div>
+
+              {(printer?.toners ?? []).length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-700">{t("devices.printerToner")}</p>
+                  {(printer?.toners ?? []).slice(0, 4).map((toner) => (
+                    <SupplyGauge
+                      key={`toner-${toner.name}`}
+                      item={toner}
+                      lowAt={15}
+                      unknownLabel={t("devices.printerLevelUnknown")}
+                    />
+                  ))}
+                </div>
+              ) : expectsToner ? (
+                <div className="rounded-md bg-white px-3 py-2 text-xs text-slate-400">
+                  {t("devices.printerTonerUnavailable")}
+                </div>
+              ) : null}
+
+              {(printer?.papers ?? []).length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-700">{t("devices.printerPaper")}</p>
+                  {(printer?.papers ?? []).slice(0, 4).map((paper) => (
+                    <SupplyGauge
+                      key={`paper-${paper.name}`}
+                      item={paper}
+                      lowAt={10}
+                      unknownLabel={t("devices.printerLevelUnknown")}
+                    />
+                  ))}
+                </div>
+              ) : expectsPaper ? (
+                <div className="rounded-md bg-white px-3 py-2 text-xs text-slate-400">
+                  {t("devices.printerPaperUnavailable")}
+                </div>
+              ) : null}
+
+              {(printer?.errorBits ?? []).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {(printer?.errorBits ?? []).slice(0, 4).map((bit) => (
+                    <span key={bit} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-amber-700">
+                      {bit}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : isPrinterMonitor ? (
+            <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-400">
+              {t("devices.noPrinterMetrics")}
+            </div>
           ) : (
             <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-400">
               {t("devices.noSystemMetrics")}
