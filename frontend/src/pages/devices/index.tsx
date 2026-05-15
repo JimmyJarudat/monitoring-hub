@@ -326,6 +326,13 @@ const DeviceCard = ({ device }: { device: Device }) => {
     vendor?.name?.slice(0, 2).toUpperCase() ||
     (isPrinterMonitor ? "PR" : null) ||
     (device.type === "SYSTEM" ? "SV" : "NW");
+  const typeLabel = isPrinterMonitor
+    ? "Printer (SNMP)"
+    : device.type === "SNMP"
+      ? "Network / Custom SNMP"
+      : device.type === "SYSTEM"
+        ? "System (SNMP)"
+        : device.type;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5">
@@ -356,7 +363,7 @@ const DeviceCard = ({ device }: { device: Device }) => {
             <p className="mt-0.5 text-sm text-slate-400">{host}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                {device.type}
+                {typeLabel}
               </span>
               {vendor ? (
                 <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-700">

@@ -137,6 +137,15 @@ const getOpenUrl = (monitor: MonitorRow) => {
   return null;
 };
 
+const getMonitorTypeLabel = (monitor: Pick<MonitorRow, "type" | "config">) => {
+  if (monitor.type === "SNMP" && typeof monitor.config.printerPreset === "string" && monitor.config.printerPreset) {
+    return "Printer (SNMP)";
+  }
+  if (monitor.type === "SNMP") return "Network / Custom SNMP";
+  if (monitor.type === "SYSTEM") return "System (SNMP)";
+  return monitor.type;
+};
+
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return "-";
   const locale = i18n.language === "th" ? "th-TH" : "en-US";
@@ -589,7 +598,7 @@ const MonitorsPage = () => {
                         {monitor.name}
                       </Link>
                       <div className="text-xs text-slate-500">
-                        {monitor.type} · {t("monitors.intervalEvery", { interval: monitor.interval })}
+                        {getMonitorTypeLabel(monitor)} · {t("monitors.intervalEvery", { interval: monitor.interval })}
                       </div>
                       {monitor.activeWindowEnabled ? (
                         <div className="mt-1">
@@ -727,8 +736,8 @@ const MonitorsPage = () => {
                     <option value="DATABASE">DATABASE</option>
                     <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DNS">DNS</option>
-                    <option value="SNMP">SNMP</option>
-                    <option value="SYSTEM">SYSTEM</option>
+                    <option value="SNMP">Network / Printer / Custom SNMP</option>
+                    <option value="SYSTEM">System (SNMP)</option>
                     <option value="DOCKER">DOCKER</option>
                   </select>
                 </label>

@@ -101,16 +101,23 @@ const channelTypeLabels: Record<ChannelType, string> = {
   WEBHOOK: "Webhook",
 };
 
-const isDeviceMonitor = (monitor?: MonitorOption | null) =>
-  monitor?.type === "SYSTEM" || monitor?.type === "SNMP";
-
 const isPrinterMonitor = (monitor?: MonitorOption | null) =>
   monitor?.type === "SNMP" && Boolean(monitor.config?.printerPreset);
+
+const isSystemMonitor = (monitor?: MonitorOption | null) => monitor?.type === "SYSTEM";
+
+const getMonitorTypeLabel = (monitor?: MonitorOption | null) => {
+  if (!monitor) return "";
+  if (isPrinterMonitor(monitor)) return "Printer (SNMP)";
+  if (monitor.type === "SNMP") return "Network / Custom SNMP";
+  if (monitor.type === "SYSTEM") return "System (SNMP)";
+  return monitor.type;
+};
 
 const getMetricOptions = (monitor?: MonitorOption | null) =>
   isPrinterMonitor(monitor)
     ? [...baseMetrics, ...printerMetrics]
-    : isDeviceMonitor(monitor)
+    : isSystemMonitor(monitor)
       ? [...baseMetrics, ...deviceMetrics]
       : baseMetrics;
 
@@ -215,11 +222,11 @@ const AlertsPage = () => {
 
   const openCreate = (metricValue?: string) => {
     const needsPrinterMonitor = Boolean(metricValue?.startsWith("printer."));
-    const needsDeviceMonitor = Boolean(metricValue?.endsWith("_pct"));
+    const needsSystemMonitor = Boolean(metricValue && deviceMetrics.some((item) => item.value === metricValue));
     const preferredMonitor = needsPrinterMonitor
       ? monitors.find((item) => isPrinterMonitor(item))
-      : needsDeviceMonitor
-      ? monitors.find((item) => isDeviceMonitor(item))
+      : needsSystemMonitor
+      ? monitors.find((item) => isSystemMonitor(item))
       : monitors[0];
 
     if (needsPrinterMonitor && !preferredMonitor) {
@@ -227,7 +234,7 @@ const AlertsPage = () => {
       return;
     }
 
-    if (needsDeviceMonitor && !preferredMonitor) {
+    if (needsSystemMonitor && !preferredMonitor) {
       toast.error(t("alerts.validationDeviceMonitor"));
       return;
     }
@@ -530,7 +537,7 @@ const AlertsPage = () => {
                       {rule.monitor.name}
                     </Link>
                     <p className="mt-1 text-xs text-slate-500">
-                      {rule.monitor.type} · {rule.monitor.enabled ? t("alerts.monitorEnabled") : t("alerts.monitorDisabled")}
+                      {getMonitorTypeLabel(rule.monitor)} · {rule.monitor.enabled ? t("alerts.monitorEnabled") : t("alerts.monitorDisabled")}
                     </p>
                   </td>
                   <td className="px-4 py-3">
@@ -646,7 +653,7 @@ const AlertsPage = () => {
                   {monitors.length === 0 ? <option value="">{t("alerts.noMonitors")}</option> : null}
                   {monitors.map((monitor) => (
                     <option key={monitor.id} value={monitor.id}>
-                      {monitor.name} ({monitor.type})
+                      {monitor.name} ({getMonitorTypeLabel(monitor)})
                     </option>
                   ))}
                 </select>

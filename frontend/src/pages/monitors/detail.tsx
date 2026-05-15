@@ -409,6 +409,15 @@ const getTarget = (monitor: MonitorDetail) => {
   return "-";
 };
 
+const getMonitorTypeLabel = (monitor: Pick<MonitorDetail, "type" | "config">) => {
+  if (monitor.type === "SNMP" && typeof monitor.config.printerPreset === "string" && monitor.config.printerPreset) {
+    return "Printer (SNMP)";
+  }
+  if (monitor.type === "SNMP") return "Network / Custom SNMP";
+  if (monitor.type === "SYSTEM") return "System (SNMP)";
+  return monitor.type;
+};
+
 const formatDateTime = (value: string | null | undefined, locale = "th-TH") => {
   if (!value) return "-";
 
@@ -931,7 +940,7 @@ const MonitorDetailPage = () => {
     if (isPrinterMonitor) {
       return [...base, "printer.toner_pct", "printer.paper_pct", "printer.error_count"];
     }
-    if (monitor?.type === "SYSTEM" || monitor?.type === "SNMP") {
+    if (monitor?.type === "SYSTEM") {
       return [...base, "cpu.used_pct", "memory.used_pct", "disk.used_pct"];
     }
     return base;
@@ -1560,7 +1569,7 @@ const MonitorDetailPage = () => {
           <p className="text-sm font-medium text-cyan-700">{t("monitorDetail.title")}</p>
           <h1 className="mt-1 truncate text-2xl font-semibold text-slate-950">{monitor.name}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            {t("monitorDetail.targetSummary", { type: monitor.type, target: getTarget(monitor), interval: monitor.interval })}
+            {t("monitorDetail.targetSummary", { type: getMonitorTypeLabel(monitor), target: getTarget(monitor), interval: monitor.interval })}
           </p>
           {monitor.activeWindowEnabled ? (
             <div className="mt-2">
@@ -2631,8 +2640,8 @@ const MonitorDetailPage = () => {
                     <option value="DATABASE">DATABASE</option>
                     <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DNS">DNS</option>
-                    <option value="SNMP">SNMP</option>
-                    <option value="SYSTEM">SYSTEM</option>
+                    <option value="SNMP">Network / Printer / Custom SNMP</option>
+                    <option value="SYSTEM">System (SNMP)</option>
                     <option value="DOCKER">DOCKER</option>
                   </select>
                 </label>
