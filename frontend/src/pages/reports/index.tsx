@@ -501,6 +501,7 @@ const ReportsPage = () => {
   const [maintenanceWindows, setMaintenanceWindows] = useState<MaintenanceWindowRow[]>([]);
   const [excludeMaintenance, setExcludeMaintenance] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [excelExporting, setExcelExporting] = useState(false);
 
   const fetchReportsData = useCallback(async (): Promise<ReportsData> => {
     const [summaryRes, resultsRes, incidentsRes, groupsRes, mwRes] = await Promise.all([
@@ -827,6 +828,24 @@ const ReportsPage = () => {
 
   const exportDate = new Date().toISOString().slice(0, 10);
 
+  const handleExcelExport = async () => {
+    setExcelExporting(true);
+    try {
+      const res = await api.get("/reports/export/excel", {
+        params: { from: appliedFrom, to: appliedTo, rangeLabel: activeRangeLabel },
+        responseType: "arraybuffer",
+      });
+      const blob = new Blob([res.data as ArrayBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      downloadBlob(`monitor-report-${exportDate}.xlsx`, blob);
+    } catch {
+      toast.error("Failed to generate Excel report.");
+    } finally {
+      setExcelExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -849,28 +868,12 @@ const ReportsPage = () => {
               {isLoading ? t("dashboard.refreshing") : t("common.refresh")}
             </button>
             <button
-              className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
-              onClick={() => downloadCsv(`monitor-report-${exportDate}.csv`, exportRows, t("reportsPage.noExportData"))}
-              disabled={exportRows.length === 0}
+              onClick={() => void handleExcelExport()}
+              disabled={excelExporting || isLoading}
             >
-              {t("reportsPage.exportCsv")}
-            </button>
-            <button
-              className="inline-flex items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              onClick={() => downloadJson(`monitor-report-${exportDate}.json`, exportPayload)}
-              disabled={effectiveResults.length === 0 && incidents.length === 0}
-            >
-              {t("reportsPage.exportJson")}
-            </button>
-            <button
-              className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              onClick={() => downloadExcel(`monitor-report-${exportDate}.xls`, exportPayload)}
-              disabled={effectiveResults.length === 0 && incidents.length === 0}
-            >
-              {t("reportsPage.exportExcel")}
+              {excelExporting ? t("reportsPage.exportingExcel") : t("reportsPage.exportExcel")}
             </button>
           </div>
         </div>

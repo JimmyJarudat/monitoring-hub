@@ -17,6 +17,7 @@ import { apiTokenRoutes } from "./apiTokens";
 import { ok } from "../lib/response";
 import { serverLogRoutes } from "./server-logs";
 import { maintenanceWindowRoutes } from "./maintenanceWindows";
+import { reportRoutes } from "./reports";
 
 // Public routes — ไม่ต้องมี token
 export const publicRoutes = new Elysia()
@@ -53,4 +54,5 @@ export const protectedRoutes = new Elysia()
   .use(adminRoutes) // /admin
   .use(domainRoutes) // /domain
   .use(apiTokenRoutes) // /api-tokens
-  .use(serverLogRoutes); // /server-logs monitor
+  .use(serverLogRoutes) // /server-logs monitor
+  .use(reportRoutes); // /reports

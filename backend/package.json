@@ -13,6 +13,7 @@
     "@prisma/client": "^7.8.0",
     "elysia": "latest",
     "elysia-rate-limit": "^4.6.1",
+    "exceljs": "^4.4.0",
     "ioredis": "^5.10.1",
     "mongodb": "^7.2.0",
     "mssql": "^12.5.2",
