@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
@@ -320,7 +321,7 @@ const GroupDetailPage = () => {
                           {monitor.name}
                         </Link>
                         <div className="text-xs text-slate-500">
-                          {monitor.type} · {getTarget(monitor.config)}
+                          {formatMonitorTypeLabel(monitor.type)} · {getTarget(monitor.config)}
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
@@ -418,7 +419,7 @@ const GroupDetailPage = () => {
                     <span className="text-xs text-slate-500">{t("groups.downPer24h", { count: monitor.downCount24h })}</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {monitor.type} · {getTarget(monitor.config)}
+                    {formatMonitorTypeLabel(monitor.type)} · {getTarget(monitor.config)}
                   </p>
                 </div>
               ))}

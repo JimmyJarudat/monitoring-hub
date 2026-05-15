@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -559,7 +560,7 @@ const StatusMapPage = () => {
                           <StatusBadge status={node.status} />
                         </div>
                         <p className="mt-1 truncate text-xs text-slate-500">
-                          {node.type} · {node.target}
+                          {formatMonitorTypeLabel(node.type)} · {node.target}
                         </p>
                         <p className="mt-2 text-xs text-slate-500">
                           {t("statusMap.nodeHealthLine", { down: node.downCount24h, checks: node.checkCount24h, uptime: formatPercent(node.uptime24h) })}
@@ -670,7 +671,7 @@ function MapNodeCard({ node, locale }: { node: MapNode; locale: string }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-950">{node.name}</p>
           <p className="mt-1 truncate text-xs text-slate-500">
-            {node.type} · {node.enabled ? t("statusMap.active") : t("common.disabled")}
+            {formatMonitorTypeLabel(node.type)} · {node.enabled ? t("statusMap.active") : t("common.disabled")}
           </p>
         </div>
         <StatusBadge status={node.status} />

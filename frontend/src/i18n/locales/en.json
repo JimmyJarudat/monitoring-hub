@@ -590,7 +590,7 @@
     "monitorTypeSnmp": "SNMP",
     "monitorTypeSystem": "System",
     "monitorTypeDocker": "Docker",
-    "monitorTypeDatabase": "Database",
+    "monitorTypeDatabase": "Database (Test Connection)",
     "guideSnmpSummary": "Store an SNMP community string for SNMP and SYSTEM monitors.",
     "guideUserPassSummary": "Store a username/password pair for database monitors, HTTP basic auth, and login-based checks.",
     "guideApiTokenSummary": "Store a token or API key such as a bearer token or Portainer API key.",

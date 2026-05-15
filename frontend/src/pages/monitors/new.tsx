@@ -125,7 +125,7 @@ const monitorTypes: Array<{ label: string; value: MonitorType; descriptionKey: s
     descriptionKey: "newMonitor.typeDescriptions.SYSTEM",
   },
   { label: "Docker", value: "DOCKER", descriptionKey: "newMonitor.typeDescriptions.DOCKER" },
-  { label: "Database", value: "DATABASE", descriptionKey: "newMonitor.typeDescriptions.DATABASE" },
+  { label: "Database (Test Connection)", value: "DATABASE", descriptionKey: "newMonitor.typeDescriptions.DATABASE" },
 ];
 
 const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [

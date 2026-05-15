@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -1002,7 +1003,7 @@ const ReportsPage = () => {
                               <Link className="font-medium text-cyan-700 underline-offset-2 hover:text-cyan-900 hover:underline" to={`/monitors/${item.id}`}>
                                 {item.monitor}
                               </Link>
-                              <p className="text-xs text-slate-500">{item.type} · {t("groups.checksCount", { count: item.checks })}</p>
+                              <p className="text-xs text-slate-500">{formatMonitorTypeLabel(item.type)} · {t("groups.checksCount", { count: item.checks })}</p>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
                               {item.lastStatus ? <StatusBadge status={item.lastStatus} /> : "-"}

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 import { isAdminUser } from "@/utils/permissions";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
@@ -143,7 +144,7 @@ const getMonitorTypeLabel = (monitor: Pick<MonitorRow, "type" | "config">) => {
   }
   if (monitor.type === "SNMP") return "Network / Custom SNMP";
   if (monitor.type === "SYSTEM") return "System (SNMP)";
-  return monitor.type;
+  return formatMonitorTypeLabel(monitor.type);
 };
 
 const formatDateTime = (value: string | null | undefined) => {
@@ -733,7 +734,7 @@ const MonitorsPage = () => {
                     <option value="HTTP">HTTP</option>
                     <option value="PING">PING</option>
                     <option value="TCP">TCP</option>
-                    <option value="DATABASE">DATABASE</option>
+                    <option value="DATABASE">Database (Test Connection)</option>
                     <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DNS">DNS</option>
                     <option value="SNMP">Network / Printer / Custom SNMP</option>

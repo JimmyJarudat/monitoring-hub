@@ -590,7 +590,7 @@
     "monitorTypeSnmp": "SNMP",
     "monitorTypeSystem": "System",
     "monitorTypeDocker": "Docker",
-    "monitorTypeDatabase": "Database",
+    "monitorTypeDatabase": "Database (Test Connection)",
     "guideSnmpSummary": "ใช้เก็บ SNMP community string สำหรับ SNMP และ SYSTEM monitor",
     "guideUserPassSummary": "ใช้เก็บชุด username/password สำหรับ database, HTTP basic auth และงานที่ต้อง login",
     "guideApiTokenSummary": "ใช้เก็บ token หรือ API key เช่น Bearer token หรือ Portainer API key",
