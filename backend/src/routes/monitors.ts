@@ -325,6 +325,18 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig, credent
     return "DOCKER monitor requires config.portainerUrl, config.endpointId and either config.apiKey or credentialId";
   }
 
+  if (type === "DOCKER") {
+    const targetCount = [
+      typeof config.stackId === "number" && Number.isFinite(config.stackId),
+      typeof config.stackName === "string" && config.stackName.trim().length > 0,
+      typeof config.containerId === "string" && config.containerId.trim().length > 0,
+    ].filter(Boolean).length;
+
+    if (targetCount > 1) {
+      return "DOCKER monitor accepts only one target: stackId, stackName, or containerId";
+    }
+  }
+
   if (type === "DATABASE") {
     if (typeof config.type !== "string") {
       return "DATABASE monitor requires config.type";

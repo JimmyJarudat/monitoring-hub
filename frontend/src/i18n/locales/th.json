@@ -1407,8 +1407,11 @@
     "endpointId": "Endpoint ID",
     "recommended": "แนะนำ",
     "stackIdPlaceholder": "เช่น 12 — ดูจาก Portainer → Stacks → URL",
+    "stackName": "Stack name",
+    "stackNamePlaceholder": "เช่น monitoring_hub, portainer หรือ wireguard",
+    "stackNameHint": "เลือกกรอกอย่างใดอย่างหนึ่ง: Stack ID, Stack name หรือ Container ID/Name โดย Stack name รองรับทั้ง managed และ external Swarm/Compose stack",
     "containerIdName": "Container ID / Name",
-    "containerPlaceholder": "เช่น nginx หรือ abc123def — ถ้าว่างและไม่มี Stack ID จะเช็ค endpoint ภาพรวม",
+    "containerPlaceholder": "เช่น nginx หรือ abc123def — ถ้าว่างและไม่มี Stack ID/Name จะเช็ค endpoint ภาพรวม",
     "timeoutMs": "Timeout ms",
     "apiPayload": "API payload",
     "untitledMonitor": "Untitled monitor",
@@ -1424,7 +1427,7 @@
       "DNS": "resolve DNS record และเทียบค่าที่คาดหวังได้",
       "SNMP": "Query SNMP agent บนอุปกรณ์ network เช่น router, switch, firewall",
       "SYSTEM": "ตรวจ CPU, RAM และ Disk ผ่าน SNMP สำหรับ Linux server ที่ติดตั้ง snmpd",
-      "DOCKER": "ตรวจ Portainer endpoint หรือ container",
+      "DOCKER": "ตรวจ Portainer endpoint, stack หรือ container",
       "DATABASE": "ตรวจสุขภาพการเชื่อมต่อ database"
     },
     "requiredHints": {
@@ -1435,7 +1438,7 @@
       "DNS": "Required: host. Optional: record type, expected value, DNS server",
       "SNMP": "Required: host. Optional: community, version, port, custom OIDs",
       "SYSTEM": "Required: host. Optional: community, version, port",
-      "DOCKER": "Required: portainerUrl, apiKey หรือ API token credential, endpointId. Optional: Cloudflare Access credential",
+      "DOCKER": "Required: portainerUrl, apiKey หรือ API token credential, endpointId. Optional: stackId, stackName, containerId, Cloudflare Access credential",
       "DATABASE": "Required: database type, host, port. SQLite ใช้ file path. MongoDB ใช้ URI หรือ authSource ได้"
     }
   }

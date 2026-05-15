@@ -43,6 +43,11 @@
   - uptime
   - interface metrics
 - [x] DOCKER via Portainer
+  - endpoint overview
+  - container by ID / name
+  - managed stack by numeric ID
+  - managed stack by name
+  - external Swarm / Compose stack by Docker labels
 - [x] DATABASE
   - PostgreSQL
   - MySQL
@@ -204,7 +209,7 @@
 ---
 
 ## Remaining Known Gaps
-- [ ] Docker monitor: รองรับ external stack (lookup by name แทน numeric stackId) — URL รูปแบบ `/stacks/name?type=1&external=true` ยังเช็คไม่ได้ ต้องเพิ่ม `stackName` field และ `checkStackByName` ใน docker.Checker.ts
+- [x] Docker monitor: รองรับ target เดียวต่อ monitor (`stackId` หรือ `stackName` หรือ `containerId`) และรองรับ external stack ผ่าน `stackName` แล้ว — lookup `/api/stacks` ก่อน แล้ว fallback ไป Docker labels (`com.docker.stack.namespace`, `com.docker.compose.project`)
 
 
 - [x] Dark mode — implement แล้ว ใช้งานได้

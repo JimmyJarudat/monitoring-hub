@@ -1407,8 +1407,11 @@
     "endpointId": "Endpoint ID",
     "recommended": "recommended",
     "stackIdPlaceholder": "e.g. 12 — see Portainer → Stacks → URL",
+    "stackName": "Stack name",
+    "stackNamePlaceholder": "e.g. monitoring_hub, portainer, or wireguard",
+    "stackNameHint": "Use either Stack ID, Stack name, or Container ID/Name. Stack name supports managed and external Swarm/Compose stacks.",
     "containerIdName": "Container ID / Name",
-    "containerPlaceholder": "e.g. nginx or abc123def — blank with no Stack ID checks endpoint overview",
+    "containerPlaceholder": "e.g. nginx or abc123def — blank with no Stack ID/Name checks endpoint overview",
     "timeoutMs": "Timeout ms",
     "apiPayload": "API payload",
     "untitledMonitor": "Untitled monitor",
@@ -1424,7 +1427,7 @@
       "DNS": "Resolve DNS records and optionally match an expected value",
       "SNMP": "Query SNMP agent on network devices — routers, switches, firewalls",
       "SYSTEM": "Monitor CPU, RAM and disk usage via SNMP — Linux servers with snmpd",
-      "DOCKER": "Check Portainer endpoint or container",
+      "DOCKER": "Check Portainer endpoint, stack, or container",
       "DATABASE": "Check database connection health"
     },
     "requiredHints": {
@@ -1435,7 +1438,7 @@
       "DNS": "Required: host. Optional: record type, expected value, DNS server",
       "SNMP": "Required: host. Optional: community, version, port, custom OIDs",
       "SYSTEM": "Required: host. Optional: community, version, port",
-      "DOCKER": "Required: portainerUrl, apiKey or API token credential, endpointId. Optional: Cloudflare Access credential",
+      "DOCKER": "Required: portainerUrl, apiKey or API token credential, endpointId. Optional: stackId, stackName, containerId, Cloudflare Access credential",
       "DATABASE": "Required: database type, host, port. SQLite uses file path. MongoDB can use URI or authSource."
     }
   }
