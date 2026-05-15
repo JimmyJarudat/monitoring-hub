@@ -1149,8 +1149,21 @@
       "retention": {
         "title": "Data retention",
         "description": "Set data age by type and choose whether the scheduler cleans up automatically every 24 hours."
+      },
+      "reportBranding": {
+        "title": "Report Branding",
+        "description": "Company name and logo shown on exported PDF and Excel reports."
       }
     },
+    "reportCompanyName": "Company name",
+    "reportCompanyNameHint": "Shown on report cover page and Excel header. Leave blank to use system name.",
+    "reportFooterText": "Footer text",
+    "reportFooterTextHint": "e.g. Confidential — Internal Use Only",
+    "reportLogo": "Report logo",
+    "reportLogoHint": "PNG, JPG, WEBP, or SVG · max 2 MB. Shown on PDF cover page.",
+    "uploadReportLogo": "Upload logo",
+    "changeReportLogo": "Change logo",
+    "removeReportLogo": "Remove",
     "logoAlt": "logo",
     "logoImage": "Image logo",
     "logoHint": "PNG, JPG, WEBP, GIF — up to 2 MB · Replaces sidebar logo text",

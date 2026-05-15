@@ -1149,8 +1149,21 @@
       "retention": {
         "title": "Data retention",
         "description": "ตั้งอายุข้อมูลรายประเภท และเลือกว่าจะให้ scheduler cleanup อัตโนมัติทุก 24 ชั่วโมงหรือไม่"
+      },
+      "reportBranding": {
+        "title": "Report Branding",
+        "description": "ชื่อบริษัทและโลโก้ที่แสดงในรายงาน PDF และ Excel ที่ export ออกมา"
       }
     },
+    "reportCompanyName": "ชื่อบริษัท",
+    "reportCompanyNameHint": "แสดงบนหน้าปกรายงาน PDF และ header ของ Excel ถ้าว่างจะใช้ชื่อระบบแทน",
+    "reportFooterText": "ข้อความ Footer",
+    "reportFooterTextHint": "เช่น เอกสารลับ — ห้ามเผยแพร่",
+    "reportLogo": "โลโก้รายงาน",
+    "reportLogoHint": "PNG, JPG, WEBP หรือ SVG · ไม่เกิน 2 MB แสดงบนหน้าปก PDF",
+    "uploadReportLogo": "อัปโหลดโลโก้",
+    "changeReportLogo": "เปลี่ยนโลโก้",
+    "removeReportLogo": "ลบออก",
     "logoAlt": "โลโก้",
     "logoImage": "Logo รูปภาพ",
     "logoHint": "PNG, JPG, WEBP, GIF — ไม่เกิน 2 MB · แทนที่ logo text ใน sidebar",

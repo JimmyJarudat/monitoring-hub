@@ -250,13 +250,16 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     "/system-config",
     async ({ body, currentUser }) => {
       requireAdminRole(currentUser.role);
-      const { general: generalPatch, ...rest } = body;
-      if (generalPatch) {
-        const current = await getSystemConfig();
-        await saveSystemConfig({ ...rest, general: { ...current.general, ...generalPatch } });
-      } else {
-        await saveSystemConfig(rest);
-      }
+      const { general: generalPatch, reportBranding: reportBrandingPatch, ...rest } = body;
+      const needsCurrent = generalPatch || reportBrandingPatch;
+      const current = needsCurrent ? await getSystemConfig() : null;
+      await saveSystemConfig({
+        ...rest,
+        ...(generalPatch && current ? { general: { ...current.general, ...generalPatch } } : {}),
+        ...(reportBrandingPatch && current
+          ? { reportBranding: { ...current.reportBranding, ...reportBrandingPatch } }
+          : {}),
+      });
       return ok({ message: "Settings saved successfully." });
     },
     {
@@ -296,6 +299,10 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
             enabled: t.Boolean(),
             time: t.String({ minLength: 5, maxLength: 5 }),
             channelIds: t.Array(t.String()),
+          }),
+          reportBranding: t.Object({
+            companyName: t.String({ maxLength: 120 }),
+            footerText: t.String({ maxLength: 200 }),
           }),
         }),
       ),
@@ -349,4 +356,49 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
     }
     await saveSystemConfig({ general: { ...current.general, logoUrl: null } });
     return ok({ message: "Logo removed successfully." });
+  })
+  .post(
+    "/system-config/report-logo",
+    async ({ body, currentUser, set }) => {
+      requireAdminRole(currentUser.role);
+
+      const file = body.file;
+      const ext = (file.name.split(".").pop() ?? "png").toLowerCase();
+      const allowed = ["png", "jpg", "jpeg", "webp", "svg"];
+      if (!allowed.includes(ext)) {
+        set.status = 400;
+        return fail("Only PNG, JPG, WEBP, SVG files are supported.");
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        set.status = 400;
+        return fail("File size must not exceed 2 MB.");
+      }
+
+      await mkdir("uploads", { recursive: true });
+
+      const current = await getSystemConfig();
+      if (current.reportBranding.logoUrl) {
+        const oldFilename = current.reportBranding.logoUrl.replace("/uploads/", "");
+        try { await unlink(`uploads/${oldFilename}`); } catch {}
+      }
+
+      const filename = `report-logo.${ext}`;
+      await Bun.write(`uploads/${filename}`, file);
+
+      const logoUrl = `/uploads/${filename}`;
+      await saveSystemConfig({ reportBranding: { ...current.reportBranding, logoUrl } });
+
+      return ok({ logoUrl });
+    },
+    { body: t.Object({ file: t.File() }) },
+  )
+  .delete("/system-config/report-logo", async ({ currentUser }) => {
+    requireAdminRole(currentUser.role);
+    const current = await getSystemConfig();
+    if (current.reportBranding.logoUrl) {
+      const filename = current.reportBranding.logoUrl.replace("/uploads/", "");
+      try { await unlink(`uploads/${filename}`); } catch {}
+    }
+    await saveSystemConfig({ reportBranding: { ...current.reportBranding, logoUrl: null } });
+    return ok({ message: "Report logo removed successfully." });
   });

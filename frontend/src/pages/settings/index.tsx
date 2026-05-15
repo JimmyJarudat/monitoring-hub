@@ -82,6 +82,7 @@ const SYS_DEFAULTS: SystemConfig = {
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
   scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
+  reportBranding: { companyName: "", logoUrl: null, footerText: "" },
 };
 
 const REMINDER_OPTIONS = [1, 2, 4, 6, 12, 24, 48, 72];
@@ -103,6 +104,9 @@ const SettingsPage = () => {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoRemoving, setLogoRemoving] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [reportLogoUploading, setReportLogoUploading] = useState(false);
+  const [reportLogoRemoving, setReportLogoRemoving] = useState(false);
+  const reportLogoInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = async (file: File) => {
     setLogoUploading(true);
@@ -133,6 +137,34 @@ const SettingsPage = () => {
       await reloadSysConfig();
     } catch { toast.error(t("settings.logoRemoveError")); }
     finally { setLogoRemoving(false); }
+  };
+
+  const handleReportLogoUpload = async (file: File) => {
+    setReportLogoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api.post<ApiResponse<{ logoUrl: string }>>(
+        "/admin/system-config/report-logo",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      if (!res.data.success) { toast.error(res.data.message); return; }
+      setSysConfig((c) => ({ ...c, reportBranding: { ...c.reportBranding, logoUrl: res.data.success ? res.data.data.logoUrl : c.reportBranding.logoUrl } }));
+      toast.success(t("settings.logoUploadSuccess"));
+    } catch { toast.error(t("settings.logoUploadError")); }
+    finally { setReportLogoUploading(false); if (reportLogoInputRef.current) reportLogoInputRef.current.value = ""; }
+  };
+
+  const handleReportLogoRemove = async () => {
+    setReportLogoRemoving(true);
+    try {
+      const res = await api.delete<ApiResponse<{ message: string }>>("/admin/system-config/report-logo");
+      if (!res.data.success) { toast.error(res.data.message); return; }
+      setSysConfig((c) => ({ ...c, reportBranding: { ...c.reportBranding, logoUrl: null } }));
+      toast.success(t("settings.logoRemoveSuccess"));
+    } catch { toast.error(t("settings.logoRemoveError")); }
+    finally { setReportLogoRemoving(false); }
   };
 
   const fetchSysConfig = useCallback(async () => {
@@ -853,6 +885,97 @@ const SettingsPage = () => {
               <p className="text-sm text-slate-400">{t("settings.noCleanupYet")}</p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-6 py-4">
+          <h2 className="font-semibold text-slate-800">{t("settings.sections.reportBranding.title")}</h2>
+          <p className="mt-0.5 text-xs text-slate-500">{t("settings.sections.reportBranding.description")}</p>
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          <SysField label={t("settings.reportCompanyName")}>
+            <input
+              type="text"
+              maxLength={120}
+              value={sysConfig.reportBranding.companyName}
+              onChange={(e) => setSysConfig((c) => ({ ...c, reportBranding: { ...c.reportBranding, companyName: e.target.value } }))}
+              className={INPUT_CLS}
+              placeholder={t("settings.reportCompanyNameHint")}
+            />
+          </SysField>
+
+          <SysField label={t("settings.reportFooterText")}>
+            <input
+              type="text"
+              maxLength={200}
+              value={sysConfig.reportBranding.footerText}
+              onChange={(e) => setSysConfig((c) => ({ ...c, reportBranding: { ...c.reportBranding, footerText: e.target.value } }))}
+              className={INPUT_CLS}
+              placeholder={t("settings.reportFooterTextHint")}
+            />
+          </SysField>
+
+          <div className="flex items-center gap-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {sysConfig.reportBranding.logoUrl ? (
+                <img
+                  src={`${API_BASE_URL}${sysConfig.reportBranding.logoUrl}?v=${Date.now()}`}
+                  alt={t("settings.reportLogo")}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <span className="text-xs text-slate-400">{t("settings.reportLogo")}</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-700">{t("settings.reportLogo")}</p>
+              <p className="mt-0.5 text-xs text-slate-500">{t("settings.reportLogoHint")}</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={reportLogoUploading}
+                  onClick={() => reportLogoInputRef.current?.click()}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                >
+                  {reportLogoUploading
+                    ? t("settings.uploading")
+                    : sysConfig.reportBranding.logoUrl
+                      ? t("settings.changeReportLogo")
+                      : t("settings.uploadReportLogo")}
+                </button>
+                {sysConfig.reportBranding.logoUrl ? (
+                  <button
+                    type="button"
+                    disabled={reportLogoRemoving}
+                    onClick={() => void handleReportLogoRemove()}
+                    className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                  >
+                    {reportLogoRemoving ? t("settings.removing") : t("settings.removeReportLogo")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <input
+              ref={reportLogoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleReportLogoUpload(f); }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end border-t border-slate-100 px-6 py-4">
+          <button
+            type="button"
+            onClick={() => void saveSysSection({ reportBranding: { companyName: sysConfig.reportBranding.companyName, footerText: sysConfig.reportBranding.footerText } }, t("settings.sections.reportBranding.title"))}
+            disabled={sysSaving}
+            className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
+          >
+            {sysSaving ? t("settings.saving") : t("common.save")}
+          </button>
         </div>
       </div>
     </div>
