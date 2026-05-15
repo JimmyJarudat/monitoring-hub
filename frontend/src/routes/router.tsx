@@ -35,6 +35,7 @@ import DomainIntelligencePage from "@/pages/domain";
 import SystemLogsPage from "@/pages/system-logs";
 import ScheduledReportsPage from "@/pages/scheduled-reports";
 import ApiTokensPage from "@/pages/api-tokens";
+import MaintenanceWindowsPage from "@/pages/maintenance-windows";
 
 const LegacyMonitorDetailRedirect = () => {
   const { id } = useParams();
@@ -68,6 +69,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "interfaces", element: <InterfaceInventoryPage /> }),
       createProtectedRoute({ path: "results", element: <ResultsPage /> }),
       createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
+      createProtectedRoute({ path: "maintenance-windows", element: <MaintenanceWindowsPage /> }),
       createProtectedRoute({ path: "profile", element: <ProfilePage /> }),
       createProtectedRoute({ path: "change-password", element: <ChangePasswordPage /> }),
       createProtectedRoute({ path: "login-history", element: <LoginHistoryPage /> }),

@@ -486,14 +486,14 @@ networks:
 | **Docker External Stack Lookup** | Done | รองรับ target เดียวต่อ monitor: `stackId`, `stackName`, หรือ `containerId`; `stackName` รองรับ managed และ external Swarm/Compose stack |
 | **Device Metrics Polish** | Done | threshold overlay / anomaly hints สำหรับ CPU/RAM/Disk และ rollup summary สำหรับกราฟระยะยาว |
 | **Credential Usage Context** | Done | แสดง credential ที่ผูกจากมุมมอง group / device และเพิ่ม group context ในหน้า credential |
-| **Maintenance Window** | Next | ประกาศ planned downtime ล่วงหน้า — ระงับ alert และเลือก exclude downtime ใน report |
+| **Maintenance Window** | Done | ประกาศ planned downtime ล่วงหน้า ผูกกับ monitor/group และระงับ incident/alert ระหว่าง window |
 | **DB Insight** | Planned | วิเคราะห์ประสิทธิภาพ database: slow queries, index, table/file sizes, connections, replication |
 
 ---
 
 ## Recommended Next Steps
 
-1. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
+1. เพิ่ม **Maintenance Window report exclusion** เพื่อเลือกตัด planned downtime ออกจาก availability report
 2. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
 
 ---

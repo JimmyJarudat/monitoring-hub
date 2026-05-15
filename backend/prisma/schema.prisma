@@ -166,6 +166,7 @@ model Monitor {
   groups               MonitorGroupMember[]
   alertRules           AlertRule[]
   incidents            Incident[]
+  maintenanceWindows   MaintenanceWindow[]
 
   @@index([credentialId])
   @@index([type, enabled])
@@ -236,6 +237,7 @@ model MonitorGroup {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   monitors    MonitorGroupMember[]
+  maintenanceWindows MaintenanceWindow[]
 
   @@map("monitor_groups")
 }
@@ -360,6 +362,26 @@ enum IncidentStatus {
   OPEN
   ACKNOWLEDGED
   RESOLVED
+}
+
+model MaintenanceWindow {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  enabled     Boolean       @default(true)
+  monitorId   String?
+  monitor     Monitor?      @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       MonitorGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([enabled, startsAt, endsAt])
+  @@index([monitorId])
+  @@index([groupId])
+  @@map("maintenance_windows")
 }
 
 model SystemSetting {

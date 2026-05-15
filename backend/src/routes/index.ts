@@ -16,6 +16,7 @@ import { notificationRoutes } from "./notifications";
 import { apiTokenRoutes } from "./apiTokens";
 import { ok } from "../lib/response";
 import { serverLogRoutes } from "./server-logs";
+import { maintenanceWindowRoutes } from "./maintenanceWindows";
 
 // Public routes — ไม่ต้องมี token
 export const publicRoutes = new Elysia()
@@ -47,6 +48,7 @@ export const protectedRoutes = new Elysia()
   .use(credentialRoutes) // /credentials
   .use(channelRoutes) // /channels
   .use(notificationRoutes) // /notifications
+  .use(maintenanceWindowRoutes) // /maintenance-windows
   .use(userRoutes) // /admin/users
   .use(adminRoutes) // /admin
   .use(domainRoutes) // /domain

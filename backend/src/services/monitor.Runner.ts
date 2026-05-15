@@ -16,6 +16,7 @@ import { tlsCheck } from "./checkers/tls.Checker";
 import { notifyIncidentEscalation, notifyIncidentReminder, notifyIncidentTransition } from "./notification.service";
 import { getSystemConfig } from "./systemConfig.service";
 import { logger } from "../lib/logger";
+import { findActiveMaintenanceWindow } from "./maintenanceWindow.service";
 
 type CheckResult = {
   status: MonitorStatus;
@@ -655,6 +656,19 @@ const reconcileAlertRuleIncidents = async (monitor: Monitor, result: RuleEvaluat
   return true;
 };
 
+const shouldSuppressByMaintenance = async (monitor: Monitor, checkedAt: Date) => {
+  const maintenanceWindow = await findActiveMaintenanceWindow(monitor.id, checkedAt);
+  if (!maintenanceWindow) return false;
+
+  logger.info("monitor", `suppressed incident during maintenance: ${monitor.id}`, {
+    monitorName: monitor.name,
+    maintenanceWindowId: maintenanceWindow.id,
+    maintenanceWindowTitle: maintenanceWindow.title,
+  });
+
+  return true;
+};
+
 const extractThresholdConfig = (config: Prisma.InputJsonObject): ThresholdConfig => {
   const raw = config.alertThresholds;
   if (!isConfigObject(raw)) return {};
@@ -793,11 +807,13 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       },
     });
 
-    await reconcileIncident(monitor, {
-      status: createdResult.status,
-      message: createdResult.message,
-      checkedAt: createdResult.checkedAt,
-    });
+    if (!(await shouldSuppressByMaintenance(monitor, createdResult.checkedAt))) {
+      await reconcileIncident(monitor, {
+        status: createdResult.status,
+        message: createdResult.message,
+        checkedAt: createdResult.checkedAt,
+      });
+    }
 
     return createdResult;
   }
@@ -817,11 +833,13 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       },
     });
 
-    await reconcileIncident(monitor, {
-      status: createdResult.status,
-      message: createdResult.message,
-      checkedAt: createdResult.checkedAt,
-    });
+    if (!(await shouldSuppressByMaintenance(monitor, createdResult.checkedAt))) {
+      await reconcileIncident(monitor, {
+        status: createdResult.status,
+        message: createdResult.message,
+        checkedAt: createdResult.checkedAt,
+      });
+    }
 
     return createdResult;
   }
@@ -842,11 +860,13 @@ export const runMonitorCheck = async (monitor: Monitor) => {
       },
     });
 
-    await reconcileIncident(monitor, {
-      status: createdResult.status,
-      message: createdResult.message,
-      checkedAt: createdResult.checkedAt,
-    });
+    if (!(await shouldSuppressByMaintenance(monitor, createdResult.checkedAt))) {
+      await reconcileIncident(monitor, {
+        status: createdResult.status,
+        message: createdResult.message,
+        checkedAt: createdResult.checkedAt,
+      });
+    }
 
     return createdResult;
   }
@@ -888,15 +908,19 @@ export const runMonitorCheck = async (monitor: Monitor) => {
     return monitorResult;
   });
 
-  const handledByRules = await reconcileAlertRuleIncidents(monitor, {
-    status: createdResult.status,
-    responseTimeMs: createdResult.responseTimeMs,
-    message: createdResult.message,
-    checkedAt: createdResult.checkedAt,
-    metadata: result.metadata,
-  });
+  const underMaintenance =
+    createdResult.status !== "UP" && (await shouldSuppressByMaintenance(monitor, createdResult.checkedAt));
+  const handledByRules = underMaintenance
+    ? false
+    : await reconcileAlertRuleIncidents(monitor, {
+        status: createdResult.status,
+        responseTimeMs: createdResult.responseTimeMs,
+        message: createdResult.message,
+        checkedAt: createdResult.checkedAt,
+        metadata: result.metadata,
+      });
 
-  if (!handledByRules) {
+  if (!underMaintenance && !handledByRules) {
     await reconcileIncident(monitor, {
       status: createdResult.status,
       message: createdResult.message,

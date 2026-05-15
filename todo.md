@@ -218,6 +218,8 @@
 - [x] CPU / RAM / Disk metrics polish — มี threshold overlay, anomaly hints, และ rollup summary แล้ว
 - [x] Bind credential usage ให้เห็นจาก group / device context
 - [x] Rollup summaries สำหรับ long-term charts
+- [x] Maintenance Window core — CRUD, monitor/group target, sidebar menu, และ runner suppress incident/alert ระหว่าง window
+- [ ] Maintenance Window reports — optional toggle เพื่อตัด planned downtime ออกจาก availability calculation
 
 ---
 
