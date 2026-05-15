@@ -733,7 +733,10 @@
     "groupSummaryDescription": "Report metrics grouped by monitor group",
     "noGroupReport": "No group report",
     "noGroupMessage": "Create monitor groups or run checks to populate this section.",
-    "groupDetail": "{{down}} down · {{degraded}} degraded · {{incidents}} incidents"
+    "groupDetail": "{{down}} down · {{degraded}} degraded · {{incidents}} incidents",
+    "excludeMaintenance": "Exclude planned downtime",
+    "excludeMaintenanceHint": "Checks during maintenance windows are not counted in uptime",
+    "maintenanceExcluded": "{{count}} checks excluded"
   },
   "statusMap": {
     "title": "Status Map",

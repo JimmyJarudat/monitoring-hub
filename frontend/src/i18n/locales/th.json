@@ -733,7 +733,10 @@
     "groupSummaryDescription": "Metric ของรายงานแยกตาม monitor group",
     "noGroupReport": "ยังไม่มีรายงานกลุ่ม",
     "noGroupMessage": "สร้าง monitor groups หรือรัน checks เพื่อเติมข้อมูลส่วนนี้",
-    "groupDetail": "{{down}} down · {{degraded}} degraded · {{incidents}} incidents"
+    "groupDetail": "{{down}} down · {{degraded}} degraded · {{incidents}} incidents",
+    "excludeMaintenance": "ตัด Planned Downtime ออก",
+    "excludeMaintenanceHint": "ผลการตรวจในช่วง maintenance window จะไม่ถูกนับใน uptime",
+    "maintenanceExcluded": "ตัดออก {{count}} ผลตรวจ"
   },
   "statusMap": {
     "title": "แผนที่สถานะ",
