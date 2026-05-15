@@ -37,6 +37,11 @@ type MonitorRow = {
   enabled: boolean;
   interval: number;
   config: Record<string, unknown>;
+  credential: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
   latestResult: {
     status: MonitorStatus;
     checkedAt: string;
@@ -305,6 +310,7 @@ const GroupDetailPage = () => {
                   <tr>
                     <th className="px-4 py-3">{t("groups.colMonitor")}</th>
                     <th className="px-4 py-3">{t("common.status")}</th>
+                    <th className="px-4 py-3">{t("groups.colCredential")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryUptime")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryAvgResponse")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryOpenIncidents")}</th>
@@ -333,6 +339,19 @@ const GroupDetailPage = () => {
                           </span>
                         ) : (
                           <span className="text-slate-400">PENDING</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {monitor.credential ? (
+                          <Link
+                            className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                            to="/credentials"
+                            title={monitor.credential.type}
+                          >
+                            {monitor.credential.name}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-400">{t("groups.noCredential")}</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">

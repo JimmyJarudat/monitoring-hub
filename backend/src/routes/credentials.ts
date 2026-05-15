@@ -50,7 +50,24 @@ export const credentialRoutes = new Elysia({ prefix: "/credentials" })
     const credentials = await prisma.credential.findMany({
       include: {
         monitors: {
-          select: { id: true, name: true, type: true, enabled: true },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            enabled: true,
+            groups: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true,
+                  },
+                },
+              },
+            },
+          },
           orderBy: [{ name: "asc" }],
         },
       },

@@ -216,7 +216,7 @@
 - [x] Monitor Active Window — เสร็จแล้ว (commit: feat: add monitor active windows)
 - [x] Incident Acknowledge timeline — แสดง "acknowledged by / at" แม้ incident จะ resolved แล้ว
 - [x] CPU / RAM / Disk metrics polish — มี threshold overlay, anomaly hints, และ rollup summary แล้ว
-- [ ] Bind credential usage ให้เห็นจาก group / device context
+- [x] Bind credential usage ให้เห็นจาก group / device context
 - [x] Rollup summaries สำหรับ long-term charts
 
 ---

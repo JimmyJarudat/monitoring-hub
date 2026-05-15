@@ -64,6 +64,11 @@ type Device = {
   enabled: boolean;
   interval: number;
   config: { host?: string; community?: string; printerPreset?: string };
+  credential: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
   latestResult: LatestResult | null;
   uptime24h: number | null;
 };
@@ -370,6 +375,19 @@ const DeviceCard = ({ device }: { device: Device }) => {
                   {vendor.name}
                 </span>
               ) : null}
+              {device.credential ? (
+                <Link
+                  className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-100"
+                  to="/credentials"
+                  title={device.credential.type}
+                >
+                  {t("devices.credential")}: {device.credential.name}
+                </Link>
+              ) : (
+                <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+                  {t("devices.noCredential")}
+                </span>
+              )}
             </div>
           </div>
         </div>

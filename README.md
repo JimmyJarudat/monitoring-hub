@@ -485,17 +485,16 @@ networks:
 | **Dark Mode** | Done | รองรับ dark theme ผ่าน class-based toggle |
 | **Docker External Stack Lookup** | Done | รองรับ target เดียวต่อ monitor: `stackId`, `stackName`, หรือ `containerId`; `stackName` รองรับ managed และ external Swarm/Compose stack |
 | **Device Metrics Polish** | Done | threshold overlay / anomaly hints สำหรับ CPU/RAM/Disk และ rollup summary สำหรับกราฟระยะยาว |
-| **Credential Usage Context** | Next | แสดงการผูก credential จากมุมมอง group / device เพิ่มจากหน้า credential |
-| **Maintenance Window** | Planned | ประกาศ planned downtime ล่วงหน้า — ระงับ alert และเลือก exclude downtime ใน report |
+| **Credential Usage Context** | Done | แสดง credential ที่ผูกจากมุมมอง group / device และเพิ่ม group context ในหน้า credential |
+| **Maintenance Window** | Next | ประกาศ planned downtime ล่วงหน้า — ระงับ alert และเลือก exclude downtime ใน report |
 | **DB Insight** | Planned | วิเคราะห์ประสิทธิภาพ database: slow queries, index, table/file sizes, connections, replication |
 
 ---
 
 ## Recommended Next Steps
 
-1. ทำ **Credential Usage Context** เพื่อให้เห็นผลกระทบของ credential จาก group / device
-2. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
-3. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
+1. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
+2. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
 
 ---
 

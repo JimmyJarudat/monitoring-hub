@@ -43,6 +43,13 @@ type CredentialRow = {
     name: string;
     type: MonitorType;
     enabled: boolean;
+    groups: Array<{
+      group: {
+        id: string;
+        name: string;
+        color: string | null;
+      };
+    }>;
   }>;
   createdAt: string;
   updatedAt: string;
@@ -516,6 +523,13 @@ const CredentialsPage = () => {
                   ? revealedSecrets[credential.id]
                   : maskSecretValue(credential.secret);
                 const isRevealBusy = revealingId === credential.id;
+                const linkedGroups = Array.from(
+                  new Map(
+                    credential.monitors.flatMap((monitor) =>
+                      monitor.groups.map(({ group }) => [group.id, group] as const),
+                    ),
+                  ).values(),
+                );
 
                 return (
                   <tr className="transition hover:bg-slate-50" key={credential.id}>
@@ -581,6 +595,29 @@ const CredentialsPage = () => {
                               </span>
                             ) : null}
                           </div>
+                          {linkedGroups.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              <span className="text-xs text-slate-400">{t("credentials.groupContext")}</span>
+                              {linkedGroups.slice(0, 4).map((group) => (
+                                <Link
+                                  className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200 transition hover:bg-cyan-50 hover:text-cyan-700"
+                                  key={group.id}
+                                  to={`/groups/${group.id}`}
+                                >
+                                  <span
+                                    className="h-1.5 w-1.5 rounded-full"
+                                    style={{ backgroundColor: group.color ?? "#22c55e" }}
+                                  />
+                                  {group.name}
+                                </Link>
+                              ))}
+                              {linkedGroups.length > 4 ? (
+                                <span className="text-[11px] text-slate-400">
+                                  {t("credentials.moreCount", { count: linkedGroups.length - 4 })}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">{t("credentials.notLinked")}</span>
