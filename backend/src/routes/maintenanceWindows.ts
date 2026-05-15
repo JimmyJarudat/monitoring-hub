@@ -29,7 +29,7 @@ const validatePayload = async (body: {
   endsAt: string;
   monitorId?: string;
   groupId?: string;
-}) => {
+}): Promise<{ error: string } | { startsAt: Date; endsAt: Date; monitorId: string | null; groupId: string | null }> => {
   const startsAt = parseDate(body.startsAt);
   const endsAt = parseDate(body.endsAt);
   const monitorId = normalizeOptionalText(body.monitorId);
