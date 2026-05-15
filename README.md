@@ -484,7 +484,7 @@ networks:
 | **Printer SNMP Preset** | Done | Preset สำเร็จรูป toner, กระดาษ, สถานะ printer และ alert metrics |
 | **Dark Mode** | Done | รองรับ dark theme ผ่าน class-based toggle |
 | **Docker External Stack Lookup** | Done | รองรับ target เดียวต่อ monitor: `stackId`, `stackName`, หรือ `containerId`; `stackName` รองรับ managed และ external Swarm/Compose stack |
-| **Device Metrics Polish** | Next | threshold overlay / anomaly hints สำหรับ CPU/RAM/Disk และ rollup summary สำหรับกราฟระยะยาว |
+| **Device Metrics Polish** | Done | threshold overlay / anomaly hints สำหรับ CPU/RAM/Disk และ rollup summary สำหรับกราฟระยะยาว |
 | **Credential Usage Context** | Next | แสดงการผูก credential จากมุมมอง group / device เพิ่มจากหน้า credential |
 | **Maintenance Window** | Planned | ประกาศ planned downtime ล่วงหน้า — ระงับ alert และเลือก exclude downtime ใน report |
 | **DB Insight** | Planned | วิเคราะห์ประสิทธิภาพ database: slow queries, index, table/file sizes, connections, replication |
@@ -493,10 +493,9 @@ networks:
 
 ## Recommended Next Steps
 
-1. ทำ **Device Metrics Polish** เพื่อให้ NMS view ใช้งาน production ได้ดีขึ้น
-2. ทำ **Credential Usage Context** เพื่อให้เห็นผลกระทบของ credential จาก group / device
-3. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
-4. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
+1. ทำ **Credential Usage Context** เพื่อให้เห็นผลกระทบของ credential จาก group / device
+2. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
+3. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
 
 ---
 

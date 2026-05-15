@@ -472,16 +472,19 @@ const supplyColorHex = (color?: string) => {
 const WARN_PCT = 75;
 const CRITICAL_PCT = 90;
 
-const thresholdCardClass = (pct: number | null | undefined) => {
+const effectiveThreshold = (custom: number | null | undefined, fallback: number) =>
+  isFiniteNumber(custom) ? custom : fallback;
+
+const thresholdCardClass = (pct: number | null | undefined, threshold = CRITICAL_PCT) => {
   if (!isFiniteNumber(pct)) return "border-slate-200 bg-slate-50";
-  if (pct >= CRITICAL_PCT) return "border-red-200 bg-red-50";
+  if (pct >= threshold) return "border-red-200 bg-red-50";
   if (pct >= WARN_PCT) return "border-amber-200 bg-amber-50";
   return "border-slate-200 bg-slate-50";
 };
 
-const thresholdValueClass = (pct: number | null | undefined) => {
+const thresholdValueClass = (pct: number | null | undefined, threshold = CRITICAL_PCT) => {
   if (!isFiniteNumber(pct)) return "text-slate-950";
-  if (pct >= CRITICAL_PCT) return "text-red-700";
+  if (pct >= threshold) return "text-red-700";
   if (pct >= WARN_PCT) return "text-amber-700";
   return "text-slate-950";
 };
@@ -503,6 +506,29 @@ const computeSeriesAnomaly = (
 
 const formatPercent = (value: number | null | undefined) =>
   isFiniteNumber(value) ? `${value.toFixed(1)}%` : "-";
+
+const percentile = (values: number[], p: number) => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[index] ?? null;
+};
+
+const summarizePercentSeries = (values: number[], threshold?: number | null) => {
+  const sanitized = values.filter(isFiniteNumber);
+  if (sanitized.length === 0) {
+    return { avg: null, max: null, p95: null, breaches: 0, count: 0 };
+  }
+
+  const avg = sanitized.reduce((sum, value) => sum + value, 0) / sanitized.length;
+  const max = Math.max(...sanitized);
+  const p95 = percentile(sanitized, 95);
+  const breaches = isFiniteNumber(threshold)
+    ? sanitized.filter((value) => value >= threshold).length
+    : 0;
+
+  return { avg, max, p95, breaches, count: sanitized.length };
+};
 
 const formatAlertThreshold = (metric: string, threshold: number) => {
   if (metric === "status") return statusThresholdLabels[threshold] ?? String(threshold);
@@ -915,6 +941,22 @@ const MonitorDetailPage = () => {
   const latestPrinterInfo = isPrinterMonitor
     ? (latestResult?.metadata?.printer as PrinterInfo | null | undefined) ?? null
     : null;
+  const configuredThresholds = useMemo(() => {
+    const raw = monitor?.config?.alertThresholds;
+    const config = typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? raw as { cpuPct?: unknown; ramPct?: unknown; diskPct?: unknown }
+      : {};
+    const toNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
+
+    return {
+      cpuPct: toNumber(config.cpuPct),
+      ramPct: toNumber(config.ramPct),
+      diskPct: toNumber(config.diskPct),
+    };
+  }, [monitor?.config]);
+  const cpuThreshold = effectiveThreshold(configuredThresholds.cpuPct, CRITICAL_PCT);
+  const ramThreshold = effectiveThreshold(configuredThresholds.ramPct, CRITICAL_PCT);
+  const diskThreshold = effectiveThreshold(configuredThresholds.diskPct, CRITICAL_PCT);
   const fallbackCredentialConfig = monitor?.config ?? {};
   const parsedEditConfig = useMemo(() => {
     try {
@@ -1048,6 +1090,19 @@ const MonitorDetailPage = () => {
       (a, b) => new Date(String(a.checkedAt)).getTime() - new Date(String(b.checkedAt)).getTime(),
     );
   }, [diskSeries, locale]);
+
+  const cpuSummary = useMemo(
+    () => summarizePercentSeries(utilizationChartData.map((point) => point.cpu).filter(isFiniteNumber), cpuThreshold),
+    [cpuThreshold, utilizationChartData],
+  );
+  const memorySummary = useMemo(
+    () => summarizePercentSeries(utilizationChartData.map((point) => point.memory).filter(isFiniteNumber), ramThreshold),
+    [ramThreshold, utilizationChartData],
+  );
+  const diskSummary = useMemo(() => {
+    const values = diskSeries.flatMap((series) => series.points.map((point) => point.value));
+    return summarizePercentSeries(values, diskThreshold);
+  }, [diskSeries, diskThreshold]);
 
   const interfaceAnalytics = useMemo(() => {
     const seriesByInterface = new Map<
@@ -1841,8 +1896,46 @@ const MonitorDetailPage = () => {
                   </div>
                 ) : null}
 
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {[
+                    { label: "CPU", summary: cpuSummary, threshold: cpuThreshold },
+                    { label: "Memory", summary: memorySummary, threshold: ramThreshold },
+                    { label: "Disk", summary: diskSummary, threshold: diskThreshold },
+                  ].map((item) => (
+                    <div className="rounded-md border border-slate-200 bg-white p-3" key={item.label}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          threshold {formatPercent(item.threshold)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">Avg</p>
+                          <p className="text-sm font-semibold text-slate-900">{formatPercent(item.summary.avg)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">Max</p>
+                          <p className={`text-sm font-semibold ${thresholdValueClass(item.summary.max, item.threshold)}`}>
+                            {formatPercent(item.summary.max)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">P95</p>
+                          <p className={`text-sm font-semibold ${thresholdValueClass(item.summary.p95, item.threshold)}`}>
+                            {formatPercent(item.summary.p95)}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {item.summary.breaches}/{item.summary.count} samples over threshold
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.cpuUsedPct)}`}>
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.cpuUsedPct, cpuThreshold)}`}>
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-xs text-slate-500">CPU</p>
                       {cpuAnomalyHint ? (
@@ -1851,7 +1944,7 @@ const MonitorDetailPage = () => {
                         </span>
                       ) : null}
                     </div>
-                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.cpuUsedPct)}`}>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.cpuUsedPct, cpuThreshold)}`}>
                       {formatPercent(latestMetadata?.cpuUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -1859,8 +1952,9 @@ const MonitorDetailPage = () => {
                       {isFiniteNumber(latestMetadata?.load5) ? latestMetadata?.load5?.toFixed(2) : "-"} /{" "}
                       {isFiniteNumber(latestMetadata?.load15) ? latestMetadata?.load15?.toFixed(2) : "-"}
                     </p>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400">threshold {formatPercent(cpuThreshold)}</p>
                   </div>
-                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.memUsedPct)}`}>
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.memUsedPct, ramThreshold)}`}>
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-xs text-slate-500">Memory</p>
                       {memAnomalyHint ? (
@@ -1869,12 +1963,13 @@ const MonitorDetailPage = () => {
                         </span>
                       ) : null}
                     </div>
-                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.memUsedPct)}`}>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.memUsedPct, ramThreshold)}`}>
                       {formatPercent(latestMetadata?.memUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {formatKb(latestMetadata?.memUsedKb)} / {formatKb(latestMetadata?.memTotalKb)}
                     </p>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400">threshold {formatPercent(ramThreshold)}</p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Uptime</p>
@@ -1914,7 +2009,47 @@ const MonitorDetailPage = () => {
                           <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                           <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
                           <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
-                          <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
+                          {cpuThreshold === ramThreshold ? (
+                            <ReferenceLine
+                              y={cpuThreshold}
+                              stroke="#ef4444"
+                              strokeDasharray="6 3"
+                              strokeWidth={1.5}
+                              label={{
+                                value: `CPU/RAM ${formatPercent(cpuThreshold)}`,
+                                position: "insideBottomRight",
+                                fontSize: 10,
+                                fill: "#dc2626",
+                              }}
+                            />
+                          ) : (
+                            <>
+                              <ReferenceLine
+                                y={cpuThreshold}
+                                stroke="#0f766e"
+                                strokeDasharray="6 3"
+                                strokeWidth={1.5}
+                                label={{
+                                  value: `CPU ${formatPercent(cpuThreshold)}`,
+                                  position: "insideTopRight",
+                                  fontSize: 10,
+                                  fill: "#0f766e",
+                                }}
+                              />
+                              <ReferenceLine
+                                y={ramThreshold}
+                                stroke="#7c3aed"
+                                strokeDasharray="6 3"
+                                strokeWidth={1.5}
+                                label={{
+                                  value: `RAM ${formatPercent(ramThreshold)}`,
+                                  position: "insideBottomRight",
+                                  fontSize: 10,
+                                  fill: "#7c3aed",
+                                }}
+                              />
+                            </>
+                          )}
                           <Tooltip
                             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                             labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt, locale) : "")}
@@ -2056,7 +2191,18 @@ const MonitorDetailPage = () => {
                         <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                         <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
                         <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
-                        <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
+                        <ReferenceLine
+                          y={diskThreshold}
+                          stroke="#ef4444"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                          label={{
+                            value: `Disk ${formatPercent(diskThreshold)}`,
+                            position: "insideBottomRight",
+                            fontSize: 10,
+                            fill: "#dc2626",
+                          }}
+                        />
                         <Tooltip
                           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                           labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt), locale) : "")}
