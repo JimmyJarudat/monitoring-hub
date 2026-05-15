@@ -52,12 +52,14 @@
 - **9 ประเภท Monitor** — PING, TCP, HTTP, TLS, DNS, SNMP, SYSTEM, Docker, Database
 - **Device/NMS View** — กราฟ CPU / RAM / Disk / Network แบบย้อนหลัง
 - **Incident Management** — auto open/resolve + acknowledge flow + escalation
+- **Active Window** — จำกัดช่วงวัน/เวลาที่ monitor ทำงาน ลด alert นอกเวลาที่ตั้งไว้
 - **Alert Rules** — กฎ threshold ต่อ monitor ส่งผ่าน 6 ช่องทาง
 - **Notification Channels** — LINE, Telegram, Email (SMTP), Slack, Discord, Webhook
 - **Groups & Credentials** — จัด monitor เป็นกลุ่ม, reuse credential ปลอดภัย
 - **Reports** — availability report แบบ on-demand และ scheduled
 - **Role-based Access** — admin (ควบคุมเต็ม) และ user (อ่านอย่างเดียว)
 - **Bilingual UI** — อังกฤษ / ไทย สลับได้ทุกหน้า
+- **Dark Mode** — รองรับ theme มืดด้วย class-based toggle
 - **API Tokens** — สำหรับการ integrate จากภายนอก
 
 ---
@@ -133,9 +135,9 @@
 | **HTTP** | Status code, body match, header, JSON path, latency | ตรวจ web app, API endpoint |
 | **TLS_CERT** | SSL certificate expiry + validity | แจ้งเตือนก่อน cert หมดอายุ |
 | **DNS** | DNS record resolve + expected value | ตรวจว่า DNS ตอบถูก |
-| **SNMP** | OID ตามกำหนด + interface counters | Router, Switch, Firewall, Printer |
+| **SNMP** | OID ตามกำหนด + interface counters + printer preset | Router, Switch, Firewall, Printer |
 | **SYSTEM** | CPU, RAM, Disk, load, uptime (via SNMP) | Server, NAS, ตรวจ resource |
-| **DOCKER** | Container status via Portainer API | ตรวจ container up/down |
+| **DOCKER** | Container / stack status via Portainer API | ตรวจ container up/down, stack by numeric ID |
 | **DATABASE** | Connectivity + latency | PostgreSQL, MySQL, MariaDB, Redis, MongoDB, SQLite, SQL Server |
 
 ### HTTP Monitor — Advanced Options
@@ -177,6 +179,7 @@
 - **Monitor Detail** — กราฟ response time, status timeline, availability map
 - **Check Now** — สั่งเช็คทันทีโดยไม่รอ interval
 - **Enable / Disable** — ปิด monitor ชั่วคราว
+- **Active Window** — กำหนดวัน/เวลาและ timezone ที่ monitor จะทำงาน
 - **Time range filter** — ดูผลย้อนหลัง Day / Week / Month / Custom
 - **Load more results** — ดูผล check ในอดีตทั้งหมด
 
@@ -197,6 +200,7 @@
 - **Top interfaces** — busiest links ปัจจุบัน
 - **Error / Discard counters** — ตรวจ packet error ใน interface
 - **32-bit / 64-bit counter** — รองรับ counter rollover ของอุปกรณ์เก่า
+- **Printer SNMP** — preset สำหรับสถานะเครื่องพิมพ์, toner, paper tray และ error bitmask
 
 ![Devices NMS](./docs/screenshots/devices.png)
 
@@ -226,7 +230,7 @@
 
 **Alert Rules** — กฎ threshold ต่อ monitor:
 
-- Metrics: status, response time, CPU %, RAM %, Disk %
+- Metrics: status, response time, CPU %, RAM %, Disk %, printer toner/paper/error
 - Operators: GT, LT, EQ, NEQ
 - Severity: INFO / WARNING / CRITICAL
 - กำหนด channel เฉพาะต่อ rule ได้
@@ -466,8 +470,8 @@ networks:
 
 ### Dark mode
 
-- UI ยังไม่รองรับ dark mode — เมื่อ implement ให้ใช้ Tailwind `dark:` prefix
-- class-based toggle (`class="dark"` บน `<html>`) + เก็บค่าใน `localStorage`
+- UI รองรับ dark mode แล้ว — งานใหม่ต้องใส่ `dark:` variant ให้ครบตาม component เดิม
+- ใช้ class-based toggle (`class="dark"` บน `<html>`) + เก็บค่าใน `localStorage`
 
 ---
 
@@ -475,13 +479,25 @@ networks:
 
 | Feature | สถานะ | รายละเอียด |
 |---|---|---|
-| **Monitor Active Window** | Planned | กำหนดวัน/เวลาที่ monitor จะทำงาน เช่น จ-ศ 08:00–17:00 นอกเวลาหยุดเช็ค |
-| **Maintenance Window** | Planned | ประกาศ planned downtime ล่วงหน้า — ระงับ alert ไม่นับ downtime ช่วงนั้น |
-| **Incident Acknowledge** | In progress | flow: Open → Acknowledged → Resolved |
-| **Printer SNMP Preset** | Planned | Preset สำเร็จรูป toner, กระดาษ, สถานะ printer (Standard Printer MIB) |
-| **Dark Mode** | Planned | รองรับ dark theme ครบทุก component |
-| **DB Insight** | Planned | วิเคราะห์ประสิทธิภาพ database: slow queries, index, connections |
+| **Monitor Active Window** | Done | กำหนดวัน/เวลาที่ monitor จะทำงาน เช่น จ-ศ 08:00–17:00 นอกเวลาจะไม่เช็ค |
+| **Incident Acknowledge** | Done | flow: Open → Acknowledged → Resolved พร้อม acknowledged by/at |
+| **Printer SNMP Preset** | Done | Preset สำเร็จรูป toner, กระดาษ, สถานะ printer และ alert metrics |
+| **Dark Mode** | Done | รองรับ dark theme ผ่าน class-based toggle |
+| **Docker External Stack Lookup** | Next | รองรับ Portainer external stack ด้วย `stackName`/lookup by name แทน numeric `stackId` เท่านั้น |
+| **Device Metrics Polish** | Next | threshold overlay / anomaly hints สำหรับ CPU/RAM/Disk และ rollup summary สำหรับกราฟระยะยาว |
+| **Credential Usage Context** | Next | แสดงการผูก credential จากมุมมอง group / device เพิ่มจากหน้า credential |
+| **Maintenance Window** | Planned | ประกาศ planned downtime ล่วงหน้า — ระงับ alert และเลือก exclude downtime ใน report |
+| **DB Insight** | Planned | วิเคราะห์ประสิทธิภาพ database: slow queries, index, table/file sizes, connections, replication |
 
 ---
 
-*Monitoring Hub — frontend v1.2.11 · backend v1.0.50*
+## Recommended Next Steps
+
+1. ทำ **Docker External Stack Lookup** ก่อน เพราะ scope เล็กและเป็น gap ที่ชัดเจนใน checker/form
+2. ทำ **Device Metrics Polish** เพื่อให้ NMS view ใช้งาน production ได้ดีขึ้น
+3. ทำ **Maintenance Window** เพราะกระทบ schema, runner, incidents และ reports
+4. เริ่ม **DB Insight** เป็นเฟสใหญ่ถัดไป โดยเริ่มจาก schema + PostgreSQL collector
+
+---
+
+*Monitoring Hub — frontend v1.3.4 · backend v1.3.2*
