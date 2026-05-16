@@ -155,33 +155,26 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
   footerText: { fontSize: 7.5, color: C.white, fontFamily: "Sarabun" },
-  // cover
-  coverTop: {
+  // cover — white professional report cover
+  coverWrapper: { flex: 1, paddingHorizontal: 60, paddingTop: 80, paddingBottom: 60, backgroundColor: C.white },
+  coverLogoImg: { width: 90, height: 90, objectFit: "contain", marginBottom: 0 },
+  coverLogoFallback: {
+    width: 72, height: 72, borderRadius: 10,
     backgroundColor: C.primary,
-    paddingHorizontal: 48,
-    paddingTop: 72,
-    paddingBottom: 48,
-    alignItems: "center",
+    alignItems: "center", justifyContent: "center",
   },
-  coverLogoBox: {
-    width: 80,
-    height: 80,
-    backgroundColor: C.white,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  coverLogoImg: { width: 70, height: 70, objectFit: "contain" },
-  coverLogoFallback: { fontSize: 28, fontFamily: "Sarabun", fontWeight: "bold", color: C.primary },
-  coverCompany: { fontSize: 26, fontFamily: "Sarabun", fontWeight: "bold", color: C.white, textAlign: "center", marginBottom: 4 },
-  coverSystem: { fontSize: 11, color: C.primaryLight, textAlign: "center" },
-  coverBottom: { padding: 48, alignItems: "center" },
-  coverDivider: { width: 48, height: 3, backgroundColor: C.accent, borderRadius: 2, marginBottom: 32 },
-  coverReportTitle: { fontSize: 20, fontFamily: "Sarabun", fontWeight: "bold", color: C.text, textAlign: "center", marginBottom: 10 },
-  coverRange: { fontSize: 10, color: C.textMuted, textAlign: "center", marginBottom: 4 },
-  coverGenerated: { fontSize: 8.5, color: C.textLight, textAlign: "center", marginTop: 8 },
-  coverFooterNote: { fontSize: 8, color: C.textLight, fontStyle: "italic", marginTop: 32, textAlign: "center" },
+  coverLogoFallbackText: { fontSize: 30, fontFamily: "Sarabun", fontWeight: "bold", color: C.white },
+  coverAccentLine: { width: 56, height: 3, backgroundColor: C.accent, borderRadius: 2, marginTop: 32, marginBottom: 40 },
+  coverReportTitle: { fontSize: 28, fontFamily: "Sarabun", fontWeight: "bold", color: "#0F172A", marginBottom: 6 },
+  coverReportSub: { fontSize: 13, color: C.textMuted, marginBottom: 40 },
+  coverInfoBlock: { borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingTop: 20 },
+  coverInfoRow: { flexDirection: "row", marginBottom: 8 },
+  coverInfoLabel: { fontSize: 8.5, color: C.textLight, width: 90, fontFamily: "Sarabun" },
+  coverInfoValue: { fontSize: 8.5, color: "#0F172A", flex: 1, fontFamily: "Sarabun", fontWeight: "bold" },
+  coverCompanyBlock: { marginTop: "auto" as unknown as number, paddingTop: 32 },
+  coverCompany: { fontSize: 12, fontFamily: "Sarabun", fontWeight: "bold", color: "#0F172A" },
+  coverSystem: { fontSize: 9, color: C.textMuted, marginTop: 2 },
+  coverConfidential: { fontSize: 7.5, color: C.textLight, fontStyle: "italic", marginTop: 8 },
   // page header
   pageHeader: {
     backgroundColor: C.primary,
@@ -287,29 +280,53 @@ const CoverPage = ({ payload }: { payload: PdfReportPayload }) => {
 
   return (
     <Page size="A4" style={S.coverPage}>
-      {/* Top cyan block */}
-      <View style={S.coverTop}>
-        <View style={S.coverLogoBox}>
-          {branding.logoUrl ? (
-            <Image style={S.coverLogoImg} src={branding.logoUrl} />
-          ) : (
-            <Text style={S.coverLogoFallback}>{displayName.slice(0, 2).toUpperCase()}</Text>
-          )}
-        </View>
-        <Text style={S.coverCompany}>{displayName}</Text>
-        {branding.companyName ? <Text style={S.coverSystem}>{branding.systemName}</Text> : null}
-      </View>
+      <View style={S.coverWrapper}>
+        {/* Logo */}
+        {branding.logoUrl ? (
+          <Image style={S.coverLogoImg} src={branding.logoUrl} />
+        ) : (
+          <View style={S.coverLogoFallback}>
+            <Text style={S.coverLogoFallbackText}>{displayName.slice(0, 2).toUpperCase()}</Text>
+          </View>
+        )}
 
-      {/* Bottom white block */}
-      <View style={S.coverBottom}>
-        <View style={S.coverDivider} />
+        {/* Cyan accent line */}
+        <View style={S.coverAccentLine} />
+
+        {/* Report title */}
         <Text style={S.coverReportTitle}>Availability Report</Text>
-        <Text style={S.coverRange}>{range.label}</Text>
-        <Text style={S.coverRange}>{fmt.dt(range.from)} → {fmt.dt(range.to)}</Text>
-        <Text style={S.coverGenerated}>Generated: {fmt.dt(generatedAt)}</Text>
-        {branding.footerText ? (
-          <Text style={S.coverFooterNote}>{branding.footerText}</Text>
-        ) : null}
+        <Text style={S.coverReportSub}>{range.label}</Text>
+
+        {/* Info block */}
+        <View style={S.coverInfoBlock}>
+          <View style={S.coverInfoRow}>
+            <Text style={S.coverInfoLabel}>Period</Text>
+            <Text style={S.coverInfoValue}>{fmt.dt(range.from)} – {fmt.dt(range.to)}</Text>
+          </View>
+          <View style={S.coverInfoRow}>
+            <Text style={S.coverInfoLabel}>Generated</Text>
+            <Text style={S.coverInfoValue}>{fmt.dt(generatedAt)}</Text>
+          </View>
+          {branding.companyName ? (
+            <View style={S.coverInfoRow}>
+              <Text style={S.coverInfoLabel}>Prepared for</Text>
+              <Text style={S.coverInfoValue}>{branding.companyName}</Text>
+            </View>
+          ) : null}
+          <View style={S.coverInfoRow}>
+            <Text style={S.coverInfoLabel}>System</Text>
+            <Text style={S.coverInfoValue}>{branding.systemName}</Text>
+          </View>
+        </View>
+
+        {/* Company block pinned to bottom */}
+        <View style={S.coverCompanyBlock}>
+          <Text style={S.coverCompany}>{displayName}</Text>
+          {branding.companyName ? <Text style={S.coverSystem}>{branding.systemName}</Text> : null}
+          {branding.footerText ? (
+            <Text style={S.coverConfidential}>{branding.footerText}</Text>
+          ) : null}
+        </View>
       </View>
     </Page>
   );
@@ -406,7 +423,7 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
               </View>
               {payload.monitorRanking.slice(0, 5).map((row, i) => (
                 <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                  <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
+                  <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]}>{row.monitor}</Text>
                   <Text style={[S.tdCell, { flex: 1.2, color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
                     {fmt.pct(row.uptime)}
                   </Text>
@@ -448,7 +465,7 @@ const MonitorPage = ({ payload }: { payload: PdfReportPayload }) => {
 
           {monitorRanking.map((row, i) => (
             <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
-              <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
+              <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]}>{row.monitor}</Text>
               <Text style={[S.tdCell, { flex: 1.1, fontSize: 7 }]}>{row.type}</Text>
               <View style={{ flex: 1.3, paddingHorizontal: 2 }}>
                 <Text style={[S.tdCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
@@ -500,13 +517,13 @@ const IncidentPage = ({ payload }: { payload: PdfReportPayload }) => {
             {incidents.map((inc, i) => (
               <View key={inc.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
                 <Text style={[S.tdCellLeft, { flex: 1.8, fontSize: 7, paddingLeft: 4 }]}>{fmt.dt(inc.startedAt)}</Text>
-                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{inc.monitor}</Text>
+                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]}>{inc.monitor}</Text>
                 <View style={{ flex: 1.2, alignItems: "center" }}>
                   <Badge status={inc.status} />
                 </View>
                 <Text style={[S.tdCell, { flex: 1 }]}>{inc.duration}</Text>
                 <Text style={[S.tdCell, { flex: 1, fontSize: 7 }]}>{inc.severity ?? "-"}</Text>
-                <Text style={[S.tdCell, { flex: 2.5, textAlign: "left", paddingLeft: 4, fontSize: 7 }]} numberOfLines={2}>
+                <Text style={[S.tdCell, { flex: 2.5, textAlign: "left", paddingLeft: 4, fontSize: 7 }]}>
                   {inc.message ?? "-"}
                 </Text>
               </View>
@@ -549,7 +566,7 @@ const GroupPage = ({ payload }: { payload: PdfReportPayload }) => {
             </View>
             {groupSummary.map((row, i) => (
               <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
-                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{row.name}</Text>
+                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]}>{row.name}</Text>
                 <Text style={[S.tdCell, { flex: 1 }]}>{row.monitorCount}</Text>
                 <View style={{ flex: 1.4, paddingHorizontal: 2 }}>
                   <Text style={[S.tdCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
