@@ -83,7 +83,62 @@ export type PdfReportPayload = {
     logoUrl: string | null;
     footerText: string;
   };
+  locale: "th" | "en";
 };
+
+// ─── translations ─────────────────────────────────────────────────────────────
+const TR = {
+  en: {
+    inRange: "in range",
+    monitorSub: (n: number) => `${n} monitors · sorted worst to best`,
+    incidentSub: (n: number) => `${n} incidents in range`,
+    groupSub: (n: number) => `${n} groups`,
+    noIncidents: "No incidents in this time range.",
+    noGroups: "No group data available.",
+    period: "Period",
+    generated: "Generated",
+    preparedFor: "Prepared for",
+    system: "System",
+    fleetUptime: "Fleet Uptime (24h)",
+    fleetAvgResponse: "Fleet Avg Response (24h)",
+    keyMetrics: "Key Metrics",
+    statusDist: "Status Distribution",
+    topAtRisk: "Top 5 At-Risk Monitors",
+    totalChecks: "Total Checks",
+    avgResponse: "Avg Response",
+    execSummary: "Executive Summary",
+    monitorRanking: "Monitor Reliability Ranking",
+    incidentReport: "Incident Report",
+    groupSummary: "Group Summary",
+    reportUptime: "Report Uptime",
+    availReport: "Availability Report",
+  },
+  th: {
+    inRange: "ในช่วงเวลา",
+    monitorSub: (n: number) => `${n} monitors · เรียงจากแย่ไปดี`,
+    incidentSub: (n: number) => `${n} incidents ในช่วงเวลา`,
+    groupSub: (n: number) => `${n} กลุ่ม`,
+    noIncidents: "ไม่มี Incident ในช่วงเวลานี้",
+    noGroups: "ไม่มีข้อมูล Group",
+    period: "ช่วงเวลา",
+    generated: "สร้างเมื่อ",
+    preparedFor: "จัดทำให้",
+    system: "ระบบ",
+    fleetUptime: "Fleet Uptime (24 ชม.)",
+    fleetAvgResponse: "Fleet เฉลี่ย Response (24 ชม.)",
+    keyMetrics: "ตัวชี้วัดหลัก",
+    statusDist: "การกระจาย Status",
+    topAtRisk: "5 Monitor ที่มีความเสี่ยงสูงสุด",
+    totalChecks: "การตรวจสอบทั้งหมด",
+    avgResponse: "เฉลี่ย Response",
+    execSummary: "สรุปผู้บริหาร",
+    monitorRanking: "อันดับความน่าเชื่อถือ Monitor",
+    incidentReport: "รายงาน Incident",
+    groupSummary: "สรุปกลุ่ม",
+    reportUptime: "Uptime ของรายงาน",
+    availReport: "รายงานความพร้อมใช้งาน",
+  },
+} as const;
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const fmt = {
@@ -276,6 +331,7 @@ const Badge = ({ status }: { status: MonitorStatus | IncidentStatus | null }) =>
 // ─── Page 1: Cover ───────────────────────────────────────────────────────────
 const CoverPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { branding, range, generatedAt } = payload;
+  const tr = TR[payload.locale];
   const displayName = branding.companyName || branding.systemName;
 
   return (
@@ -290,36 +346,32 @@ const CoverPage = ({ payload }: { payload: PdfReportPayload }) => {
           </View>
         )}
 
-        {/* Cyan accent line */}
         <View style={S.coverAccentLine} />
 
-        {/* Report title */}
-        <Text style={S.coverReportTitle}>Availability Report</Text>
+        <Text style={S.coverReportTitle}>{tr.availReport}</Text>
         <Text style={S.coverReportSub}>{range.label}</Text>
 
-        {/* Info block */}
         <View style={S.coverInfoBlock}>
           <View style={S.coverInfoRow}>
-            <Text style={S.coverInfoLabel}>Period</Text>
+            <Text style={S.coverInfoLabel}>{tr.period}</Text>
             <Text style={S.coverInfoValue}>{fmt.dt(range.from)} – {fmt.dt(range.to)}</Text>
           </View>
           <View style={S.coverInfoRow}>
-            <Text style={S.coverInfoLabel}>Generated</Text>
+            <Text style={S.coverInfoLabel}>{tr.generated}</Text>
             <Text style={S.coverInfoValue}>{fmt.dt(generatedAt)}</Text>
           </View>
           {branding.companyName ? (
             <View style={S.coverInfoRow}>
-              <Text style={S.coverInfoLabel}>Prepared for</Text>
+              <Text style={S.coverInfoLabel}>{tr.preparedFor}</Text>
               <Text style={S.coverInfoValue}>{branding.companyName}</Text>
             </View>
           ) : null}
           <View style={S.coverInfoRow}>
-            <Text style={S.coverInfoLabel}>System</Text>
+            <Text style={S.coverInfoLabel}>{tr.system}</Text>
             <Text style={S.coverInfoValue}>{branding.systemName}</Text>
           </View>
         </View>
 
-        {/* Company block pinned to bottom */}
         <View style={S.coverCompanyBlock}>
           <Text style={S.coverCompany}>{displayName}</Text>
           {branding.companyName ? <Text style={S.coverSystem}>{branding.systemName}</Text> : null}
@@ -335,31 +387,32 @@ const CoverPage = ({ payload }: { payload: PdfReportPayload }) => {
 // ─── Page 2: Executive Summary ───────────────────────────────────────────────
 const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { summary, branding } = payload;
+  const tr = TR[payload.locale];
   const uptimeBg = fmt.uptimeColor(summary.reportUptime);
 
   const kpis = [
-    { label: "Total Checks", value: summary.checks.toLocaleString(), unit: "in range" },
+    { label: tr.totalChecks, value: summary.checks.toLocaleString(), unit: tr.inRange },
     { label: "UP", value: summary.up.toLocaleString(), unit: "" },
     { label: "DOWN", value: summary.down.toLocaleString(), unit: "" },
     { label: "DEGRADED", value: summary.degraded.toLocaleString(), unit: "" },
     { label: "Incidents", value: summary.incidents.toLocaleString(), unit: `${summary.openIncidents} open` },
-    { label: "Avg Response", value: summary.avgResponseMs != null ? String(summary.avgResponseMs) : "N/A", unit: summary.avgResponseMs != null ? "ms" : "" },
+    { label: tr.avgResponse, value: summary.avgResponseMs != null ? String(summary.avgResponseMs) : "N/A", unit: summary.avgResponseMs != null ? "ms" : "" },
   ];
 
   return (
     <Page size="A4" style={S.page}>
-      <PageHeader title="Executive Summary" sub={`${payload.range.label}  ·  Generated ${fmt.dt(payload.generatedAt)}`} />
+      <PageHeader title={tr.execSummary} sub={`${payload.range.label}  ·  ${tr.generated} ${fmt.dt(payload.generatedAt)}`} />
       <View style={S.content}>
         {/* Uptime banner */}
         <View style={[S.uptimeBanner, { backgroundColor: uptimeBg }]}>
           <View style={{ alignItems: "center" }}>
             <Text style={S.uptimeValue}>{fmt.pct(summary.reportUptime)}</Text>
-            <Text style={S.uptimeLabel}>Report Uptime</Text>
+            <Text style={S.uptimeLabel}>{tr.reportUptime}</Text>
           </View>
         </View>
 
         {/* KPI grid */}
-        <Text style={S.sectionTitle}>Key Metrics</Text>
+        <Text style={S.sectionTitle}>{tr.keyMetrics}</Text>
         <View style={S.statGrid}>
           {kpis.map((kpi) => (
             <View key={kpi.label} style={S.statCard}>
@@ -373,13 +426,13 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
         {/* Fleet stats */}
         <View style={[S.statGrid, { marginBottom: 14 }]}>
           <View style={[S.statCard, { flex: 1, borderColor: C.border, backgroundColor: C.bg }]}>
-            <Text style={S.statLabel}>Fleet Uptime (24h)</Text>
+            <Text style={S.statLabel}>{tr.fleetUptime}</Text>
             <Text style={[S.statValue, { fontSize: 16, color: fmt.uptimeColor(summary.fleetUptime24h) }]}>
               {fmt.pct(summary.fleetUptime24h)}
             </Text>
           </View>
           <View style={[S.statCard, { flex: 1, borderColor: C.border, backgroundColor: C.bg }]}>
-            <Text style={S.statLabel}>Fleet Avg Response (24h)</Text>
+            <Text style={S.statLabel}>{tr.fleetAvgResponse}</Text>
             <Text style={[S.statValue, { fontSize: 16, color: C.primary }]}>
               {fmt.ms(summary.fleetAvgResponseMs)}
             </Text>
@@ -387,7 +440,7 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
         </View>
 
         {/* Status distribution */}
-        <Text style={S.sectionTitle}>Status Distribution</Text>
+        <Text style={S.sectionTitle}>{tr.statusDist}</Text>
         <View style={S.table}>
           <View style={S.tableHeader}>
             {["Status", "Count", "% of Checks"].map((h) => (
@@ -414,7 +467,7 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
         {/* Top 5 worst monitors */}
         {payload.monitorRanking.length > 0 && (
           <>
-            <Text style={S.sectionTitle}>Top 5 At-Risk Monitors</Text>
+            <Text style={S.sectionTitle}>{tr.topAtRisk}</Text>
             <View style={S.table}>
               <View style={S.tableHeader}>
                 {[{ l: "Monitor", f: 3 }, { l: "Uptime %", f: 1.2 }, { l: "Down", f: 0.8 }, { l: "Degraded", f: 0.9 }].map(({ l, f }, i) => (
@@ -443,10 +496,11 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
 // ─── Page 3: Monitor Reliability ─────────────────────────────────────────────
 const MonitorPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { monitorRanking, branding } = payload;
+  const tr = TR[payload.locale];
 
   return (
     <Page size="A4" style={S.page}>
-      <PageHeader title="Monitor Reliability Ranking" sub={`${monitorRanking.length} monitors · เรียงจากแย่ไปดี`} />
+      <PageHeader title={tr.monitorRanking} sub={tr.monitorSub(monitorRanking.length)} />
       <View style={S.content}>
         <View style={S.table}>
           <View style={S.tableHeader}>
@@ -491,14 +545,15 @@ const MonitorPage = ({ payload }: { payload: PdfReportPayload }) => {
 // ─── Page 4: Incident Report ──────────────────────────────────────────────────
 const IncidentPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { incidents, branding } = payload;
+  const tr = TR[payload.locale];
 
   return (
     <Page size="A4" style={S.page}>
-      <PageHeader title="Incident Report" sub={`${incidents.length} incidents in range`} />
+      <PageHeader title={tr.incidentReport} sub={tr.incidentSub(incidents.length)} />
       <View style={S.content}>
         {incidents.length === 0 ? (
           <Text style={{ fontSize: 10, color: C.textLight, textAlign: "center", marginTop: 32, fontFamily: "Sarabun" }}>
-            ไม่มี Incident ในช่วงเวลานี้
+            {tr.noIncidents}
           </Text>
         ) : (
           <View style={S.table}>
@@ -539,14 +594,15 @@ const IncidentPage = ({ payload }: { payload: PdfReportPayload }) => {
 // ─── Page 5: Group Summary ────────────────────────────────────────────────────
 const GroupPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { groupSummary, branding } = payload;
+  const tr = TR[payload.locale];
 
   return (
     <Page size="A4" style={S.page}>
-      <PageHeader title="Group Summary" sub={`${groupSummary.length} groups`} />
+      <PageHeader title={tr.groupSummary} sub={tr.groupSub(groupSummary.length)} />
       <View style={S.content}>
         {groupSummary.length === 0 ? (
           <Text style={{ fontSize: 10, color: C.textLight, textAlign: "center", marginTop: 32, fontFamily: "Sarabun" }}>
-            ไม่มีข้อมูล Group
+            {tr.noGroups}
           </Text>
         ) : (
           <View style={S.table}>

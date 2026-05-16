@@ -970,7 +970,7 @@ const SettingsPage = () => {
         <div className="flex items-center justify-end border-t border-slate-100 px-6 py-4">
           <button
             type="button"
-            onClick={() => void saveSysSection({ reportBranding: { companyName: sysConfig.reportBranding.companyName, footerText: sysConfig.reportBranding.footerText } }, t("settings.sections.reportBranding.title"))}
+            onClick={() => void saveSysSection({ reportBranding: { companyName: sysConfig.reportBranding.companyName, footerText: sysConfig.reportBranding.footerText, logoUrl: sysConfig.reportBranding.logoUrl } }, t("settings.sections.reportBranding.title"))}
             disabled={sysSaving}
             className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
           >

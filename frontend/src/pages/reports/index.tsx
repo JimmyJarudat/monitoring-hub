@@ -293,11 +293,6 @@ const formatDuration = (startedAt: string, resolvedAt: string | null) => {
   return `${minutes}m`;
 };
 
-const escapeCsv = (value: unknown) => {
-  const text = String(value ?? "");
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-};
-
 const downloadBlob = (filename: string, blob: Blob) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -307,181 +302,6 @@ const downloadBlob = (filename: string, blob: Blob) => {
   URL.revokeObjectURL(url);
 };
 
-const downloadCsv = (filename: string, rows: Array<Record<string, unknown>>, emptyMessage: string) => {
-  if (rows.length === 0) {
-    toast.info(emptyMessage);
-    return;
-  }
-
-  const headers = Object.keys(rows[0]);
-  const body = rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(","));
-  const csv = [headers.join(","), ...body].join("\n");
-  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
-};
-
-const downloadJson = (filename: string, payload: ReportExportPayload) => {
-  downloadBlob(
-    filename,
-    new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8",
-    }),
-  );
-};
-
-const escapeHtml = (value: unknown) => {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-};
-
-const statusCellClass = (status: MonitorStatus | IncidentStatus | null) => {
-  if (status === "UP" || status === "RESOLVED") return "status-up";
-  if (status === "DEGRADED") return "status-degraded";
-  if (status === "DOWN" || status === "OPEN") return "status-down";
-  return "status-muted";
-};
-
-const tableRows = (rows: Array<Record<string, unknown>>) => {
-  if (rows.length === 0) {
-    return '<tr><td class="empty" colspan="8">No data</td></tr>';
-  }
-
-  const headers = Object.keys(rows[0]);
-  const head = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>`;
-  const body = rows
-    .map(
-      (row) =>
-        `<tr>${headers
-          .map((header) => {
-            const value = row[header];
-            const className = header.toLowerCase().includes("status")
-              ? ` class="${statusCellClass(value as MonitorStatus | IncidentStatus | null)}"`
-              : "";
-            return `<td${className}>${escapeHtml(value)}</td>`;
-          })
-          .join("")}</tr>`,
-    )
-    .join("");
-
-  return `${head}${body}`;
-};
-
-const downloadExcel = (filename: string, payload: ReportExportPayload) => {
-  const summaryRows = [
-    { Metric: "Report uptime", Value: formatPercent(payload.summary.reportUptime) },
-    { Metric: "Checks", Value: payload.summary.checks },
-    { Metric: "UP", Value: payload.summary.up },
-    { Metric: "DEGRADED", Value: payload.summary.degraded },
-    { Metric: "DOWN", Value: payload.summary.down },
-    { Metric: "Incidents", Value: payload.summary.incidents },
-    { Metric: "Open incidents", Value: payload.summary.openIncidents },
-    { Metric: "Resolved incidents", Value: payload.summary.resolvedIncidents },
-    { Metric: "Average response", Value: formatResponseTime(payload.summary.avgResponseMs) },
-    { Metric: "Fleet uptime 24h", Value: formatPercent(payload.summary.fleetUptime24h) },
-  ];
-
-  const workbook = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { font-family: Arial, sans-serif; color: #0f172a; }
-    .title { background: #0f172a; color: #ffffff; font-size: 22px; font-weight: 700; }
-    .subtitle { background: #164e63; color: #ecfeff; font-size: 12px; }
-    .section { background: #06b6d4; color: #ffffff; font-size: 14px; font-weight: 700; }
-    table { border-collapse: collapse; margin-bottom: 18px; width: 100%; }
-    th { background: #e2e8f0; color: #334155; font-weight: 700; border: 1px solid #cbd5e1; padding: 8px; }
-    td { border: 1px solid #cbd5e1; padding: 7px; vertical-align: top; }
-    tr:nth-child(even) td { background: #f8fafc; }
-    .summary td:first-child { background: #f1f5f9; font-weight: 700; }
-    .status-up { background: #dcfce7; color: #166534; font-weight: 700; }
-    .status-degraded { background: #fef3c7; color: #92400e; font-weight: 700; }
-    .status-down { background: #ffe4e6; color: #be123c; font-weight: 700; }
-    .status-muted { background: #f1f5f9; color: #64748b; font-weight: 700; }
-    .empty { color: #64748b; font-style: italic; text-align: center; }
-  </style>
-</head>
-<body>
-  <table>
-    <tr><td class="title" colspan="10">Monitoring Hub Report</td></tr>
-    <tr><td class="subtitle" colspan="10">Generated at ${escapeHtml(formatDateTime(payload.generatedAt))}</td></tr>
-    <tr><td class="subtitle" colspan="10">Range: ${escapeHtml(payload.range.label)} (${escapeHtml(formatDateTime(payload.range.from))} - ${escapeHtml(formatDateTime(payload.range.to))})</td></tr>
-  </table>
-
-  <table class="summary">
-    <tr><td class="section" colspan="2">Executive Summary</td></tr>
-    ${tableRows(summaryRows)}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="8">Monitor Reliability Ranking</td></tr>
-    ${tableRows(
-      payload.monitorRanking.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Checks: row.checks,
-        Uptime: formatPercent(row.uptime),
-        Down: row.down,
-        Degraded: row.degraded,
-        "Avg Response": formatResponseTime(row.avgResponse),
-        "Last Status": row.lastStatus ?? "",
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="9">Group Summary</td></tr>
-    ${tableRows(
-      payload.groupSummary.map((row) => ({
-        Group: row.name,
-        Monitors: row.monitorCount,
-        Checks: row.checks,
-        Uptime: formatPercent(row.uptime),
-        UP: row.up,
-        Down: row.down,
-        Degraded: row.degraded,
-        Incidents: row.incidents,
-        "Avg Response": formatResponseTime(row.avgResponse),
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="8">Incident Report</td></tr>
-    ${tableRows(
-      payload.incidents.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Status: row.status,
-        Started: formatDateTime(row.startedAt),
-        Resolved: formatDateTime(row.resolvedAt),
-        Duration: row.duration,
-        Severity: row.severity ?? "",
-        Message: row.message ?? "",
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="7">Result Samples</td></tr>
-    ${tableRows(
-      payload.resultSamples.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Status: row.status,
-        "Response Time": formatResponseTime(row.responseTimeMs),
-        "Checked At": formatDateTime(row.checkedAt),
-        Message: row.message ?? "",
-      })),
-    )}
-  </table>
-</body>
-</html>`;
-
-  downloadBlob(filename, new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }));
-};
 
 const ReportsPage = () => {
   const { t, i18n } = useTranslation();
@@ -817,18 +637,7 @@ const ReportsPage = () => {
     summary,
   ]);
 
-  const exportRows = useMemo(() => {
-    return monitorRanking.map((item) => ({
-      monitor: item.monitor,
-      type: item.type,
-      checks: item.checks,
-      uptime: item.uptime ?? "",
-      down: item.down,
-      degraded: item.degraded,
-      avg_response_ms: item.avgResponse ?? "",
-      last_status: item.lastStatus ?? "",
-    }));
-  }, [monitorRanking]);
+
 
   const exportDate = new Date().toISOString().slice(0, 10);
 
@@ -855,7 +664,8 @@ const ReportsPage = () => {
           logoUrl,
           footerText: sysConfig.reportBranding.footerText,
         },
-      };
+        locale: i18n.language === "th" ? "th" : "en",
+      } as PdfReportPayload;
 
       const blob = await generatePdfBlob(pdfPayload);
       downloadBlob(`monitor-report-${exportDate}.pdf`, blob);
