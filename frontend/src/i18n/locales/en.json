@@ -695,6 +695,8 @@
     "loadError": "Failed to load reports",
     "exportExcel": "Export Excel",
     "exportingExcel": "Generating...",
+    "exportPdf": "Export PDF",
+    "exportingPdf": "Generating PDF...",
     "noExportData": "No data to export",
     "windowTitle": "Report window",
     "currentRange": "Current range:",

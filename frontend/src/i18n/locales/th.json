@@ -695,6 +695,8 @@
     "loadError": "โหลด reports ไม่สำเร็จ",
     "exportExcel": "Export Excel",
     "exportingExcel": "กำลังสร้างไฟล์...",
+    "exportPdf": "Export PDF",
+    "exportingPdf": "กำลังสร้าง PDF...",
     "noExportData": "ไม่มีข้อมูลสำหรับ export",
     "windowTitle": "ช่วงเวลารายงาน",
     "currentRange": "ช่วงปัจจุบัน:",

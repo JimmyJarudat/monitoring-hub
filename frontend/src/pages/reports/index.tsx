@@ -15,7 +15,9 @@ import {
   YAxis,
 } from "recharts";
 import { useApi } from "@/hooks/useApi";
+import { useSystemConfig } from "@/contexts/systemConfig.context";
 import { formatMonitorTypeLabel } from "@/utils/monitorType";
+import { generatePdfBlob, type PdfReportPayload } from "@/components/reports/AvailabilityReportPdf";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -484,6 +486,7 @@ const downloadExcel = (filename: string, payload: ReportExportPayload) => {
 const ReportsPage = () => {
   const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const { config: sysConfig } = useSystemConfig();
   const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("week");
   const [customFrom, setCustomFrom] = useState(() =>
@@ -502,6 +505,7 @@ const ReportsPage = () => {
   const [excludeMaintenance, setExcludeMaintenance] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [excelExporting, setExcelExporting] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   const fetchReportsData = useCallback(async (): Promise<ReportsData> => {
     const [summaryRes, resultsRes, incidentsRes, groupsRes, mwRes] = await Promise.all([
@@ -828,6 +832,40 @@ const ReportsPage = () => {
 
   const exportDate = new Date().toISOString().slice(0, 10);
 
+  const handlePdfExport = async () => {
+    setPdfExporting(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL as string || "/api";
+      const logoUrl = sysConfig.reportBranding.logoUrl
+        ? `${API_BASE_URL}${sysConfig.reportBranding.logoUrl}`
+        : sysConfig.general.logoUrl
+          ? `${API_BASE_URL}${sysConfig.general.logoUrl}`
+          : null;
+
+      const pdfPayload: PdfReportPayload = {
+        generatedAt: exportPayload.generatedAt,
+        range: exportPayload.range,
+        summary: exportPayload.summary,
+        monitorRanking: exportPayload.monitorRanking,
+        groupSummary: exportPayload.groupSummary.map((g) => ({ ...g, avgResponse: g.avgResponse ?? null })),
+        incidents: exportPayload.incidents,
+        branding: {
+          companyName: sysConfig.reportBranding.companyName,
+          systemName: sysConfig.general.systemName,
+          logoUrl,
+          footerText: sysConfig.reportBranding.footerText,
+        },
+      };
+
+      const blob = await generatePdfBlob(pdfPayload);
+      downloadBlob(`monitor-report-${exportDate}.pdf`, blob);
+    } catch {
+      toast.error("Failed to generate PDF report.");
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
   const handleExcelExport = async () => {
     setExcelExporting(true);
     try {
@@ -874,6 +912,14 @@ const ReportsPage = () => {
               disabled={excelExporting || isLoading}
             >
               {excelExporting ? t("reportsPage.exportingExcel") : t("reportsPage.exportExcel")}
+            </button>
+            <button
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              onClick={() => void handlePdfExport()}
+              disabled={pdfExporting || isLoading}
+            >
+              {pdfExporting ? t("reportsPage.exportingPdf") : t("reportsPage.exportPdf")}
             </button>
           </div>
         </div>
