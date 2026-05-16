@@ -37,6 +37,7 @@ import ScheduledReportsPage from "@/pages/scheduled-reports";
 import ApiTokensPage from "@/pages/api-tokens";
 import MaintenanceWindowsPage from "@/pages/maintenance-windows";
 import DbInsightPage from "@/pages/db-insight";
+import DbInsightDetailPage from "@/pages/db-insight/detail";
 
 const LegacyMonitorDetailRedirect = () => {
   const { id } = useParams();
@@ -72,7 +73,7 @@ const routes: RouteObject[] = [
       createProtectedRoute({ path: "incidents", element: <IncidentsPage /> }),
       createProtectedRoute({ path: "maintenance-windows", element: <MaintenanceWindowsPage /> }),
       createProtectedRoute({ path: "db-insight", element: <DbInsightPage /> }),
-      createProtectedRoute({ path: "db-insight/:monitorId", element: <DbInsightPage /> }),
+      createProtectedRoute({ path: "db-insight/:monitorId", element: <DbInsightDetailPage /> }),
       createProtectedRoute({ path: "profile", element: <ProfilePage /> }),
       createProtectedRoute({ path: "change-password", element: <ChangePasswordPage /> }),
       createProtectedRoute({ path: "login-history", element: <LoginHistoryPage /> }),

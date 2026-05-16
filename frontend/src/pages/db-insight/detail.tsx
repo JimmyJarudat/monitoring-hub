@@ -1,0 +1,712 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useApi } from "@/hooks/useApi";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type DbType = "postgresql" | "mysql" | "mariadb" | "redis" | "mongodb" | "sqlite" | "sqlserver" | "mssql";
+
+type Monitor = {
+  id: string;
+  name: string;
+  type: string;
+  enabled: boolean;
+  config: { type: DbType; host?: string; port?: number; database?: string; uri?: string };
+  credentialId: string | null;
+};
+
+type InsightConfig = {
+  id: string;
+  enabled: boolean;
+  collectIntervalMinutes: number;
+  slowQueryThresholdMs: number;
+  topNQueries: number;
+} | null;
+
+type SlowQuery = {
+  id: string;
+  queryHash: string;
+  queryText: string;
+  avgDurationMs: number;
+  maxDurationMs: number;
+  callCount: number;
+  rowsExamined: number | null;
+};
+
+type IndexStat = {
+  id: string;
+  tableName: string;
+  indexName: string | null;
+  status: "MISSING" | "UNUSED" | "HEALTHY";
+  scansCount: number;
+  sizeBytes: number | null;
+  lastUsed: string | null;
+  suggestedSql: string | null;
+};
+
+type TableSize = {
+  id: string;
+  tableName: string;
+  totalBytes: number;
+  dataBytes: number;
+  indexBytes: number;
+  rowCount: number;
+  lastAnalyzedAt: string | null;
+};
+
+type FileSize = {
+  id: string;
+  fileType: "DATA" | "LOG" | "WAL";
+  filePath: string;
+  sizeBytes: number;
+};
+
+type ConnectionStat = {
+  total: number;
+  active: number;
+  idle: number;
+  idleInTransaction: number;
+  maxConnections: number;
+  blockedCount: number;
+  longestBlockedSeconds: number | null;
+} | null;
+
+type ReplicationRow = {
+  id: string;
+  replicaName: string;
+  state: "STREAMING" | "LAGGING" | "STOPPED";
+  lagSeconds: number | null;
+  detailJson: Record<string, unknown>;
+};
+
+type Snapshot = {
+  id: string;
+  monitorId: string;
+  dbType: string;
+  collectedAt: string;
+  collectionDurationMs: number | null;
+  errorMessage: string | null;
+  slowQueries: SlowQuery[];
+  indexStats: IndexStat[];
+  tableSizes: TableSize[];
+  fileSizes: FileSize[];
+  connectionStats: ConnectionStat;
+  replicationStatus: ReplicationRow[];
+} | null;
+
+type ApiSuccess<T> = { success: true; data: T };
+type ApiResponse<T> = ApiSuccess<T> | { success: false; message: string };
+
+// ─── DB type metadata ─────────────────────────────────────────────────────────
+const DB_META: Record<DbType, { label: string; bg: string }> = {
+  postgresql: { label: "PostgreSQL", bg: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/20 dark:text-blue-300 dark:ring-blue-400/20" },
+  mysql:      { label: "MySQL",      bg: "bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-900/20 dark:text-orange-300 dark:ring-orange-400/20" },
+  mariadb:    { label: "MariaDB",    bg: "bg-teal-50 text-teal-700 ring-teal-600/20 dark:bg-teal-900/20 dark:text-teal-300 dark:ring-teal-400/20" },
+  redis:      { label: "Redis",      bg: "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-400/20" },
+  mongodb:    { label: "MongoDB",    bg: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-400/20" },
+  sqlite:     { label: "SQLite",     bg: "bg-slate-100 text-slate-700 ring-slate-600/20 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-500/20" },
+  sqlserver:  { label: "SQL Server", bg: "bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/20 dark:text-indigo-300 dark:ring-indigo-400/20" },
+  mssql:      { label: "MSSQL",      bg: "bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/20 dark:text-indigo-300 dark:ring-indigo-400/20" },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtBytes = (b: number | null) => {
+  if (b == null) return "—";
+  if (b >= 1_099_511_627_776) return `${(b / 1_099_511_627_776).toFixed(1)} TB`;
+  if (b >= 1_073_741_824) return `${(b / 1_073_741_824).toFixed(1)} GB`;
+  if (b >= 1_048_576) return `${(b / 1_048_576).toFixed(1)} MB`;
+  if (b >= 1_024) return `${(b / 1_024).toFixed(1)} KB`;
+  return `${b} B`;
+};
+
+const fmtMs = (v: number) => {
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}s`;
+  return `${v.toFixed(0)}ms`;
+};
+
+const fmtNum = (v: number) => v.toLocaleString();
+
+const fmtRelative = (iso: string) => {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+};
+
+const copyToClipboard = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+const StatCard = ({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) => (
+  <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex flex-col gap-1">
+    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
+    <p className={`text-2xl font-bold ${accent ?? "text-slate-900 dark:text-white"}`}>{value}</p>
+    {sub && <p className="text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
+  </div>
+);
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+type Tab = "slow" | "index" | "tables" | "connections" | "replication";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "slow",        label: "Slow Queries" },
+  { key: "index",       label: "Index Analysis" },
+  { key: "tables",      label: "Tables & Files" },
+  { key: "connections", label: "Connections" },
+  { key: "replication", label: "Replication" },
+];
+
+// ─── Slow Queries Tab ─────────────────────────────────────────────────────────
+const SlowQueriesTab = ({ queries, threshold }: { queries: SlowQuery[]; threshold: number }) => {
+  if (queries.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
+        <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        <p className="text-sm">No slow queries above {threshold} ms threshold</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Query</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Avg Time</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Max Time</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Calls</th>
+            <th className="pb-2 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Rows</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {queries.map((q) => (
+            <tr key={q.id} className="group">
+              <td className="py-2 pr-4 max-w-xs">
+                <div className="flex items-start gap-2">
+                  <span
+                    className={`mt-0.5 shrink-0 inline-flex h-1.5 w-1.5 rounded-full ${
+                      q.avgDurationMs > 5000 ? "bg-rose-500" : q.avgDurationMs > 1000 ? "bg-amber-500" : "bg-blue-500"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate max-w-sm" title={q.queryText}>
+                      {q.queryText}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(q.queryText)}
+                    className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-opacity"
+                    title="Copy query"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                  </button>
+                </div>
+              </td>
+              <td className={`py-2 pr-4 text-right font-mono font-semibold ${q.avgDurationMs > 5000 ? "text-rose-600 dark:text-rose-400" : q.avgDurationMs > 1000 ? "text-amber-600 dark:text-amber-400" : "text-slate-700 dark:text-slate-300"}`}>
+                {fmtMs(q.avgDurationMs)}
+              </td>
+              <td className="py-2 pr-4 text-right font-mono text-slate-500 dark:text-slate-400">
+                {fmtMs(q.maxDurationMs)}
+              </td>
+              <td className="py-2 pr-4 text-right text-slate-700 dark:text-slate-300">
+                {fmtNum(q.callCount)}
+              </td>
+              <td className="py-2 text-right text-slate-500 dark:text-slate-400">
+                {q.rowsExamined != null ? fmtNum(q.rowsExamined) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── Index Analysis Tab ───────────────────────────────────────────────────────
+const INDEX_STATUS_STYLE = {
+  MISSING: "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/20 dark:text-rose-300",
+  UNUSED:  "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-300",
+  HEALTHY: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/20 dark:text-emerald-300",
+};
+
+const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
+  const missing = stats.filter((s) => s.status === "MISSING");
+  const unused  = stats.filter((s) => s.status === "UNUSED");
+  const healthy = stats.filter((s) => s.status === "HEALTHY");
+
+  const Section = ({ title, items, emptyMsg }: { title: string; items: IndexStat[]; emptyMsg: string }) => (
+    <div>
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{title} <span className="font-normal text-slate-400">({items.length})</span></h3>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400 dark:text-slate-500 py-2">{emptyMsg}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm mb-1">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">Table</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">Index</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">Scans</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">Size</th>
+                <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Suggestion</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {items.map((i) => (
+                <tr key={i.id} className="group">
+                  <td className="py-1.5 pr-3 font-mono text-xs text-slate-700 dark:text-slate-300">{i.tableName}</td>
+                  <td className="py-1.5 pr-3 font-mono text-xs text-slate-500 dark:text-slate-400">{i.indexName ?? <span className="italic">—</span>}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-600 dark:text-slate-300">{fmtNum(i.scansCount)}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-500 dark:text-slate-400">{fmtBytes(i.sizeBytes)}</td>
+                  <td className="py-1.5 max-w-xs">
+                    {i.suggestedSql ? (
+                      <div className="flex items-center gap-1.5">
+                        <code className="font-mono text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs" title={i.suggestedSql}>{i.suggestedSql}</code>
+                        <button
+                          onClick={() => copyToClipboard(i.suggestedSql!)}
+                          className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-opacity"
+                          title="Copy SQL"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                        </button>
+                      </div>
+                    ) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  if (stats.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
+        <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
+        <p className="text-sm">No index data available</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        {(["MISSING", "UNUSED", "HEALTHY"] as const).map((s) => (
+          <span key={s} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${INDEX_STATUS_STYLE[s]}`}>
+            {s === "MISSING" ? missing.length : s === "UNUSED" ? unused.length : healthy.length} {s}
+          </span>
+        ))}
+      </div>
+      <Section title="Missing Indexes" items={missing} emptyMsg="No missing indexes detected" />
+      <Section title="Unused Indexes" items={unused} emptyMsg="No unused indexes detected" />
+      <Section title="Healthy Indexes" items={healthy} emptyMsg="No index data" />
+    </div>
+  );
+};
+
+// ─── Tables & Files Tab ───────────────────────────────────────────────────────
+const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSize[] }) => {
+  const FILE_ICON: Record<FileSize["fileType"], string> = {
+    DATA: "text-blue-500",
+    LOG:  "text-amber-500",
+    WAL:  "text-purple-500",
+  };
+
+  const totalDbBytes = files.find((f) => f.fileType === "DATA")?.sizeBytes ?? null;
+
+  return (
+    <div className="space-y-8">
+      {/* File sizes */}
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">File Sizes</h3>
+        {files.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">No file size data available</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {files.map((f) => (
+              <div key={f.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 flex items-center gap-3">
+                <div className={`${FILE_ICON[f.fileType]} shrink-0`}>
+                  <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{f.fileType}</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{fmtBytes(f.sizeBytes)}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 truncate" title={f.filePath}>{f.filePath}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Table sizes */}
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Table Sizes</h3>
+        {tables.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">No table size data available</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Table</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Total</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Data</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Indexes</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Rows</th>
+                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Bar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {tables.map((t) => {
+                  const pct = totalDbBytes && totalDbBytes > 0 ? (t.totalBytes / totalDbBytes) * 100 : 0;
+                  return (
+                    <tr key={t.id}>
+                      <td className="py-1.5 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">{t.tableName}</td>
+                      <td className="py-1.5 pr-4 text-right font-semibold text-slate-800 dark:text-slate-200">{fmtBytes(t.totalBytes)}</td>
+                      <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtBytes(t.dataBytes)}</td>
+                      <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtBytes(t.indexBytes)}</td>
+                      <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtNum(t.rowCount)}</td>
+                      <td className="py-1.5 min-w-[80px]">
+                        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-500 dark:bg-blue-400"
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Connections Tab ──────────────────────────────────────────────────────────
+const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
+  if (!stat) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
+        <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
+        <p className="text-sm">No connection data available</p>
+      </div>
+    );
+  }
+
+  const usedPct = stat.maxConnections > 0 ? (stat.total / stat.maxConnections) * 100 : 0;
+  const usedColor = usedPct > 80 ? "bg-rose-500" : usedPct > 60 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="space-y-6">
+      {/* Usage bar */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Connection pool usage</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">
+            {stat.total} / {stat.maxConnections} <span className="text-xs font-normal text-slate-400">({usedPct.toFixed(0)}%)</span>
+          </p>
+        </div>
+        <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${usedColor}`} style={{ width: `${Math.min(usedPct, 100)}%` }} />
+        </div>
+      </div>
+
+      {/* Stat grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { label: "Active", value: stat.active, accent: stat.active > 0 ? "text-emerald-600 dark:text-emerald-400" : undefined },
+          { label: "Idle", value: stat.idle },
+          { label: "Idle in Txn", value: stat.idleInTransaction, accent: stat.idleInTransaction > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
+          { label: "Blocked", value: stat.blockedCount, accent: stat.blockedCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined },
+          { label: "Max Allowed", value: stat.maxConnections },
+        ].map((card) => (
+          <StatCard
+            key={card.label}
+            label={card.label}
+            value={String(card.value)}
+            accent={card.accent}
+          />
+        ))}
+      </div>
+
+      {stat.longestBlockedSeconds != null && stat.longestBlockedSeconds > 0 && (
+        <div className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-3 text-sm text-rose-700 dark:text-rose-300">
+          Longest blocked query: <strong>{stat.longestBlockedSeconds.toFixed(1)}s</strong>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Replication Tab ──────────────────────────────────────────────────────────
+const REPLICATION_STYLE = {
+  STREAMING: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/20 dark:text-emerald-300",
+  LAGGING:   "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-300",
+  STOPPED:   "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/20 dark:text-rose-300",
+};
+
+const ReplicationTab = ({ replicas }: { replicas: ReplicationRow[] }) => {
+  if (replicas.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
+        <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+        <p className="text-sm">No replication configured or no replicas found</p>
+        <p className="text-xs text-slate-400">This is normal for standalone PostgreSQL instances</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Replica</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">State</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Lag</th>
+            <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Details</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {replicas.map((r) => (
+            <tr key={r.id}>
+              <td className="py-2 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">{r.replicaName}</td>
+              <td className="py-2 pr-4">
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${REPLICATION_STYLE[r.state]}`}>
+                  {r.state}
+                </span>
+              </td>
+              <td className={`py-2 pr-4 text-right font-mono ${r.lagSeconds != null && r.lagSeconds > 30 ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-slate-600 dark:text-slate-300"}`}>
+                {r.lagSeconds != null ? `${r.lagSeconds.toFixed(1)}s` : "—"}
+              </td>
+              <td className="py-2 text-xs text-slate-400 dark:text-slate-500 font-mono">
+                {typeof r.detailJson.replayLsn === "string" ? `replay: ${r.detailJson.replayLsn}` : ""}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+const DbInsightDetailPage = () => {
+  const { monitorId } = useParams<{ monitorId: string }>();
+  const { t } = useTranslation();
+  const { api } = useApi();
+
+  const [monitor, setMonitor] = useState<Monitor | null>(null);
+  const [config, setConfig] = useState<InsightConfig>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>("slow");
+
+  const load = useCallback(async () => {
+    if (!monitorId) return;
+    setIsLoading(true);
+    try {
+      const res = await api.get<ApiResponse<{ monitor: Monitor; config: InsightConfig; snapshot: Snapshot }>>(
+        `/db-insight/${monitorId}/latest`,
+      );
+      if (res.data.success) {
+        setMonitor(res.data.data.monitor);
+        setConfig(res.data.data.config);
+        setSnapshot(res.data.data.snapshot);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, monitorId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const dbType = (monitor?.config?.type ?? "postgresql") as DbType;
+  const dbMeta = DB_META[dbType] ?? DB_META.postgresql;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!monitor) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-24 text-slate-400">
+        <p className="text-lg font-medium">Monitor not found</p>
+        <Link to="/db-insight" className="text-sm text-cyan-600 hover:underline">← Back to DB Insight</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <Link to="/db-insight" className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+              ← {t("sidebar.dbInsight")}
+            </Link>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white truncate">{monitor.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${dbMeta.bg}`}>
+              {dbMeta.label}
+            </span>
+            {monitor.config.host && (
+              <span className="text-xs text-slate-400 font-mono">
+                {monitor.config.host}{monitor.config.port ? `:${monitor.config.port}` : ""}{monitor.config.database ? `/${monitor.config.database}` : ""}
+              </span>
+            )}
+            {!config?.enabled && (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                DB Insight not enabled — <Link to={`/monitors/${monitor.id}`} className="underline">enable in monitor settings</Link>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => void load()}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Refresh
+        </button>
+      </div>
+
+      {/* No snapshot yet */}
+      {!snapshot ? (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-10 flex flex-col items-center gap-3 text-center">
+          <svg className="h-12 w-12 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
+          <p className="text-base font-medium text-slate-700 dark:text-slate-200">No snapshots yet</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm">
+            {config?.enabled
+              ? `DB Insight is enabled. The next snapshot will be collected within ${config.collectIntervalMinutes} minutes.`
+              : "Enable DB Insight in monitor settings to start collecting insights."}
+          </p>
+          {!config?.enabled && (
+            <Link
+              to={`/monitors/${monitor.id}`}
+              className="mt-1 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700"
+            >
+              Open Monitor Settings
+            </Link>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Snapshot meta */}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+            <span>Snapshot: {fmtRelative(snapshot.collectedAt)}</span>
+            {snapshot.collectionDurationMs != null && (
+              <span>Collection took {snapshot.collectionDurationMs}ms</span>
+            )}
+            {snapshot.errorMessage && (
+              <span className="text-amber-600 dark:text-amber-400">Warning: {snapshot.errorMessage}</span>
+            )}
+          </div>
+
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <StatCard
+              label="Active Connections"
+              value={snapshot.connectionStats ? String(snapshot.connectionStats.active) : "—"}
+              sub={snapshot.connectionStats ? `of ${snapshot.connectionStats.maxConnections} max` : undefined}
+              accent={
+                snapshot.connectionStats && snapshot.connectionStats.active / snapshot.connectionStats.maxConnections > 0.8
+                  ? "text-rose-600 dark:text-rose-400"
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Slow Queries"
+              value={String(snapshot.slowQueries.length)}
+              sub={config ? `> ${config.slowQueryThresholdMs}ms threshold` : undefined}
+              accent={snapshot.slowQueries.length > 0 ? "text-amber-600 dark:text-amber-400" : undefined}
+            />
+            <StatCard
+              label="DB Size"
+              value={fmtBytes(snapshot.fileSizes.find((f) => f.fileType === "DATA")?.sizeBytes ?? null)}
+            />
+            <StatCard
+              label="Blocked Queries"
+              value={snapshot.connectionStats ? String(snapshot.connectionStats.blockedCount) : "—"}
+              accent={snapshot.connectionStats?.blockedCount ?? 0 > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
+            />
+            <StatCard
+              label="Replicas"
+              value={String(snapshot.replicationStatus.length)}
+              sub={
+                snapshot.replicationStatus.length > 0
+                  ? snapshot.replicationStatus.every((r) => r.state === "STREAMING")
+                    ? "all streaming"
+                    : "check replication tab"
+                  : "standalone"
+              }
+            />
+          </div>
+
+          {/* Tabs */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+            {/* Tab bar */}
+            <div className="border-b border-slate-200 dark:border-slate-700 flex overflow-x-auto">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === tab.key
+                      ? "border-cyan-500 text-cyan-600 dark:text-cyan-400"
+                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.key === "slow" && snapshot.slowQueries.length > 0 && (
+                    <span className="ml-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs px-1.5 py-0.5">
+                      {snapshot.slowQueries.length}
+                    </span>
+                  )}
+                  {tab.key === "index" && snapshot.indexStats.filter((i) => i.status !== "HEALTHY").length > 0 && (
+                    <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-xs px-1.5 py-0.5">
+                      {snapshot.indexStats.filter((i) => i.status !== "HEALTHY").length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div className="p-4">
+              {activeTab === "slow" && (
+                <SlowQueriesTab
+                  queries={snapshot.slowQueries}
+                  threshold={config?.slowQueryThresholdMs ?? 1000}
+                />
+              )}
+              {activeTab === "index" && <IndexAnalysisTab stats={snapshot.indexStats} />}
+              {activeTab === "tables" && (
+                <TablesFilesTab tables={snapshot.tableSizes} files={snapshot.fileSizes} />
+              )}
+              {activeTab === "connections" && <ConnectionsTab stat={snapshot.connectionStats} />}
+              {activeTab === "replication" && <ReplicationTab replicas={snapshot.replicationStatus} />}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default DbInsightDetailPage;
