@@ -1148,4 +1148,51 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
     {
       params: t.Object({ id: t.String() }),
     },
+  )
+  // ── DB Insight config ──────────────────────────────────────────
+  .get(
+    "/:id/insight-config",
+    async ({ params, set }) => {
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.id } });
+      if (!monitor) { set.status = 404; return fail("Monitor not found"); }
+      const config = await prisma.dbInsightConfig.findUnique({ where: { monitorId: params.id } });
+      return ok(config);
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  .patch(
+    "/:id/insight-config",
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.id } });
+      if (!monitor) { set.status = 404; return fail("Monitor not found"); }
+      if (monitor.type !== "DATABASE") { set.status = 400; return fail("DB Insight is only available for DATABASE monitors"); }
+
+      const config = await prisma.dbInsightConfig.upsert({
+        where: { monitorId: params.id },
+        create: {
+          monitorId: params.id,
+          enabled: body.enabled,
+          collectIntervalMinutes: body.collectIntervalMinutes,
+          slowQueryThresholdMs: body.slowQueryThresholdMs,
+          topNQueries: body.topNQueries,
+        },
+        update: {
+          enabled: body.enabled,
+          collectIntervalMinutes: body.collectIntervalMinutes,
+          slowQueryThresholdMs: body.slowQueryThresholdMs,
+          topNQueries: body.topNQueries,
+        },
+      });
+      return ok(config);
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        enabled: t.Boolean(),
+        collectIntervalMinutes: t.Integer({ minimum: 1, maximum: 1440 }),
+        slowQueryThresholdMs: t.Integer({ minimum: 100 }),
+        topNQueries: t.Integer({ minimum: 1, maximum: 100 }),
+      }),
+    },
   );
