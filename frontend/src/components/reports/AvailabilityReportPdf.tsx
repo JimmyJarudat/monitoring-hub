@@ -9,7 +9,20 @@ import {
   pdf,
 } from "@react-pdf/renderer";
 
-// ─── types (mirrored from reports page) ──────────────────────────────────────
+// ─── font registration (Thai support) ───────────────────────────────────────
+Font.register({
+  family: "Sarabun",
+  fonts: [
+    { src: "/fonts/Sarabun-Regular.ttf", fontWeight: "normal", fontStyle: "normal" },
+    { src: "/fonts/Sarabun-Bold.ttf", fontWeight: "bold", fontStyle: "normal" },
+    { src: "/fonts/Sarabun-Italic.ttf", fontWeight: "normal", fontStyle: "italic" },
+  ],
+});
+
+// Disable font hyphenation for Thai text
+Font.registerHyphenationCallback((word) => [word]);
+
+// ─── types ───────────────────────────────────────────────────────────────────
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type MonitorType = string;
@@ -82,88 +95,163 @@ const fmt = {
   },
   uptimeColor: (v: number | null): string => {
     if (v == null) return "#94A3B8";
-    if (v >= 99) return "#16A34A";
+    if (v >= 99) return "#059669";
     if (v >= 95) return "#D97706";
     return "#E11D48";
   },
-  statusColor: (s: MonitorStatus | IncidentStatus | null): string => {
-    if (s === "UP" || s === "RESOLVED") return "#16A34A";
-    if (s === "DOWN" || s === "OPEN") return "#E11D48";
-    if (s === "DEGRADED" || s === "ACKNOWLEDGED") return "#D97706";
-    return "#94A3B8";
+  statusFg: (s: MonitorStatus | IncidentStatus | null): string => {
+    if (s === "UP" || s === "RESOLVED") return "#065F46";
+    if (s === "DOWN" || s === "OPEN") return "#9F1239";
+    if (s === "DEGRADED" || s === "ACKNOWLEDGED") return "#92400E";
+    return "#475569";
   },
   statusBg: (s: MonitorStatus | IncidentStatus | null): string => {
-    if (s === "UP" || s === "RESOLVED") return "#DCFCE7";
+    if (s === "UP" || s === "RESOLVED") return "#D1FAE5";
     if (s === "DOWN" || s === "OPEN") return "#FFE4E6";
     if (s === "DEGRADED" || s === "ACKNOWLEDGED") return "#FEF3C7";
     return "#F1F5F9";
   },
 };
 
+// ─── colour palette (white + cyan theme) ────────────────────────────────────
+const C = {
+  primary: "#0891B2",       // cyan-600
+  primaryLight: "#CFFAFE",  // cyan-100
+  primaryDark: "#164E63",   // cyan-900
+  accent: "#06B6D4",        // cyan-500
+  white: "#FFFFFF",
+  bg: "#F0F9FF",            // cyan-50
+  border: "#BAE6FD",        // cyan-200
+  text: "#0F172A",          // slate-950
+  textMuted: "#64748B",     // slate-500
+  textLight: "#94A3B8",     // slate-400
+  rowAlt: "#F0F9FF",        // cyan-50
+};
+
 // ─── styles ──────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
-  page: { fontFamily: "Helvetica", backgroundColor: "#F8FAFC", paddingBottom: 40 },
-  coverPage: { fontFamily: "Helvetica", backgroundColor: "#0F172A" },
-  // footer
+  page: {
+    fontFamily: "Sarabun",
+    fontSize: 9,
+    backgroundColor: "#FFFFFF",
+    paddingBottom: 44,
+    color: C.text,
+  },
+  coverPage: {
+    fontFamily: "Sarabun",
+    backgroundColor: "#FFFFFF",
+  },
+  // footer (sticky)
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 32,
-    backgroundColor: "#0F172A",
+    height: 36,
+    backgroundColor: C.primary,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 24,
     justifyContent: "space-between",
   },
-  footerText: { fontSize: 7, color: "#94A3B8" },
+  footerText: { fontSize: 7.5, color: C.white, fontFamily: "Sarabun" },
   // cover
-  coverContent: { flex: 1, alignItems: "center", justifyContent: "center", padding: 48 },
-  coverLogo: { width: 80, height: 80, objectFit: "contain", marginBottom: 24 },
-  coverTitle: { fontSize: 32, fontFamily: "Helvetica-Bold", color: "#F8FAFC", textAlign: "center", marginBottom: 8 },
-  coverSubtitle: { fontSize: 14, color: "#94A3B8", textAlign: "center", marginBottom: 40 },
-  coverDivider: { width: 60, height: 2, backgroundColor: "#06B6D4", marginBottom: 40 },
-  coverReportLabel: { fontSize: 22, fontFamily: "Helvetica-Bold", color: "#E2E8F0", textAlign: "center", marginBottom: 12 },
-  coverRange: { fontSize: 11, color: "#CBD5E1", textAlign: "center", marginBottom: 6 },
-  coverGenerated: { fontSize: 9, color: "#64748B", textAlign: "center" },
+  coverTop: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 48,
+    paddingTop: 72,
+    paddingBottom: 48,
+    alignItems: "center",
+  },
+  coverLogoBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: C.white,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  coverLogoImg: { width: 70, height: 70, objectFit: "contain" },
+  coverLogoFallback: { fontSize: 28, fontFamily: "Sarabun", fontWeight: "bold", color: C.primary },
+  coverCompany: { fontSize: 26, fontFamily: "Sarabun", fontWeight: "bold", color: C.white, textAlign: "center", marginBottom: 4 },
+  coverSystem: { fontSize: 11, color: C.primaryLight, textAlign: "center" },
+  coverBottom: { padding: 48, alignItems: "center" },
+  coverDivider: { width: 48, height: 3, backgroundColor: C.accent, borderRadius: 2, marginBottom: 32 },
+  coverReportTitle: { fontSize: 20, fontFamily: "Sarabun", fontWeight: "bold", color: C.text, textAlign: "center", marginBottom: 10 },
+  coverRange: { fontSize: 10, color: C.textMuted, textAlign: "center", marginBottom: 4 },
+  coverGenerated: { fontSize: 8.5, color: C.textLight, textAlign: "center", marginTop: 8 },
+  coverFooterNote: { fontSize: 8, color: C.textLight, fontStyle: "italic", marginTop: 32, textAlign: "center" },
   // page header
-  pageHeader: { backgroundColor: "#0F172A", paddingHorizontal: 24, paddingVertical: 14 },
-  pageHeaderTitle: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#F8FAFC" },
-  pageHeaderSub: { fontSize: 8, color: "#94A3B8", marginTop: 2 },
+  pageHeader: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+  },
+  pageHeaderTitle: { fontSize: 15, fontFamily: "Sarabun", fontWeight: "bold", color: C.white },
+  pageHeaderSub: { fontSize: 8, color: C.primaryLight, marginTop: 2 },
   // content
   content: { paddingHorizontal: 24, paddingTop: 16 },
-  sectionTitle: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#0F172A", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
+  sectionTitle: {
+    fontSize: 8.5,
+    fontFamily: "Sarabun",
+    fontWeight: "bold",
+    color: C.primary,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
   // stat cards
-  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  statCard: { flex: 1, minWidth: "28%", backgroundColor: "#FFFFFF", borderRadius: 6, padding: 10, borderWidth: 1, borderColor: "#E2E8F0" },
-  statLabel: { fontSize: 7, color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 },
-  statValue: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#0F172A" },
-  statUnit: { fontSize: 8, color: "#64748B", marginTop: 2 },
+  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  statCard: {
+    flex: 1,
+    minWidth: "28%",
+    backgroundColor: C.white,
+    borderRadius: 6,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  statLabel: { fontSize: 7, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, fontFamily: "Sarabun" },
+  statValue: { fontSize: 20, fontFamily: "Sarabun", fontWeight: "bold", color: C.text },
+  statUnit: { fontSize: 7.5, color: C.textMuted, marginTop: 2 },
   // uptime banner
-  uptimeBanner: { borderRadius: 6, padding: 12, marginBottom: 16, alignItems: "center" },
-  uptimeValue: { fontSize: 36, fontFamily: "Helvetica-Bold", color: "#FFFFFF" },
-  uptimeLabel: { fontSize: 9, color: "#FFFFFF", opacity: 0.8, marginTop: 2 },
+  uptimeBanner: { borderRadius: 8, padding: 14, marginBottom: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 12 },
+  uptimeValue: { fontSize: 34, fontFamily: "Sarabun", fontWeight: "bold", color: C.white },
+  uptimeLabel: { fontSize: 9, color: C.white, opacity: 0.9, marginTop: 2, fontFamily: "Sarabun" },
   // table
-  table: { marginBottom: 16 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0F172A", borderRadius: 4, paddingVertical: 6, paddingHorizontal: 4 },
-  tableHeaderCell: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#E2E8F0", textAlign: "center" },
-  tableRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
-  tableRowAlt: { backgroundColor: "#F8FAFC" },
-  tableCell: { fontSize: 7, color: "#0F172A", textAlign: "center" },
-  tableCellLeft: { fontSize: 7, color: "#0F172A", textAlign: "left" },
+  table: { marginBottom: 14 },
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: C.primary,
+    borderRadius: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+  },
+  thCell: { fontSize: 7.5, fontFamily: "Sarabun", fontWeight: "bold", color: C.white, textAlign: "center" },
+  tableRow: {
+    flexDirection: "row",
+    paddingVertical: 5,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  tableRowAlt: { backgroundColor: C.rowAlt },
+  tdCell: { fontSize: 8, color: C.text, textAlign: "center", fontFamily: "Sarabun" },
+  tdCellLeft: { fontSize: 8, color: C.text, textAlign: "left", fontFamily: "Sarabun" },
   // badge
   badge: { borderRadius: 3, paddingVertical: 2, paddingHorizontal: 5, alignSelf: "center" },
-  badgeText: { fontSize: 6, fontFamily: "Helvetica-Bold" },
-  // uptime bar
-  uptimeBarBg: { backgroundColor: "#E2E8F0", borderRadius: 3, height: 6, marginTop: 2 },
-  uptimeBarFill: { borderRadius: 3, height: 6 },
-  // divider
-  divider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 12 },
+  badgeText: { fontSize: 6.5, fontFamily: "Sarabun", fontWeight: "bold" },
+  // uptime mini bar
+  barBg: { backgroundColor: C.border, borderRadius: 2, height: 5, marginTop: 2 },
+  barFill: { borderRadius: 2, height: 5 },
 });
 
 // ─── shared components ────────────────────────────────────────────────────────
-const Footer = ({ company, system, footer, pageNum }: { company: string; system: string; footer: string; pageNum?: string }) => (
+const Footer = ({ company, system, footer }: { company: string; system: string; footer: string }) => (
   <View style={S.footer} fixed>
     <Text style={S.footerText}>{company || system}</Text>
     <Text style={S.footerText}>{footer || "Availability Report"}</Text>
@@ -173,20 +261,22 @@ const Footer = ({ company, system, footer, pageNum }: { company: string; system:
 
 const PageHeader = ({ title, sub }: { title: string; sub?: string }) => (
   <View style={S.pageHeader}>
-    <Text style={S.pageHeaderTitle}>{title}</Text>
-    {sub ? <Text style={S.pageHeaderSub}>{sub}</Text> : null}
+    <View>
+      <Text style={S.pageHeaderTitle}>{title}</Text>
+      {sub ? <Text style={S.pageHeaderSub}>{sub}</Text> : null}
+    </View>
   </View>
 );
 
 const UptimeBar = ({ value }: { value: number | null }) => (
-  <View style={S.uptimeBarBg}>
-    <View style={[S.uptimeBarFill, { width: `${value ?? 0}%`, backgroundColor: fmt.uptimeColor(value) }]} />
+  <View style={S.barBg}>
+    <View style={[S.barFill, { width: `${Math.max(value ?? 0, 0)}%`, backgroundColor: fmt.uptimeColor(value) }]} />
   </View>
 );
 
 const Badge = ({ status }: { status: MonitorStatus | IncidentStatus | null }) => (
   <View style={[S.badge, { backgroundColor: fmt.statusBg(status) }]}>
-    <Text style={[S.badgeText, { color: fmt.statusColor(status) }]}>{status ?? "N/A"}</Text>
+    <Text style={[S.badgeText, { color: fmt.statusFg(status) }]}>{status ?? "N/A"}</Text>
   </View>
 );
 
@@ -197,31 +287,28 @@ const CoverPage = ({ payload }: { payload: PdfReportPayload }) => {
 
   return (
     <Page size="A4" style={S.coverPage}>
-      <View style={S.coverContent}>
-        {branding.logoUrl ? (
-          <Image style={S.coverLogo} src={branding.logoUrl} />
-        ) : (
-          <View style={{ width: 64, height: 64, backgroundColor: "#06B6D4", borderRadius: 12, marginBottom: 24, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontSize: 28, fontFamily: "Helvetica-Bold", color: "#FFFFFF" }}>
-              {displayName.slice(0, 2).toUpperCase()}
-            </Text>
-          </View>
-        )}
+      {/* Top cyan block */}
+      <View style={S.coverTop}>
+        <View style={S.coverLogoBox}>
+          {branding.logoUrl ? (
+            <Image style={S.coverLogoImg} src={branding.logoUrl} />
+          ) : (
+            <Text style={S.coverLogoFallback}>{displayName.slice(0, 2).toUpperCase()}</Text>
+          )}
+        </View>
+        <Text style={S.coverCompany}>{displayName}</Text>
+        {branding.companyName ? <Text style={S.coverSystem}>{branding.systemName}</Text> : null}
+      </View>
 
-        <Text style={S.coverTitle}>{displayName}</Text>
-        <Text style={S.coverSubtitle}>{branding.systemName}</Text>
-
+      {/* Bottom white block */}
+      <View style={S.coverBottom}>
         <View style={S.coverDivider} />
-
-        <Text style={S.coverReportLabel}>Availability Report</Text>
+        <Text style={S.coverReportTitle}>Availability Report</Text>
         <Text style={S.coverRange}>{range.label}</Text>
         <Text style={S.coverRange}>{fmt.dt(range.from)} → {fmt.dt(range.to)}</Text>
         <Text style={S.coverGenerated}>Generated: {fmt.dt(generatedAt)}</Text>
-
         {branding.footerText ? (
-          <Text style={{ fontSize: 8, color: "#475569", marginTop: 40, fontStyle: "italic" }}>
-            {branding.footerText}
-          </Text>
+          <Text style={S.coverFooterNote}>{branding.footerText}</Text>
         ) : null}
       </View>
     </Page>
@@ -235,8 +322,8 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
 
   const kpis = [
     { label: "Total Checks", value: summary.checks.toLocaleString(), unit: "in range" },
-    { label: "UP Checks", value: summary.up.toLocaleString(), unit: "" },
-    { label: "DOWN Checks", value: summary.down.toLocaleString(), unit: "" },
+    { label: "UP", value: summary.up.toLocaleString(), unit: "" },
+    { label: "DOWN", value: summary.down.toLocaleString(), unit: "" },
     { label: "DEGRADED", value: summary.degraded.toLocaleString(), unit: "" },
     { label: "Incidents", value: summary.incidents.toLocaleString(), unit: `${summary.openIncidents} open` },
     { label: "Avg Response", value: summary.avgResponseMs != null ? String(summary.avgResponseMs) : "N/A", unit: summary.avgResponseMs != null ? "ms" : "" },
@@ -247,9 +334,11 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
       <PageHeader title="Executive Summary" sub={`${payload.range.label}  ·  Generated ${fmt.dt(payload.generatedAt)}`} />
       <View style={S.content}>
         {/* Uptime banner */}
-        <View style={[S.uptimeBanner, { backgroundColor: uptimeBg, marginBottom: 16 }]}>
-          <Text style={S.uptimeValue}>{fmt.pct(summary.reportUptime)}</Text>
-          <Text style={S.uptimeLabel}>Report Uptime</Text>
+        <View style={[S.uptimeBanner, { backgroundColor: uptimeBg }]}>
+          <View style={{ alignItems: "center" }}>
+            <Text style={S.uptimeValue}>{fmt.pct(summary.reportUptime)}</Text>
+            <Text style={S.uptimeLabel}>Report Uptime</Text>
+          </View>
         </View>
 
         {/* KPI grid */}
@@ -265,16 +354,16 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
         </View>
 
         {/* Fleet stats */}
-        <View style={[S.statGrid, { marginBottom: 16 }]}>
-          <View style={[S.statCard, { flex: 1 }]}>
+        <View style={[S.statGrid, { marginBottom: 14 }]}>
+          <View style={[S.statCard, { flex: 1, borderColor: C.border, backgroundColor: C.bg }]}>
             <Text style={S.statLabel}>Fleet Uptime (24h)</Text>
             <Text style={[S.statValue, { fontSize: 16, color: fmt.uptimeColor(summary.fleetUptime24h) }]}>
               {fmt.pct(summary.fleetUptime24h)}
             </Text>
           </View>
-          <View style={[S.statCard, { flex: 1 }]}>
+          <View style={[S.statCard, { flex: 1, borderColor: C.border, backgroundColor: C.bg }]}>
             <Text style={S.statLabel}>Fleet Avg Response (24h)</Text>
-            <Text style={[S.statValue, { fontSize: 16 }]}>
+            <Text style={[S.statValue, { fontSize: 16, color: C.primary }]}>
               {fmt.ms(summary.fleetAvgResponseMs)}
             </Text>
           </View>
@@ -285,20 +374,20 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
         <View style={S.table}>
           <View style={S.tableHeader}>
             {["Status", "Count", "% of Checks"].map((h) => (
-              <Text key={h} style={[S.tableHeaderCell, { flex: 1 }]}>{h}</Text>
+              <Text key={h} style={[S.thCell, { flex: 1 }]}>{h}</Text>
             ))}
           </View>
-          {[
+          {([
             { status: "UP" as MonitorStatus, count: summary.up },
             { status: "DEGRADED" as MonitorStatus, count: summary.degraded },
             { status: "DOWN" as MonitorStatus, count: summary.down },
-          ].map((row, i) => (
+          ] as const).map((row, i) => (
             <View key={row.status} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
               <View style={{ flex: 1, alignItems: "center" }}>
                 <Badge status={row.status} />
               </View>
-              <Text style={[S.tableCell, { flex: 1 }]}>{row.count.toLocaleString()}</Text>
-              <Text style={[S.tableCell, { flex: 1, color: fmt.statusColor(row.status) }]}>
+              <Text style={[S.tdCell, { flex: 1 }]}>{row.count.toLocaleString()}</Text>
+              <Text style={[S.tdCell, { flex: 1, color: fmt.statusFg(row.status), fontFamily: "Sarabun", fontWeight: "bold" }]}>
                 {summary.checks > 0 ? `${((row.count / summary.checks) * 100).toFixed(1)}%` : "N/A"}
               </Text>
             </View>
@@ -311,25 +400,24 @@ const SummaryPage = ({ payload }: { payload: PdfReportPayload }) => {
             <Text style={S.sectionTitle}>Top 5 At-Risk Monitors</Text>
             <View style={S.table}>
               <View style={S.tableHeader}>
-                {["Monitor", "Uptime %", "Down", "Degraded"].map((h, i) => (
-                  <Text key={h} style={[S.tableHeaderCell, i === 0 ? { flex: 3, textAlign: "left", paddingLeft: 4 } : { flex: 1 }]}>{h}</Text>
+                {[{ l: "Monitor", f: 3 }, { l: "Uptime %", f: 1.2 }, { l: "Down", f: 0.8 }, { l: "Degraded", f: 0.9 }].map(({ l, f }, i) => (
+                  <Text key={l} style={[S.thCell, { flex: f }, i === 0 ? { textAlign: "left", paddingLeft: 4 } : {}]}>{l}</Text>
                 ))}
               </View>
               {payload.monitorRanking.slice(0, 5).map((row, i) => (
                 <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                  <Text style={[S.tableCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
-                  <Text style={[S.tableCell, { flex: 1, color: fmt.uptimeColor(row.uptime) }]}>
+                  <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
+                  <Text style={[S.tdCell, { flex: 1.2, color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
                     {fmt.pct(row.uptime)}
                   </Text>
-                  <Text style={[S.tableCell, { flex: 1, color: row.down > 0 ? "#E11D48" : "#0F172A" }]}>{row.down}</Text>
-                  <Text style={[S.tableCell, { flex: 1, color: row.degraded > 0 ? "#D97706" : "#0F172A" }]}>{row.degraded}</Text>
+                  <Text style={[S.tdCell, { flex: 0.8, color: row.down > 0 ? "#E11D48" : C.text }]}>{row.down}</Text>
+                  <Text style={[S.tdCell, { flex: 0.9, color: row.degraded > 0 ? "#D97706" : C.text }]}>{row.degraded}</Text>
                 </View>
               ))}
             </View>
           </>
         )}
       </View>
-
       <Footer company={branding.companyName} system={branding.systemName} footer={branding.footerText} />
     </Page>
   );
@@ -341,41 +429,36 @@ const MonitorPage = ({ payload }: { payload: PdfReportPayload }) => {
 
   return (
     <Page size="A4" style={S.page}>
-      <PageHeader title="Monitor Reliability Ranking" sub={`${monitorRanking.length} monitors · sorted by uptime (worst first)`} />
+      <PageHeader title="Monitor Reliability Ranking" sub={`${monitorRanking.length} monitors · เรียงจากแย่ไปดี`} />
       <View style={S.content}>
         <View style={S.table}>
           <View style={S.tableHeader}>
             {[
-              { label: "Monitor", flex: 3 },
-              { label: "Type", flex: 1.2 },
-              { label: "Uptime %", flex: 1.2 },
-              { label: "Checks", flex: 0.9 },
-              { label: "Down", flex: 0.8 },
-              { label: "Avg ms", flex: 1 },
-              { label: "Last", flex: 1.2 },
-            ].map(({ label, flex }, i) => (
-              <Text
-                key={label}
-                style={[S.tableHeaderCell, { flex }, i === 0 ? { textAlign: "left", paddingLeft: 4 } : {}]}
-              >
-                {label}
-              </Text>
+              { l: "Monitor", f: 3 },
+              { l: "Type", f: 1.1 },
+              { l: "Uptime %", f: 1.3 },
+              { l: "Checks", f: 0.9 },
+              { l: "Down", f: 0.8 },
+              { l: "Avg ms", f: 1 },
+              { l: "Last", f: 1.2 },
+            ].map(({ l, f }, i) => (
+              <Text key={l} style={[S.thCell, { flex: f }, i === 0 ? { textAlign: "left", paddingLeft: 4 } : {}]}>{l}</Text>
             ))}
           </View>
 
           {monitorRanking.map((row, i) => (
             <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
-              <Text style={[S.tableCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
-              <Text style={[S.tableCell, { flex: 1.2, fontSize: 6 }]}>{row.type}</Text>
-              <View style={{ flex: 1.2, paddingHorizontal: 2 }}>
-                <Text style={[S.tableCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Helvetica-Bold" }]}>
+              <Text style={[S.tdCellLeft, { flex: 3, paddingLeft: 4 }]} numberOfLines={1}>{row.monitor}</Text>
+              <Text style={[S.tdCell, { flex: 1.1, fontSize: 7 }]}>{row.type}</Text>
+              <View style={{ flex: 1.3, paddingHorizontal: 2 }}>
+                <Text style={[S.tdCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
                   {fmt.pct(row.uptime)}
                 </Text>
                 <UptimeBar value={row.uptime} />
               </View>
-              <Text style={[S.tableCell, { flex: 0.9 }]}>{row.checks}</Text>
-              <Text style={[S.tableCell, { flex: 0.8, color: row.down > 0 ? "#E11D48" : "#0F172A" }]}>{row.down}</Text>
-              <Text style={[S.tableCell, { flex: 1 }]}>{fmt.ms(row.avgResponse)}</Text>
+              <Text style={[S.tdCell, { flex: 0.9 }]}>{row.checks}</Text>
+              <Text style={[S.tdCell, { flex: 0.8, color: row.down > 0 ? "#E11D48" : C.text }]}>{row.down}</Text>
+              <Text style={[S.tdCell, { flex: 1 }]}>{fmt.ms(row.avgResponse)}</Text>
               <View style={{ flex: 1.2, alignItems: "center" }}>
                 <Badge status={row.lastStatus} />
               </View>
@@ -388,7 +471,7 @@ const MonitorPage = ({ payload }: { payload: PdfReportPayload }) => {
   );
 };
 
-// ─── Page 4: Incident Report ─────────────────────────────────────────────────
+// ─── Page 4: Incident Report ──────────────────────────────────────────────────
 const IncidentPage = ({ payload }: { payload: PdfReportPayload }) => {
   const { incidents, branding } = payload;
 
@@ -397,39 +480,33 @@ const IncidentPage = ({ payload }: { payload: PdfReportPayload }) => {
       <PageHeader title="Incident Report" sub={`${incidents.length} incidents in range`} />
       <View style={S.content}>
         {incidents.length === 0 ? (
-          <Text style={{ fontSize: 10, color: "#94A3B8", textAlign: "center", marginTop: 32 }}>
-            No incidents in this time range.
+          <Text style={{ fontSize: 10, color: C.textLight, textAlign: "center", marginTop: 32, fontFamily: "Sarabun" }}>
+            ไม่มี Incident ในช่วงเวลานี้
           </Text>
         ) : (
           <View style={S.table}>
             <View style={S.tableHeader}>
               {[
-                { label: "Started", flex: 1.8 },
-                { label: "Monitor", flex: 2.5 },
-                { label: "Status", flex: 1.2 },
-                { label: "Duration", flex: 1 },
-                { label: "Severity", flex: 1 },
-                { label: "Message", flex: 2.5 },
-              ].map(({ label, flex }, i) => (
-                <Text
-                  key={label}
-                  style={[S.tableHeaderCell, { flex }, i <= 1 ? { textAlign: "left", paddingLeft: 4 } : {}]}
-                >
-                  {label}
-                </Text>
+                { l: "Started", f: 1.8 },
+                { l: "Monitor", f: 2.5 },
+                { l: "Status", f: 1.2 },
+                { l: "Duration", f: 1 },
+                { l: "Severity", f: 1 },
+                { l: "Message", f: 2.5 },
+              ].map(({ l, f }, i) => (
+                <Text key={l} style={[S.thCell, { flex: f }, i <= 1 ? { textAlign: "left", paddingLeft: 4 } : {}]}>{l}</Text>
               ))}
             </View>
-
             {incidents.map((inc, i) => (
               <View key={inc.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
-                <Text style={[S.tableCellLeft, { flex: 1.8, fontSize: 6, paddingLeft: 4 }]}>{fmt.dt(inc.startedAt)}</Text>
-                <Text style={[S.tableCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{inc.monitor}</Text>
+                <Text style={[S.tdCellLeft, { flex: 1.8, fontSize: 7, paddingLeft: 4 }]}>{fmt.dt(inc.startedAt)}</Text>
+                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{inc.monitor}</Text>
                 <View style={{ flex: 1.2, alignItems: "center" }}>
                   <Badge status={inc.status} />
                 </View>
-                <Text style={[S.tableCell, { flex: 1 }]}>{inc.duration}</Text>
-                <Text style={[S.tableCell, { flex: 1, fontSize: 6 }]}>{inc.severity ?? "-"}</Text>
-                <Text style={[S.tableCell, { flex: 2.5, textAlign: "left", paddingLeft: 4, fontSize: 6 }]} numberOfLines={2}>
+                <Text style={[S.tdCell, { flex: 1 }]}>{inc.duration}</Text>
+                <Text style={[S.tdCell, { flex: 1, fontSize: 7 }]}>{inc.severity ?? "-"}</Text>
+                <Text style={[S.tdCell, { flex: 2.5, textAlign: "left", paddingLeft: 4, fontSize: 7 }]} numberOfLines={2}>
                   {inc.message ?? "-"}
                 </Text>
               </View>
@@ -451,46 +528,40 @@ const GroupPage = ({ payload }: { payload: PdfReportPayload }) => {
       <PageHeader title="Group Summary" sub={`${groupSummary.length} groups`} />
       <View style={S.content}>
         {groupSummary.length === 0 ? (
-          <Text style={{ fontSize: 10, color: "#94A3B8", textAlign: "center", marginTop: 32 }}>
-            No group data available.
+          <Text style={{ fontSize: 10, color: C.textLight, textAlign: "center", marginTop: 32, fontFamily: "Sarabun" }}>
+            ไม่มีข้อมูล Group
           </Text>
         ) : (
           <View style={S.table}>
             <View style={S.tableHeader}>
               {[
-                { label: "Group", flex: 2.5 },
-                { label: "Monitors", flex: 1 },
-                { label: "Uptime %", flex: 1.4 },
-                { label: "Checks", flex: 1 },
-                { label: "Down", flex: 0.8 },
-                { label: "Degraded", flex: 0.9 },
-                { label: "Incidents", flex: 0.9 },
-                { label: "Avg ms", flex: 1 },
-              ].map(({ label, flex }, i) => (
-                <Text
-                  key={label}
-                  style={[S.tableHeaderCell, { flex }, i === 0 ? { textAlign: "left", paddingLeft: 4 } : {}]}
-                >
-                  {label}
-                </Text>
+                { l: "Group", f: 2.5 },
+                { l: "Monitors", f: 1 },
+                { l: "Uptime %", f: 1.4 },
+                { l: "Checks", f: 1 },
+                { l: "Down", f: 0.8 },
+                { l: "Degraded", f: 0.9 },
+                { l: "Incidents", f: 0.9 },
+                { l: "Avg ms", f: 1 },
+              ].map(({ l, f }, i) => (
+                <Text key={l} style={[S.thCell, { flex: f }, i === 0 ? { textAlign: "left", paddingLeft: 4 } : {}]}>{l}</Text>
               ))}
             </View>
-
             {groupSummary.map((row, i) => (
               <View key={row.id} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]} wrap={false}>
-                <Text style={[S.tableCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{row.name}</Text>
-                <Text style={[S.tableCell, { flex: 1 }]}>{row.monitorCount}</Text>
+                <Text style={[S.tdCellLeft, { flex: 2.5, paddingLeft: 4 }]} numberOfLines={1}>{row.name}</Text>
+                <Text style={[S.tdCell, { flex: 1 }]}>{row.monitorCount}</Text>
                 <View style={{ flex: 1.4, paddingHorizontal: 2 }}>
-                  <Text style={[S.tableCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Helvetica-Bold" }]}>
+                  <Text style={[S.tdCell, { color: fmt.uptimeColor(row.uptime), fontFamily: "Sarabun", fontWeight: "bold" }]}>
                     {fmt.pct(row.uptime)}
                   </Text>
                   <UptimeBar value={row.uptime} />
                 </View>
-                <Text style={[S.tableCell, { flex: 1 }]}>{row.checks}</Text>
-                <Text style={[S.tableCell, { flex: 0.8, color: row.down > 0 ? "#E11D48" : "#0F172A" }]}>{row.down}</Text>
-                <Text style={[S.tableCell, { flex: 0.9, color: row.degraded > 0 ? "#D97706" : "#0F172A" }]}>{row.degraded}</Text>
-                <Text style={[S.tableCell, { flex: 0.9, color: row.incidents > 0 ? "#E11D48" : "#0F172A" }]}>{row.incidents}</Text>
-                <Text style={[S.tableCell, { flex: 1 }]}>{fmt.ms(row.avgResponse)}</Text>
+                <Text style={[S.tdCell, { flex: 1 }]}>{row.checks}</Text>
+                <Text style={[S.tdCell, { flex: 0.8, color: row.down > 0 ? "#E11D48" : C.text }]}>{row.down}</Text>
+                <Text style={[S.tdCell, { flex: 0.9, color: row.degraded > 0 ? "#D97706" : C.text }]}>{row.degraded}</Text>
+                <Text style={[S.tdCell, { flex: 0.9, color: row.incidents > 0 ? "#E11D48" : C.text }]}>{row.incidents}</Text>
+                <Text style={[S.tdCell, { flex: 1 }]}>{fmt.ms(row.avgResponse)}</Text>
               </View>
             ))}
           </View>
@@ -501,7 +572,7 @@ const GroupPage = ({ payload }: { payload: PdfReportPayload }) => {
   );
 };
 
-// ─── Document ─────────────────────────────────────────────────────────────────
+// ─── Document ──────────────────────────────────────────────────────────────────
 const AvailabilityReportPdf = ({ payload }: { payload: PdfReportPayload }) => (
   <Document
     title={`Availability Report — ${payload.range.label}`}
@@ -516,7 +587,7 @@ const AvailabilityReportPdf = ({ payload }: { payload: PdfReportPayload }) => (
   </Document>
 );
 
-// ─── export generator ─────────────────────────────────────────────────────────
+// ─── generator function ───────────────────────────────────────────────────────
 export async function generatePdfBlob(payload: PdfReportPayload): Promise<Blob> {
   const doc = <AvailabilityReportPdf payload={payload} />;
   return await pdf(doc).toBlob();
