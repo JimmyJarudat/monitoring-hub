@@ -180,6 +180,12 @@ const MonitorsPage = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenuState | null>(null);
   const [editingMonitor, setEditingMonitor] = useState<MonitorRow | null>(null);
+  const [insightForm, setInsightForm] = useState({
+    enabled: false,
+    collectIntervalMinutes: 5,
+    slowQueryThresholdMs: 1000,
+    topNQueries: 20,
+  });
   const [deletingMonitor, setDeletingMonitor] = useState<MonitorRow | null>(null);
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [editForm, setEditForm] = useState<EditForm>({
@@ -340,6 +346,18 @@ const MonitorsPage = () => {
       activeWindowTimezone: monitor.activeWindowTimezone ?? "Asia/Bangkok",
       configText: toConfigText(monitor.config),
     });
+
+    if (monitor.type === "DATABASE") {
+      void api.get<{ success: boolean; data: { enabled: boolean; collectIntervalMinutes: number; slowQueryThresholdMs: number; topNQueries: number } | null }>(
+        `/monitors/${monitor.id}/insight-config`,
+      ).then((res) => {
+        if (res.data.success && res.data.data) {
+          setInsightForm({ ...res.data.data });
+        } else {
+          setInsightForm({ enabled: false, collectIntervalMinutes: 5, slowQueryThresholdMs: 1000, topNQueries: 20 });
+        }
+      });
+    }
   };
 
   const toggleEditActiveWindowDay = (day: number) => {
@@ -401,6 +419,10 @@ const MonitorsPage = () => {
       if (!response.data.success) {
         toast.error(response.data.message);
         return;
+      }
+
+      if (editForm.type === "DATABASE") {
+        await api.patch(`/monitors/${editingMonitor.id}/insight-config`, insightForm);
       }
 
       toast.success(t("monitors.updateSuccess"));
@@ -858,6 +880,60 @@ const MonitorsPage = () => {
                     </div>
                   ) : null}
                 </div>
+
+                {editForm.type === "DATABASE" ? (
+                  <div className="rounded-md border border-cyan-200 bg-cyan-50 p-4 sm:col-span-2">
+                    <label className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={insightForm.enabled}
+                        className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                        onChange={(e) => setInsightForm((f) => ({ ...f, enabled: e.target.checked }))}
+                      />
+                      <div>
+                        <span className="text-sm font-semibold text-cyan-900">Enable DB Insight</span>
+                        <p className="text-xs text-cyan-700">Collect slow queries, index health, table sizes, and connections.</p>
+                      </div>
+                    </label>
+
+                    {insightForm.enabled ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Collect every (minutes)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={1440}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.collectIntervalMinutes}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, collectIntervalMinutes: Number(e.target.value) }))}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Slow query threshold (ms)</span>
+                          <input
+                            type="number"
+                            min={100}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.slowQueryThresholdMs}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, slowQueryThresholdMs: Number(e.target.value) }))}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Top N queries</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.topNQueries}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, topNQueries: Number(e.target.value) }))}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">{t("monitors.configJson")}</span>
