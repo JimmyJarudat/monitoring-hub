@@ -23,7 +23,14 @@
     "auditLogs": "Audit Logs",
     "systemLogs": "System Logs",
     "scheduledReports": "Scheduled Reports",
-    "settings": "Settings"
+    "settings": "Settings",
+    "dbInsight": "DB Insight",
+    "dbInsightOverview": "DB Insights",
+    "dbInsightSlowQueries": "Slow Queries",
+    "dbInsightIndexes": "Index Analysis",
+    "dbInsightTables": "Tables & Files",
+    "dbInsightConnections": "Connections",
+    "dbInsightReplication": "Replication"
   },
   "nav": {
     "home": "Home",

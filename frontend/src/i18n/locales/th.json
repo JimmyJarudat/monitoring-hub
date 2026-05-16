@@ -23,7 +23,14 @@
     "auditLogs": "บันทึกการใช้งาน",
     "systemLogs": "บันทึกระบบ",
     "scheduledReports": "รายงานอัตโนมัติ",
-    "settings": "การตั้งค่า"
+    "settings": "การตั้งค่า",
+    "dbInsight": "DB Insight",
+    "dbInsightOverview": "DB Insights",
+    "dbInsightSlowQueries": "Slow Queries",
+    "dbInsightIndexes": "Index Analysis",
+    "dbInsightTables": "Tables & Files",
+    "dbInsightConnections": "Connections",
+    "dbInsightReplication": "Replication"
   },
   "nav": {
     "home": "หน้าหลัก",
