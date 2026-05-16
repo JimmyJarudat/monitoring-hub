@@ -15,7 +15,7 @@ import { domainRoutes } from "./domain.route";
 import { notificationRoutes } from "./notifications";
 import { apiTokenRoutes } from "./apiTokens";
 import { ok } from "../lib/response";
-import { serverLogRoutes } from "./server-logs";
+import { serverLogRoutes } from "../controllers/server-logs.controller";
 import { maintenanceWindowRoutes } from "./maintenanceWindows";
 import { reportRoutes } from "./reports";
 
