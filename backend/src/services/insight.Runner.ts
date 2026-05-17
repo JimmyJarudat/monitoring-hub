@@ -3,6 +3,8 @@ import { decryptCredentialSecret } from "../lib/credentialSecret";
 import { logger } from "../lib/logger";
 import prisma from "../lib/prisma";
 import { collectPostgres } from "./insight/postgresql.collector";
+import { collectMysql } from "./insight/mysql.collector";
+import { collectSqlServer } from "./insight/sqlserver.collector";
 
 const TICK_MS = 60_000; // check every 1 minute
 
@@ -68,109 +70,104 @@ const runInsightCollection = async (configId: string) => {
 
   const startMs = Date.now();
 
+  const saveResult = async (result: Awaited<ReturnType<typeof collectPostgres>>) => {
+    await prisma.$transaction(async (tx) => {
+      if (result.slowQueries.length > 0) {
+        await tx.dbSlowQuery.createMany({
+          data: result.slowQueries.map((q) => ({
+            snapshotId: snapshot.id,
+            queryHash: q.queryHash,
+            queryText: q.queryText,
+            avgDurationMs: q.avgDurationMs,
+            maxDurationMs: q.maxDurationMs,
+            callCount: q.callCount,
+            rowsExamined: q.rowsExamined,
+          })),
+        });
+      }
+      if (result.indexStats.length > 0) {
+        await tx.dbIndexStat.createMany({
+          data: result.indexStats.map((i) => ({
+            snapshotId: snapshot.id,
+            tableName: i.tableName,
+            indexName: i.indexName,
+            status: i.status,
+            scansCount: i.scansCount,
+            sizeBytes: i.sizeBytes,
+            lastUsed: i.lastUsed,
+            suggestedSql: i.suggestedSql,
+          })),
+        });
+      }
+      if (result.tableSizes.length > 0) {
+        await tx.dbTableSize.createMany({
+          data: result.tableSizes.map((t) => ({
+            snapshotId: snapshot.id,
+            tableName: t.tableName,
+            totalBytes: t.totalBytes,
+            dataBytes: t.dataBytes,
+            indexBytes: t.indexBytes,
+            rowCount: t.rowCount,
+            lastAnalyzedAt: t.lastAnalyzedAt,
+          })),
+        });
+      }
+      if (result.fileSizes.length > 0) {
+        await tx.dbFileSize.createMany({
+          data: result.fileSizes.map((f) => ({
+            snapshotId: snapshot.id,
+            fileType: f.fileType,
+            filePath: f.filePath,
+            sizeBytes: f.sizeBytes,
+          })),
+        });
+      }
+      await tx.dbConnectionStat.create({
+        data: {
+          snapshotId: snapshot.id,
+          total: result.connectionStat.total,
+          active: result.connectionStat.active,
+          idle: result.connectionStat.idle,
+          idleInTransaction: result.connectionStat.idleInTransaction,
+          maxConnections: result.connectionStat.maxConnections,
+          blockedCount: result.connectionStat.blockedCount,
+          longestBlockedSeconds: result.connectionStat.longestBlockedSeconds,
+        },
+      });
+      if (result.replicationStatus.length > 0) {
+        await tx.dbReplicationStatus.createMany({
+          data: result.replicationStatus.map((r) => ({
+            snapshotId: snapshot.id,
+            replicaName: r.replicaName,
+            state: r.state,
+            lagSeconds: r.lagSeconds,
+            detailJson: r.detailJson as Prisma.InputJsonObject,
+          })),
+        });
+      }
+      await tx.dbInsightSnapshot.update({
+        where: { id: snapshot.id },
+        data: { collectionDurationMs: Date.now() - startMs },
+      });
+    });
+  };
+
   try {
     const connConfig = resolveDbConfig(monitorConfig, monitor.credential);
+    const opts = { slowQueryThresholdMs: config.slowQueryThresholdMs, topNQueries: config.topNQueries };
 
     if (dbType === "postgresql" || dbType === "postgres") {
-      const result = await collectPostgres(connConfig, {
-        slowQueryThresholdMs: config.slowQueryThresholdMs,
-        topNQueries: config.topNQueries,
-      });
-
-      await prisma.$transaction(async (tx) => {
-        // Slow queries
-        if (result.slowQueries.length > 0) {
-          await tx.dbSlowQuery.createMany({
-            data: result.slowQueries.map((q) => ({
-              snapshotId: snapshot.id,
-              queryHash: q.queryHash,
-              queryText: q.queryText,
-              avgDurationMs: q.avgDurationMs,
-              maxDurationMs: q.maxDurationMs,
-              callCount: q.callCount,
-              rowsExamined: q.rowsExamined,
-            })),
-          });
-        }
-
-        // Index stats
-        if (result.indexStats.length > 0) {
-          await tx.dbIndexStat.createMany({
-            data: result.indexStats.map((i) => ({
-              snapshotId: snapshot.id,
-              tableName: i.tableName,
-              indexName: i.indexName,
-              status: i.status,
-              scansCount: i.scansCount,
-              sizeBytes: i.sizeBytes,
-              lastUsed: i.lastUsed,
-              suggestedSql: i.suggestedSql,
-            })),
-          });
-        }
-
-        // Table sizes
-        if (result.tableSizes.length > 0) {
-          await tx.dbTableSize.createMany({
-            data: result.tableSizes.map((t) => ({
-              snapshotId: snapshot.id,
-              tableName: t.tableName,
-              totalBytes: t.totalBytes,
-              dataBytes: t.dataBytes,
-              indexBytes: t.indexBytes,
-              rowCount: t.rowCount,
-              lastAnalyzedAt: t.lastAnalyzedAt,
-            })),
-          });
-        }
-
-        // File sizes
-        if (result.fileSizes.length > 0) {
-          await tx.dbFileSize.createMany({
-            data: result.fileSizes.map((f) => ({
-              snapshotId: snapshot.id,
-              fileType: f.fileType,
-              filePath: f.filePath,
-              sizeBytes: f.sizeBytes,
-            })),
-          });
-        }
-
-        // Connection stats
-        await tx.dbConnectionStat.create({
-          data: {
-            snapshotId: snapshot.id,
-            total: result.connectionStat.total,
-            active: result.connectionStat.active,
-            idle: result.connectionStat.idle,
-            idleInTransaction: result.connectionStat.idleInTransaction,
-            maxConnections: result.connectionStat.maxConnections,
-            blockedCount: result.connectionStat.blockedCount,
-            longestBlockedSeconds: result.connectionStat.longestBlockedSeconds,
-          },
-        });
-
-        // Replication
-        if (result.replicationStatus.length > 0) {
-          await tx.dbReplicationStatus.createMany({
-            data: result.replicationStatus.map((r) => ({
-              snapshotId: snapshot.id,
-              replicaName: r.replicaName,
-              state: r.state,
-              lagSeconds: r.lagSeconds,
-              detailJson: r.detailJson as Prisma.InputJsonObject,
-            })),
-          });
-        }
-
-        // Update snapshot with duration
-        await tx.dbInsightSnapshot.update({
-          where: { id: snapshot.id },
-          data: { collectionDurationMs: Date.now() - startMs },
-        });
-      });
+      await saveResult(await collectPostgres(connConfig, opts));
+    } else if (dbType === "mysql" || dbType === "mariadb") {
+      await saveResult(await collectMysql(connConfig, opts));
+    } else if (dbType === "sqlserver" || dbType === "mssql") {
+      const sqlConnConfig = {
+        ...connConfig,
+        encrypt: (monitorConfig as Record<string, unknown>).encrypt === true,
+        trustServerCertificate: (monitorConfig as Record<string, unknown>).trustServerCertificate !== false,
+      };
+      await saveResult(await collectSqlServer(sqlConnConfig, opts));
     } else {
-      // DB type not yet supported — mark snapshot with message
       await prisma.dbInsightSnapshot.update({
         where: { id: snapshot.id },
         data: {
