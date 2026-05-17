@@ -138,43 +138,58 @@ const fmtMs = (v: number) => {
 
 const fmtNum = (v: number) => v.toLocaleString();
 
-const fmtRelative = (iso: string) => {
+const fmtRelative = (iso: string, t: (key: string, options?: Record<string, unknown>) => string) => {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60) return t("dbInsightDetail.relativeSeconds", { count: diff });
+  if (diff < 3600) return t("dbInsightDetail.relativeMinutes", { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t("dbInsightDetail.relativeHours", { count: Math.floor(diff / 3600) });
+  return t("dbInsightDetail.relativeDays", { count: Math.floor(diff / 86400) });
 };
 
 const copyToClipboard = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
-const StatCard = ({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) => (
-  <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex flex-col gap-1">
-    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
-    <p className={`text-2xl font-bold ${accent ?? "text-slate-900 dark:text-white"}`}>{value}</p>
-    {sub && <p className="text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
-  </div>
-);
+const StatCard = ({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) => {
+  const rail =
+    accent?.includes("rose") ? "bg-rose-500" :
+    accent?.includes("amber") ? "bg-amber-500" :
+    accent?.includes("emerald") ? "bg-emerald-500" :
+    "bg-cyan-500";
+
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600">
+      <div className={`absolute inset-x-0 top-0 h-1 ${rail}`} />
+      <div className="flex min-h-[84px] flex-col justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+        <div>
+          <p className={`text-2xl font-bold leading-none ${accent ?? "text-slate-900 dark:text-white"}`}>{value}</p>
+          {sub && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 type Tab = "slow" | "index" | "tables" | "connections" | "replication";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "slow",        label: "Slow Queries" },
-  { key: "index",       label: "Index Analysis" },
-  { key: "tables",      label: "Tables & Files" },
-  { key: "connections", label: "Connections" },
-  { key: "replication", label: "Replication" },
+const TABS: { key: Tab; labelKey: string }[] = [
+  { key: "slow",        labelKey: "dbInsightDetail.tabs.slow" },
+  { key: "index",       labelKey: "dbInsightDetail.tabs.index" },
+  { key: "tables",      labelKey: "dbInsightDetail.tabs.tables" },
+  { key: "connections", labelKey: "dbInsightDetail.tabs.connections" },
+  { key: "replication", labelKey: "dbInsightDetail.tabs.replication" },
 ];
 
 // ─── Slow Queries Tab ─────────────────────────────────────────────────────────
 const SlowQueriesTab = ({ queries, threshold }: { queries: SlowQuery[]; threshold: number }) => {
+  const { t } = useTranslation();
+
   if (queries.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-        <p className="text-sm">No slow queries above {threshold} ms threshold</p>
+        <p className="text-sm">{t("dbInsightDetail.emptySlowQueries", { threshold })}</p>
       </div>
     );
   }
@@ -184,11 +199,11 @@ const SlowQueriesTab = ({ queries, threshold }: { queries: SlowQuery[]; threshol
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Query</th>
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Avg Time</th>
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Max Time</th>
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Calls</th>
-            <th className="pb-2 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">Rows</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colQuery")}</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">{t("dbInsightDetail.colAvgTime")}</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">{t("dbInsightDetail.colMaxTime")}</th>
+            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">{t("dbInsightDetail.colCalls")}</th>
+            <th className="pb-2 font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">{t("dbInsightDetail.colRows")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -209,7 +224,7 @@ const SlowQueriesTab = ({ queries, threshold }: { queries: SlowQuery[]; threshol
                   <button
                     onClick={() => copyToClipboard(q.queryText)}
                     className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-opacity"
-                    title="Copy query"
+                    title={t("dbInsightDetail.copyQuery")}
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
                   </button>
@@ -243,6 +258,7 @@ const INDEX_STATUS_STYLE = {
 };
 
 const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
+  const { t } = useTranslation();
   const missing = stats.filter((s) => s.status === "MISSING");
   const unused  = stats.filter((s) => s.status === "UNUSED");
   const healthy = stats.filter((s) => s.status === "HEALTHY");
@@ -257,11 +273,11 @@ const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
           <table className="w-full text-sm mb-1">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">Table</th>
-                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">Index</th>
-                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">Scans</th>
-                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">Size</th>
-                <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Suggestion</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colTable")}</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colIndex")}</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colScans")}</th>
+                <th className="pb-2 pr-3 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colSize")}</th>
+                <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colSuggestion")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -278,7 +294,7 @@ const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
                         <button
                           onClick={() => copyToClipboard(i.suggestedSql!)}
                           className="opacity-0 group-hover:opacity-100 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-opacity"
-                          title="Copy SQL"
+                          title={t("dbInsightDetail.copySql")}
                         >
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
                         </button>
@@ -298,7 +314,7 @@ const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
-        <p className="text-sm">No index data available</p>
+        <p className="text-sm">{t("dbInsightDetail.emptyIndexData")}</p>
       </div>
     );
   }
@@ -312,15 +328,16 @@ const IndexAnalysisTab = ({ stats }: { stats: IndexStat[] }) => {
           </span>
         ))}
       </div>
-      <Section title="Missing Indexes" items={missing} emptyMsg="No missing indexes detected" />
-      <Section title="Unused Indexes" items={unused} emptyMsg="No unused indexes detected" />
-      <Section title="Healthy Indexes" items={healthy} emptyMsg="No index data" />
+      <Section title={t("dbInsightDetail.missingIndexes")} items={missing} emptyMsg={t("dbInsightDetail.noMissingIndexes")} />
+      <Section title={t("dbInsightDetail.unusedIndexes")} items={unused} emptyMsg={t("dbInsightDetail.noUnusedIndexes")} />
+      <Section title={t("dbInsightDetail.healthyIndexes")} items={healthy} emptyMsg={t("dbInsightDetail.noIndexData")} />
     </div>
   );
 };
 
 // ─── Tables & Files Tab ───────────────────────────────────────────────────────
 const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSize[] }) => {
+  const { t } = useTranslation();
   const FILE_ICON: Record<FileSize["fileType"], string> = {
     DATA: "text-blue-500",
     LOG:  "text-amber-500",
@@ -333,9 +350,9 @@ const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSiz
     <div className="space-y-8">
       {/* File sizes */}
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">File Sizes</h3>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">{t("dbInsightDetail.fileSizes")}</h3>
         {files.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500">No file size data available</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">{t("dbInsightDetail.noFileSizeData")}</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {files.map((f) => (
@@ -356,20 +373,20 @@ const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSiz
 
       {/* Table sizes */}
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Table Sizes</h3>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">{t("dbInsightDetail.tableSizes")}</h3>
         {tables.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500">No table size data available</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">{t("dbInsightDetail.noTableSizeData")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Table</th>
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Total</th>
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Data</th>
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Indexes</th>
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Rows</th>
-                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Bar</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colTable")}</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colTotal")}</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colData")}</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colIndexes")}</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colRows")}</th>
+                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colBar")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -420,11 +437,13 @@ const STATUS_DOT_CONN: Record<string, string> = {
 };
 
 const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
+  const { t } = useTranslation();
+
   if (!stat) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
-        <p className="text-sm">No connection data available</p>
+        <p className="text-sm">{t("dbInsightDetail.noConnectionData")}</p>
       </div>
     );
   }
@@ -438,7 +457,7 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {/* Usage bar */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Connection pool usage</p>
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{t("dbInsightDetail.connectionPoolUsage")}</p>
           <p className="text-sm font-bold text-slate-900 dark:text-white">
             {stat.total} / {stat.maxConnections} <span className="text-xs font-normal text-slate-400">({usedPct.toFixed(0)}%)</span>
           </p>
@@ -451,11 +470,11 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {/* Stat grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
-          { label: "Active",       value: stat.active,           accent: stat.active > 0 ? "text-emerald-600 dark:text-emerald-400" : undefined },
-          { label: "Idle",         value: stat.idle },
-          { label: "Idle in Txn",  value: stat.idleInTransaction, accent: stat.idleInTransaction > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
-          { label: "Blocked",      value: stat.blockedCount,      accent: stat.blockedCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined },
-          { label: "Max Allowed",  value: stat.maxConnections },
+          { label: t("dbInsightDetail.active"),       value: stat.active,           accent: stat.active > 0 ? "text-emerald-600 dark:text-emerald-400" : undefined },
+          { label: t("dbInsightDetail.idle"),         value: stat.idle },
+          { label: t("dbInsightDetail.idleInTxn"),  value: stat.idleInTransaction, accent: stat.idleInTransaction > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
+          { label: t("dbInsightDetail.blocked"),      value: stat.blockedCount,      accent: stat.blockedCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined },
+          { label: t("dbInsightDetail.maxAllowed"),  value: stat.maxConnections },
         ].map((card) => (
           <StatCard key={card.label} label={card.label} value={String(card.value)} accent={card.accent} />
         ))}
@@ -463,7 +482,7 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
 
       {stat.longestBlockedSeconds != null && stat.longestBlockedSeconds > 0 && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-3 text-sm text-rose-700 dark:text-rose-300">
-          Longest blocked query: <strong>{stat.longestBlockedSeconds.toFixed(1)}s</strong>
+          {t("dbInsightDetail.longestBlockedQuery")} <strong>{stat.longestBlockedSeconds.toFixed(1)}s</strong>
         </div>
       )}
 
@@ -471,18 +490,18 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {processList.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
-            Active Sessions <span className="font-normal text-slate-400">({processList.length})</span>
+            {t("dbInsightDetail.activeSessions")} <span className="font-normal text-slate-400">({processList.length})</span>
           </h3>
           <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-left">
                   <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">PID</th>
-                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">User</th>
-                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Application</th>
-                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">State</th>
-                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400 text-right">Duration</th>
-                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Database</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colUser")}</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colApplication")}</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colState")}</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colDuration")}</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colDatabase")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -504,7 +523,7 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
                         <div className="flex items-center gap-1.5">
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColor}`} />
                           <span className={`${row.isBlocked ? "text-rose-600 dark:text-rose-400 font-medium" : "text-slate-600 dark:text-slate-300"}`}>
-                            {row.isBlocked ? "blocked" : row.status}
+                            {row.isBlocked ? t("dbInsightDetail.blocked") : row.status}
                           </span>
                         </div>
                       </td>
@@ -524,14 +543,14 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {/* Per-user breakdown */}
       {stat.loginBreakdown && Object.keys(stat.loginBreakdown).length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Connections by User</h3>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{t("dbInsightDetail.connectionsByUser")}</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">User / Login</th>
-                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Connections</th>
-                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Share</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colUserLogin")}</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">{t("dbInsightDetail.colConnections")}</th>
+                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">{t("dbInsightDetail.colShare")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -577,12 +596,14 @@ const REPL_TYPE_STYLE: Record<string, string> = {
 };
 
 const ReplicationTab = ({ replicas }: { replicas: ReplicationRow[] }) => {
+  const { t } = useTranslation();
+
   if (replicas.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
-        <p className="text-sm">No replication configured or no replicas found</p>
-        <p className="text-xs text-slate-400">Normal for standalone instances</p>
+        <p className="text-sm">{t("dbInsightDetail.noReplication")}</p>
+        <p className="text-xs text-slate-400">{t("dbInsightDetail.standaloneHint")}</p>
       </div>
     );
   }
@@ -612,7 +633,7 @@ const ReplicationTab = ({ replicas }: { replicas: ReplicationRow[] }) => {
                 </span>
               )}
               <span className={`ml-auto font-mono text-sm font-bold ${r.lagSeconds != null && r.lagSeconds > 30 ? "text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-300"}`}>
-                {r.lagSeconds != null ? `lag: ${r.lagSeconds.toFixed(1)}s` : "lag: —"}
+                {r.lagSeconds != null ? t("dbInsightDetail.lagSeconds", { seconds: r.lagSeconds.toFixed(1) }) : t("dbInsightDetail.lagUnavailable")}
               </span>
             </div>
 
@@ -669,6 +690,21 @@ const DbInsightDetailPage = () => {
 
   const dbType = (monitor?.config?.type ?? "postgresql") as DbType;
   const dbMeta = DB_META[dbType] ?? DB_META.postgresql;
+  const targetLabel = monitor?.config.host
+    ? `${monitor.config.host}${monitor.config.port ? `:${monitor.config.port}` : ""}${monitor.config.database ? `/${monitor.config.database}` : ""}`
+    : monitor?.config.uri
+      ? t("dbInsightDetail.uriConfigured")
+      : t("common.notAvailable");
+  const nonHealthyIndexCount = snapshot?.indexStats.filter((i) => i.status !== "HEALTHY").length ?? 0;
+  const blockedCount = snapshot?.connectionStats?.blockedCount ?? 0;
+  const replicationIssueCount = snapshot?.replicationStatus.filter((r) => r.state !== "STREAMING").length ?? 0;
+  const issueCount = (snapshot?.slowQueries.length ?? 0) + nonHealthyIndexCount + blockedCount + replicationIssueCount;
+  const connectionUsedPct = snapshot?.connectionStats && snapshot.connectionStats.maxConnections > 0
+    ? (snapshot.connectionStats.total / snapshot.connectionStats.maxConnections) * 100
+    : null;
+  const healthTone = issueCount > 0 || (connectionUsedPct ?? 0) > 80
+    ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-200"
+    : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200";
 
   if (isLoading) {
     return (
@@ -681,8 +717,8 @@ const DbInsightDetailPage = () => {
   if (!monitor) {
     return (
       <div className="flex flex-col items-center gap-3 py-24 text-slate-400">
-        <p className="text-lg font-medium">Monitor not found</p>
-        <Link to="/db-insight" className="text-sm text-cyan-600 hover:underline">← Back to DB Insight</Link>
+        <p className="text-lg font-medium">{t("dbInsightDetail.monitorNotFound")}</p>
+        <Link to="/db-insight" className="text-sm text-cyan-600 hover:underline">{t("dbInsightDetail.backToDbInsight")}</Link>
       </div>
     );
   }
@@ -690,97 +726,140 @@ const DbInsightDetailPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <Link to="/db-insight" className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-              ← {t("sidebar.dbInsight")}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-wrap items-start gap-4 p-4">
+          <div className="flex-1 min-w-0">
+            <Link to="/db-insight" className="text-xs font-medium text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300">
+              {t("dbInsightDetail.backToDbInsight")}
             </Link>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white truncate">{monitor.name}</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${dbMeta.bg}`}>
-              {dbMeta.label}
-            </span>
-            {monitor.config.host && (
-              <span className="text-xs text-slate-400 font-mono">
-                {monitor.config.host}{monitor.config.port ? `:${monitor.config.port}` : ""}{monitor.config.database ? `/${monitor.config.database}` : ""}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white truncate">{monitor.name}</h1>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${dbMeta.bg}`}>
+                {dbMeta.label}
               </span>
-            )}
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                config?.enabled
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/20 dark:text-emerald-300"
+                  : "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-300"
+              }`}>
+                {config?.enabled ? t("dbInsightDetail.collecting") : t("dbInsightDetail.notEnabled")}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 text-xs text-slate-500 dark:text-slate-400 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.target")}</span>
+                <span className="block truncate font-mono text-slate-700 dark:text-slate-200" title={targetLabel}>{targetLabel}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.collectionInterval")}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {config ? t("dbInsightDetail.minutes", { count: config.collectIntervalMinutes }) : "—"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.slowThreshold")}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {config ? `${config.slowQueryThresholdMs}ms` : "—"}
+                </span>
+              </div>
+            </div>
             {!config?.enabled && (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                DB Insight not enabled — <Link to={`/monitors/${monitor.id}`} className="underline">enable in monitor settings</Link>
-              </span>
+              <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+                {t("dbInsightDetail.notEnabledHint")}{" "}
+                <Link to={`/monitors/${monitor.id}`} className="font-medium underline">{t("dbInsightDetail.enableInMonitorSettings")}</Link>
+              </p>
             )}
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {snapshot && (
+          <div className="flex flex-wrap items-center gap-2">
+            {snapshot && (
+              <button
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `db-insight-${monitor.name.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                {t("dbInsightDetail.export")}
+              </button>
+            )}
             <button
-              onClick={() => {
-                const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `db-insight-${monitor.name.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
+              onClick={() => void load()}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              Export
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              {t("common.refresh")}
             </button>
-          )}
-          <button
-            onClick={() => void load()}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            Refresh
-          </button>
+          </div>
         </div>
+        {snapshot && (
+          <div className="grid border-t border-slate-100 bg-slate-50/70 text-xs dark:border-slate-700 dark:bg-slate-900/20 sm:grid-cols-4">
+            <div className="px-4 py-3">
+              <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.snapshotAge", { age: "" }).replace(":", "").trim()}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">{fmtRelative(snapshot.collectedAt, t)}</span>
+            </div>
+            <div className="px-4 py-3">
+              <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.connectionPoolUsage")}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {connectionUsedPct == null ? "—" : `${connectionUsedPct.toFixed(0)}%`}
+              </span>
+            </div>
+            <div className="px-4 py-3">
+              <span className="block uppercase tracking-wide text-slate-400 dark:text-slate-500">{t("dbInsightDetail.warning", { message: "" }).replace(":", "").trim()}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">{issueCount}</span>
+            </div>
+            <div className={`m-2 rounded-lg border px-3 py-2 ${healthTone}`}>
+              <span className="block text-xs font-semibold uppercase tracking-wide">{config?.enabled ? t("dbInsightDetail.collecting") : t("dbInsightDetail.notEnabled")}</span>
+              <span className="text-lg font-bold leading-tight">{issueCount > 0 ? issueCount : "OK"}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* No snapshot yet */}
       {!snapshot ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-10 flex flex-col items-center gap-3 text-center">
           <svg className="h-12 w-12 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
-          <p className="text-base font-medium text-slate-700 dark:text-slate-200">No snapshots yet</p>
+          <p className="text-base font-medium text-slate-700 dark:text-slate-200">{t("dbInsightDetail.noSnapshots")}</p>
           <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm">
             {config?.enabled
-              ? `DB Insight is enabled. The next snapshot will be collected within ${config.collectIntervalMinutes} minutes.`
-              : "Enable DB Insight in monitor settings to start collecting insights."}
+              ? t("dbInsightDetail.nextSnapshotHint", { minutes: config.collectIntervalMinutes })
+              : t("dbInsightDetail.enableHint")}
           </p>
           {!config?.enabled && (
             <Link
               to={`/monitors/${monitor.id}`}
               className="mt-1 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700"
             >
-              Open Monitor Settings
+              {t("dbInsightDetail.openMonitorSettings")}
             </Link>
           )}
         </div>
       ) : (
         <>
           {/* Snapshot meta */}
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>Snapshot: {fmtRelative(snapshot.collectedAt)}</span>
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            <span>{t("dbInsightDetail.snapshotAge", { age: fmtRelative(snapshot.collectedAt, t) })}</span>
             {snapshot.collectionDurationMs != null && (
-              <span>Collection took {snapshot.collectionDurationMs}ms</span>
+              <span>{t("dbInsightDetail.collectionTook", { ms: snapshot.collectionDurationMs })}</span>
             )}
             {snapshot.errorMessage && (
-              <span className="text-amber-600 dark:text-amber-400">Warning: {snapshot.errorMessage}</span>
+              <span className="text-amber-600 dark:text-amber-400">{t("dbInsightDetail.warning", { message: snapshot.errorMessage })}</span>
             )}
           </div>
 
           {/* Stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatCard
-              label="Active Connections"
+              label={t("dbInsightDetail.activeConnections")}
               value={snapshot.connectionStats ? String(snapshot.connectionStats.active) : "—"}
-              sub={snapshot.connectionStats ? `of ${snapshot.connectionStats.maxConnections} max` : undefined}
+              sub={snapshot.connectionStats ? t("dbInsightDetail.ofMax", { max: snapshot.connectionStats.maxConnections }) : undefined}
               accent={
                 snapshot.connectionStats && snapshot.connectionStats.active / snapshot.connectionStats.maxConnections > 0.8
                   ? "text-rose-600 dark:text-rose-400"
@@ -788,29 +867,29 @@ const DbInsightDetailPage = () => {
               }
             />
             <StatCard
-              label="Slow Queries"
+              label={t("dbInsightDetail.slowQueries")}
               value={String(snapshot.slowQueries.length)}
-              sub={config ? `> ${config.slowQueryThresholdMs}ms threshold` : undefined}
+              sub={config ? t("dbInsightDetail.thresholdSub", { threshold: config.slowQueryThresholdMs }) : undefined}
               accent={snapshot.slowQueries.length > 0 ? "text-amber-600 dark:text-amber-400" : undefined}
             />
             <StatCard
-              label="DB Size"
+              label={t("dbInsightDetail.dbSize")}
               value={fmtBytes(snapshot.fileSizes.find((f) => f.fileType === "DATA")?.sizeBytes ?? null)}
             />
             <StatCard
-              label="Blocked Queries"
+              label={t("dbInsightDetail.blockedQueries")}
               value={snapshot.connectionStats ? String(snapshot.connectionStats.blockedCount) : "—"}
-              accent={snapshot.connectionStats?.blockedCount ?? 0 > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
+              accent={(snapshot.connectionStats?.blockedCount ?? 0) > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
             />
             <StatCard
-              label="Replicas"
+              label={t("dbInsightDetail.replicas")}
               value={String(snapshot.replicationStatus.length)}
               sub={
                 snapshot.replicationStatus.length > 0
                   ? snapshot.replicationStatus.every((r) => r.state === "STREAMING")
-                    ? "all streaming"
-                    : "check replication tab"
-                  : "standalone"
+                    ? t("dbInsightDetail.allStreaming")
+                    : t("dbInsightDetail.checkReplicationTab")
+                  : t("dbInsightDetail.standalone")
               }
             />
           </div>
@@ -829,7 +908,7 @@ const DbInsightDetailPage = () => {
                       : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                   }`}
                 >
-                  {tab.label}
+                  {t(tab.labelKey)}
                   {tab.key === "slow" && snapshot.slowQueries.length > 0 && (
                     <span className="ml-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs px-1.5 py-0.5">
                       {snapshot.slowQueries.length}
@@ -842,7 +921,7 @@ const DbInsightDetailPage = () => {
                   )}
                   {tab.key === "connections" && (snapshot.connectionStats?.blockedCount ?? 0) > 0 && (
                     <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-xs px-1.5 py-0.5">
-                      {snapshot.connectionStats!.blockedCount} blocked
+                      {t("dbInsightDetail.blockedBadge", { count: snapshot.connectionStats!.blockedCount })}
                     </span>
                   )}
                   {tab.key === "replication" && snapshot.replicationStatus.some((r) => r.state !== "STREAMING") && (
