@@ -195,10 +195,20 @@ type ThresholdForm = {
   ramPct: string;
   diskPct: string;
 };
+
+const sizeUnits = [
+  { value: "MB", multiplier: 1024 ** 2 },
+  { value: "GB", multiplier: 1024 ** 3 },
+  { value: "TB", multiplier: 1024 ** 4 },
+] as const;
+
+type SizeUnit = (typeof sizeUnits)[number]["value"];
+
 type AlertRuleForm = {
   metric: string;
   operator: AlertOperator;
   threshold: string;
+  thresholdSizeUnit: SizeUnit;
   severity: AlertSeverity;
   enabled: boolean;
   channelIds: string[];
@@ -334,6 +344,46 @@ const alertMetricLabels: Record<string, string> = {
   "printer.toner_pct": "Printer toner",
   "printer.paper_pct": "Printer paper",
   "printer.error_count": "Printer errors",
+  "db.slow_query_avg_ms": "DB slow query avg",
+  "db.slow_query_count": "DB slow query count",
+  "db.log_file_size_bytes": "DB log file size",
+  "db.data_file_size_bytes": "DB data file size",
+  "db.table_size_bytes": "DB largest table",
+  "db.active_connections_pct": "DB active connections",
+  "db.replication_lag_seconds": "DB replication lag",
+  "db.blocked_query_seconds": "DB blocked query",
+  "db.unused_index_count": "DB unused indexes",
+};
+
+const isSizeMetric = (metric: string) => metric.endsWith("_bytes");
+
+const trimDecimal = (value: number) => {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, "");
+};
+
+const toSizeFormValue = (bytes: number): { threshold: string; thresholdSizeUnit: SizeUnit } => {
+  const abs = Math.abs(bytes);
+  const unit: SizeUnit = abs >= 1024 ** 4 ? "TB" : abs >= 1024 ** 3 ? "GB" : "MB";
+  const multiplier = sizeUnits.find((item) => item.value === unit)?.multiplier ?? sizeUnits[1].multiplier;
+  return {
+    threshold: trimDecimal(bytes / multiplier),
+    thresholdSizeUnit: unit,
+  };
+};
+
+const getDefaultAlertThresholdForm = (metric: string, threshold: string | number) => {
+  const value = Number(threshold);
+  return isSizeMetric(metric) && Number.isFinite(value)
+    ? toSizeFormValue(value)
+    : { threshold: String(threshold), thresholdSizeUnit: "GB" as SizeUnit };
+};
+
+const getAlertThresholdValue = (form: AlertRuleForm) => {
+  const value = Number(form.threshold);
+  if (!isSizeMetric(form.metric)) return value;
+  const multiplier = sizeUnits.find((item) => item.value === form.thresholdSizeUnit)?.multiplier ?? sizeUnits[1].multiplier;
+  return value * multiplier;
 };
 
 const alertRuleDefaults = (metric: string): Pick<AlertRuleForm, "operator" | "threshold" | "severity"> => {
@@ -342,6 +392,15 @@ const alertRuleDefaults = (metric: string): Pick<AlertRuleForm, "operator" | "th
   if (metric === "printer.toner_pct") return { operator: "LT", threshold: "15", severity: "WARNING" };
   if (metric === "printer.paper_pct") return { operator: "LT", threshold: "10", severity: "WARNING" };
   if (metric === "printer.error_count") return { operator: "GT", threshold: "0", severity: "CRITICAL" };
+  if (metric === "db.slow_query_avg_ms") return { operator: "GT", threshold: "5000", severity: "WARNING" };
+  if (metric === "db.slow_query_count") return { operator: "GT", threshold: "10", severity: "WARNING" };
+  if (metric === "db.log_file_size_bytes") return { operator: "GT", threshold: String(2 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.data_file_size_bytes") return { operator: "GT", threshold: String(50 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.table_size_bytes") return { operator: "GT", threshold: String(10 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.active_connections_pct") return { operator: "GT", threshold: "80", severity: "CRITICAL" };
+  if (metric === "db.replication_lag_seconds") return { operator: "GT", threshold: "30", severity: "CRITICAL" };
+  if (metric === "db.blocked_query_seconds") return { operator: "GT", threshold: "60", severity: "CRITICAL" };
+  if (metric === "db.unused_index_count") return { operator: "GT", threshold: "5", severity: "INFO" };
   return { operator: "GT", threshold: "90", severity: metric === "disk.used_pct" ? "CRITICAL" : "WARNING" };
 };
 
@@ -351,10 +410,23 @@ const statusThresholdLabels: Record<number, string> = {
   3: "UP",
 };
 
+const formatBytes = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let next = Math.abs(value);
+  let index = 0;
+  while (next >= 1024 && index < units.length - 1) {
+    next /= 1024;
+    index += 1;
+  }
+  return `${value < 0 ? "-" : ""}${next.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
 const emptyAlertRuleForm = (): AlertRuleForm => ({
   metric: "status",
   operator: "NEQ",
   threshold: "3",
+  thresholdSizeUnit: "GB",
   severity: "CRITICAL",
   enabled: true,
   channelIds: [],
@@ -534,6 +606,10 @@ const formatAlertThreshold = (metric: string, threshold: number) => {
   if (metric === "status") return statusThresholdLabels[threshold] ?? String(threshold);
   if (metric === "response_time") return `${threshold.toLocaleString()} ms`;
   if (metric.endsWith("_pct")) return `${threshold}%`;
+  if (metric.endsWith("_bytes")) return formatBytes(threshold);
+  if (metric.endsWith("_ms")) return `${threshold.toLocaleString()} ms`;
+  if (metric.endsWith("_seconds")) return `${threshold.toLocaleString()}s`;
+  if (metric.endsWith("_count")) return threshold.toLocaleString();
   return String(threshold);
 };
 
@@ -543,6 +619,10 @@ const formatCurrentRuleValue = (metric: string, value: number) => {
   if (metric === "status") return formatStatusValue(value);
   if (metric === "response_time") return `${value.toLocaleString()} ms`;
   if (metric.endsWith("_pct")) return `${value.toFixed(1)}%`;
+  if (metric.endsWith("_bytes")) return formatBytes(value);
+  if (metric.endsWith("_ms")) return `${value.toLocaleString()} ms`;
+  if (metric.endsWith("_seconds")) return `${value.toFixed(value >= 10 ? 0 : 1)}s`;
+  if (metric.endsWith("_count")) return value.toLocaleString();
   return String(value);
 };
 
@@ -991,6 +1071,20 @@ const MonitorDetailPage = () => {
     }
     if (monitor?.type === "SYSTEM") {
       return [...base, "cpu.used_pct", "memory.used_pct", "disk.used_pct"];
+    }
+    if (monitor?.type === "DATABASE") {
+      return [
+        ...base,
+        "db.slow_query_avg_ms",
+        "db.slow_query_count",
+        "db.log_file_size_bytes",
+        "db.data_file_size_bytes",
+        "db.table_size_bytes",
+        "db.active_connections_pct",
+        "db.replication_lag_seconds",
+        "db.blocked_query_seconds",
+        "db.unused_index_count",
+      ];
     }
     return base;
   }, [isPrinterMonitor, monitor?.type]);
@@ -1486,7 +1580,7 @@ const MonitorDetailPage = () => {
     const defaults = alertRuleDefaults(metric);
     next.metric = metric;
     next.operator = defaults.operator;
-    next.threshold = defaults.threshold;
+    Object.assign(next, getDefaultAlertThresholdForm(metric, defaults.threshold));
     next.severity = defaults.severity;
     setEditingRule(null);
     setAlertRuleForm(next);
@@ -1498,7 +1592,7 @@ const MonitorDetailPage = () => {
     setAlertRuleForm({
       metric: rule.metric,
       operator: rule.operator,
-      threshold: String(rule.threshold),
+      ...getDefaultAlertThresholdForm(rule.metric, rule.threshold),
       severity: rule.severity,
       enabled: rule.enabled,
       channelIds: rule.channels?.map((item) => item.channel.id) ?? [],
@@ -1509,7 +1603,13 @@ const MonitorDetailPage = () => {
   const handleRuleMetricChange = (metric: string) => {
     setAlertRuleForm((current) => {
       const defaults = alertRuleDefaults(metric);
-      return { ...current, metric, ...defaults };
+      return {
+        ...current,
+        metric,
+        operator: defaults.operator,
+        severity: defaults.severity,
+        ...getDefaultAlertThresholdForm(metric, defaults.threshold),
+      };
     });
   };
 
@@ -1529,7 +1629,7 @@ const MonitorDetailPage = () => {
       return;
     }
 
-    const threshold = Number(alertRuleForm.threshold);
+    const threshold = getAlertThresholdValue(alertRuleForm);
     if (!Number.isFinite(threshold)) {
       toast.error(t("monitorDetail.validationThresholdNumber"));
       return;
@@ -1544,6 +1644,10 @@ const MonitorDetailPage = () => {
     }
     if (alertRuleForm.metric === "printer.error_count" && threshold < 0) {
       toast.error(t("monitorDetail.validationPrinterErrors"));
+      return;
+    }
+    if (alertRuleForm.metric.startsWith("db.") && threshold < 0) {
+      toast.error("DB Insight threshold must be greater than or equal to 0");
       return;
     }
 
@@ -3194,6 +3298,35 @@ const MonitorDetailPage = () => {
                       <option value="2">DEGRADED</option>
                       <option value="1">DOWN</option>
                     </select>
+                  ) : isSizeMetric(alertRuleForm.metric) ? (
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+                      <input
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        min={0}
+                        step="0.1"
+                        type="number"
+                        value={alertRuleForm.threshold}
+                        onChange={(event) =>
+                          setAlertRuleForm((current) => ({ ...current, threshold: event.target.value }))
+                        }
+                      />
+                      <select
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={alertRuleForm.thresholdSizeUnit}
+                        onChange={(event) =>
+                          setAlertRuleForm((current) => ({
+                            ...current,
+                            thresholdSizeUnit: event.target.value as SizeUnit,
+                          }))
+                        }
+                      >
+                        {sizeUnits.map((unit) => (
+                          <option key={unit.value} value={unit.value}>
+                            {unit.value}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   ) : (
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"

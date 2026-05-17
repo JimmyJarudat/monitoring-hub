@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
 import { notifyAdmins } from "../services/appNotification.service";
+import { DB_INSIGHT_ALERT_METRICS, isDbInsightAlertMetric } from "../services/dbInsightAlert.service";
 import { runMonitorCheck } from "../services/monitor.Runner";
 import { notifyIncidentNow } from "../services/notification.service";
 
@@ -155,6 +156,7 @@ const allowedAlertMetrics = new Set([
   "printer.toner_pct",
   "printer.paper_pct",
   "printer.error_count",
+  ...DB_INSIGHT_ALERT_METRICS,
 ]);
 
 const validateAlertRuleInput = (
@@ -169,6 +171,14 @@ const validateAlertRuleInput = (
   }
   if (body.metric === "response_time" && body.threshold < 0) {
     return "Response time threshold must be greater than or equal to 0.";
+  }
+  if (isDbInsightAlertMetric(body.metric)) {
+    if (monitorType !== "DATABASE") {
+      return "DB Insight rules can only be used with DATABASE monitors.";
+    }
+    if (body.threshold < 0) {
+      return "DB Insight thresholds must be greater than or equal to 0.";
+    }
   }
   if (body.metric.startsWith("printer.") && monitorType !== "SNMP") {
     return "Printer rules can only be used with SNMP printer monitors.";

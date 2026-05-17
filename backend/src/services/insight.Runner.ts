@@ -6,6 +6,7 @@ import { collectPostgres } from "./insight/postgresql.collector";
 import { collectMysql } from "./insight/mysql.collector";
 import { collectSqlServer } from "./insight/sqlserver.collector";
 import { collectMongodb } from "./insight/mongodb.collector";
+import { reconcileDbInsightAlertRules } from "./dbInsightAlert.service";
 
 const TICK_MS = 60_000; // check every 1 minute
 
@@ -193,6 +194,7 @@ const runInsightCollection = async (configId: string) => {
       });
     }
 
+    await reconcileDbInsightAlertRules(snapshot.id);
     logger.info("insight", `collected snapshot for monitor ${monitor.id} (${monitor.name}) in ${Date.now() - startMs}ms`);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

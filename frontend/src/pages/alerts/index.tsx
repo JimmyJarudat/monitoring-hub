@@ -9,6 +9,14 @@ type AlertOperator = "GT" | "LT" | "EQ" | "NEQ";
 type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
 type ChannelType = "LINE" | "SLACK" | "DISCORD" | "EMAIL" | "TELEGRAM" | "WEBHOOK";
 
+const sizeUnits = [
+  { value: "MB", multiplier: 1024 ** 2 },
+  { value: "GB", multiplier: 1024 ** 3 },
+  { value: "TB", multiplier: 1024 ** 4 },
+] as const;
+
+type SizeUnit = (typeof sizeUnits)[number]["value"];
+
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };
 
 type ChannelOption = {
@@ -50,6 +58,7 @@ type RuleForm = {
   metric: string;
   operator: AlertOperator;
   threshold: string;
+  thresholdSizeUnit: SizeUnit;
   severity: AlertSeverity;
   enabled: boolean;
   channelIds: string[];
@@ -79,6 +88,18 @@ const printerMetrics: MetricOption[] = [
   { value: "printer.error_count", labelKey: "alerts.metricPrinterErrors", defaultThreshold: 0, defaultOperator: "GT" },
 ];
 
+const dbInsightMetrics: MetricOption[] = [
+  { value: "db.slow_query_avg_ms", labelKey: "alerts.metricDbSlowQueryAvg", defaultThreshold: 5000, defaultOperator: "GT" },
+  { value: "db.slow_query_count", labelKey: "alerts.metricDbSlowQueryCount", defaultThreshold: 10, defaultOperator: "GT" },
+  { value: "db.log_file_size_bytes", labelKey: "alerts.metricDbLogFileSize", defaultThreshold: 2 * 1024 * 1024 * 1024, defaultOperator: "GT" },
+  { value: "db.data_file_size_bytes", labelKey: "alerts.metricDbDataFileSize", defaultThreshold: 50 * 1024 * 1024 * 1024, defaultOperator: "GT" },
+  { value: "db.table_size_bytes", labelKey: "alerts.metricDbTableSize", defaultThreshold: 10 * 1024 * 1024 * 1024, defaultOperator: "GT" },
+  { value: "db.active_connections_pct", labelKey: "alerts.metricDbActiveConnections", defaultThreshold: 80, defaultOperator: "GT" },
+  { value: "db.replication_lag_seconds", labelKey: "alerts.metricDbReplicationLag", defaultThreshold: 30, defaultOperator: "GT" },
+  { value: "db.blocked_query_seconds", labelKey: "alerts.metricDbBlockedQuery", defaultThreshold: 60, defaultOperator: "GT" },
+  { value: "db.unused_index_count", labelKey: "alerts.metricDbUnusedIndexes", defaultThreshold: 5, defaultOperator: "GT" },
+];
+
 const operatorLabels: Record<AlertOperator, string> = {
   GT: ">",
   LT: "<",
@@ -105,10 +126,12 @@ const isPrinterMonitor = (monitor?: MonitorOption | null) =>
   monitor?.type === "SNMP" && Boolean(monitor.config?.printerPreset);
 
 const isSystemMonitor = (monitor?: MonitorOption | null) => monitor?.type === "SYSTEM";
+const isDatabaseMonitor = (monitor?: MonitorOption | null) => monitor?.type === "DATABASE";
 
 const getMonitorTypeLabel = (monitor?: MonitorOption | null) => {
   if (!monitor) return "";
   if (isPrinterMonitor(monitor)) return "Printer (SNMP)";
+  if (isDatabaseMonitor(monitor)) return "Database";
   if (monitor.type === "SNMP") return "Network / Custom SNMP";
   if (monitor.type === "SYSTEM") return "System (SNMP)";
   return monitor.type;
@@ -117,19 +140,49 @@ const getMonitorTypeLabel = (monitor?: MonitorOption | null) => {
 const getMetricOptions = (monitor?: MonitorOption | null) =>
   isPrinterMonitor(monitor)
     ? [...baseMetrics, ...printerMetrics]
+    : isDatabaseMonitor(monitor)
+      ? [...baseMetrics, ...dbInsightMetrics]
     : isSystemMonitor(monitor)
       ? [...baseMetrics, ...deviceMetrics]
       : baseMetrics;
 
+const isSizeMetric = (metric: string) => metric.endsWith("_bytes");
+
+const trimDecimal = (value: number) => {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, "");
+};
+
+const toSizeFormValue = (bytes: number): { threshold: string; thresholdSizeUnit: SizeUnit } => {
+  const abs = Math.abs(bytes);
+  const unit: SizeUnit = abs >= 1024 ** 4 ? "TB" : abs >= 1024 ** 3 ? "GB" : "MB";
+  const multiplier = sizeUnits.find((item) => item.value === unit)?.multiplier ?? sizeUnits[1].multiplier;
+  return {
+    threshold: trimDecimal(bytes / multiplier),
+    thresholdSizeUnit: unit,
+  };
+};
+
+const getDefaultThresholdForm = (metric: string, threshold: number) =>
+  isSizeMetric(metric) ? toSizeFormValue(threshold) : { threshold: String(threshold), thresholdSizeUnit: "GB" as SizeUnit };
+
+const getThresholdValue = (form: RuleForm) => {
+  const value = Number(form.threshold);
+  if (!isSizeMetric(form.metric)) return value;
+  const multiplier = sizeUnits.find((item) => item.value === form.thresholdSizeUnit)?.multiplier ?? sizeUnits[1].multiplier;
+  return value * multiplier;
+};
+
 const emptyForm = (monitors: MonitorOption[]): RuleForm => {
   const monitor = monitors[0] ?? null;
   const metric = getMetricOptions(monitor)[0] ?? baseMetrics[0];
+  const threshold = getDefaultThresholdForm(metric.value, metric.defaultThreshold);
 
   return {
     monitorId: monitor?.id ?? "",
     metric: metric.value,
     operator: metric.defaultOperator,
-    threshold: String(metric.defaultThreshold),
+    ...threshold,
     severity: "WARNING",
     enabled: true,
     channelIds: [],
@@ -144,6 +197,19 @@ const formatThreshold = (metric: string, threshold: number) => {
   if (metric === "response_time") return `${threshold} ms`;
   if (metric.endsWith("_pct")) return `${threshold}%`;
   if (metric === "printer.error_count") return `${threshold} errors`;
+  if (metric.endsWith("_bytes")) {
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = Math.abs(threshold);
+    let index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+      value /= 1024;
+      index += 1;
+    }
+    return `${threshold < 0 ? "-" : ""}${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+  }
+  if (metric.endsWith("_ms")) return `${threshold.toLocaleString()} ms`;
+  if (metric.endsWith("_seconds")) return `${threshold}s`;
+  if (metric.endsWith("_count")) return `${threshold.toLocaleString()}`;
   return String(threshold);
 };
 
@@ -201,7 +267,10 @@ const AlertsPage = () => {
       total: rules.length,
       enabled: rules.filter((rule) => rule.enabled).length,
       open: rules.filter((rule) => rule.openIncident).length,
-      device: rules.filter((rule) => rule.metric.endsWith("_pct") || rule.metric.startsWith("printer.")).length,
+      device: rules.filter(
+        (rule) => deviceMetrics.some((metric) => metric.value === rule.metric) || rule.metric.startsWith("printer."),
+      ).length,
+      db: rules.filter((rule) => rule.metric.startsWith("db.")).length,
     }),
     [rules],
   );
@@ -215,6 +284,8 @@ const AlertsPage = () => {
   const metricLabel = useCallback(
     (metric: string) => {
       const option = [...baseMetrics, ...deviceMetrics, ...printerMetrics].find((item) => item.value === metric);
+      const dbOption = dbInsightMetrics.find((item) => item.value === metric);
+      if (dbOption) return t(dbOption.labelKey);
       return option ? t(option.labelKey) : metric;
     },
     [t],
@@ -223,8 +294,11 @@ const AlertsPage = () => {
   const openCreate = (metricValue?: string) => {
     const needsPrinterMonitor = Boolean(metricValue?.startsWith("printer."));
     const needsSystemMonitor = Boolean(metricValue && deviceMetrics.some((item) => item.value === metricValue));
+    const needsDatabaseMonitor = Boolean(metricValue?.startsWith("db."));
     const preferredMonitor = needsPrinterMonitor
       ? monitors.find((item) => isPrinterMonitor(item))
+      : needsDatabaseMonitor
+      ? monitors.find((item) => isDatabaseMonitor(item))
       : needsSystemMonitor
       ? monitors.find((item) => isSystemMonitor(item))
       : monitors[0];
@@ -239,6 +313,11 @@ const AlertsPage = () => {
       return;
     }
 
+    if (needsDatabaseMonitor && !preferredMonitor) {
+      toast.error("DB Insight rules require a DATABASE monitor");
+      return;
+    }
+
     const draft = emptyForm(preferredMonitor ? [preferredMonitor] : monitors);
     const monitor = monitors.find((item) => item.id === draft.monitorId) ?? null;
     const options = getMetricOptions(monitor);
@@ -249,7 +328,7 @@ const AlertsPage = () => {
       ...draft,
       metric: metric.value,
       operator: metric.defaultOperator,
-      threshold: String(metric.defaultThreshold),
+      ...getDefaultThresholdForm(metric.value, metric.defaultThreshold),
     });
     setIsModalOpen(true);
   };
@@ -260,7 +339,7 @@ const AlertsPage = () => {
       monitorId: rule.monitorId,
       metric: rule.metric,
       operator: rule.operator,
-      threshold: String(rule.threshold),
+      ...getDefaultThresholdForm(rule.metric, rule.threshold),
       severity: rule.severity,
       enabled: rule.enabled,
       channelIds: rule.channels.map((item) => item.channel.id),
@@ -283,7 +362,7 @@ const AlertsPage = () => {
       monitorId,
       metric: metric.value,
       operator: metric.defaultOperator,
-      threshold: String(metric.defaultThreshold),
+      ...getDefaultThresholdForm(metric.value, metric.defaultThreshold),
     }));
   };
 
@@ -294,7 +373,7 @@ const AlertsPage = () => {
       ...current,
       metric: metric.value,
       operator: metric.defaultOperator,
-      threshold: String(metric.defaultThreshold),
+      ...getDefaultThresholdForm(metric.value, metric.defaultThreshold),
     }));
   };
 
@@ -312,7 +391,7 @@ const AlertsPage = () => {
       toast.error(t("alerts.validationMonitor"));
       return false;
     }
-    const threshold = Number(form.threshold);
+    const threshold = getThresholdValue(form);
     if (!Number.isFinite(threshold)) {
       toast.error(t("alerts.validationThreshold"));
       return false;
@@ -327,6 +406,10 @@ const AlertsPage = () => {
     }
     if (form.metric === "printer.error_count" && threshold < 0) {
       toast.error(t("alerts.validationPrinterErrors"));
+      return false;
+    }
+    if (form.metric.startsWith("db.") && threshold < 0) {
+      toast.error("DB Insight threshold must be greater than or equal to 0");
       return false;
     }
     if (form.metric === "response_time" && threshold < 0) {
@@ -344,7 +427,7 @@ const AlertsPage = () => {
       const payload = {
         metric: form.metric,
         operator: form.operator,
-        threshold: Number(form.threshold),
+        threshold: getThresholdValue(form),
         severity: form.severity,
         enabled: form.enabled,
         channelIds: form.channelIds,
@@ -467,11 +550,12 @@ const AlertsPage = () => {
         </div>
       </div>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-4">
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard label={t("alerts.summaryTotal")} value={summary.total} tone="text-slate-950" />
         <SummaryCard label={t("alerts.summaryEnabled")} value={summary.enabled} tone="text-emerald-700" />
         <SummaryCard label={t("alerts.summaryOpenIncidents")} value={summary.open} tone="text-rose-700" />
         <SummaryCard label={t("alerts.summaryDevice")} value={summary.device} tone="text-cyan-700" />
+        <SummaryCard label={t("alerts.summaryDatabase")} value={summary.db} tone="text-blue-700" />
       </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -490,6 +574,30 @@ const AlertsPage = () => {
                 onClick={() => openCreate(metric.value)}
                 disabled={monitors.length === 0}
                 className="rounded-md border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t(metric.labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-blue-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">{t("alerts.dbInsightThresholds")}</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("alerts.dbInsightThresholdsDesc")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dbInsightMetrics.map((metric) => (
+              <button
+                key={metric.value}
+                type="button"
+                onClick={() => openCreate(metric.value)}
+                disabled={monitors.length === 0}
+                className="rounded-md border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {t(metric.labelKey)}
               </button>
@@ -709,16 +817,44 @@ const AlertsPage = () => {
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">{t("alerts.fieldThreshold")}</span>
-                  <input
-                    type="number"
-                    value={form.threshold}
-                    min={form.metric.endsWith("_pct") || form.metric === "printer.error_count" ? 0 : undefined}
-                    max={form.metric.endsWith("_pct") ? 100 : undefined}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, threshold: event.target.value }))
-                    }
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                  />
+                  {isSizeMetric(form.metric) ? (
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+                      <input
+                        type="number"
+                        value={form.threshold}
+                        min={0}
+                        step="0.1"
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, threshold: event.target.value }))
+                        }
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      />
+                      <select
+                        value={form.thresholdSizeUnit}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, thresholdSizeUnit: event.target.value as SizeUnit }))
+                        }
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      >
+                        {sizeUnits.map((unit) => (
+                          <option key={unit.value} value={unit.value}>
+                            {unit.value}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      value={form.threshold}
+                      min={form.metric.endsWith("_pct") || form.metric === "printer.error_count" || form.metric.startsWith("db.") ? 0 : undefined}
+                      max={form.metric.endsWith("_pct") ? 100 : undefined}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, threshold: event.target.value }))
+                      }
+                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    />
+                  )}
                   {form.metric === "status" ? (
                     <p className="mt-1 text-xs text-slate-500">1=DOWN, 2=DEGRADED, 3=UP</p>
                   ) : null}
