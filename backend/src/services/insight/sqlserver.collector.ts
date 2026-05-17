@@ -246,94 +246,195 @@ async function collectFileSizes(pool: MssqlPool): Promise<FileSize[]> {
 
 // ── connection stats ───────────────────────────────────────────
 async function collectConnectionStat(pool: MssqlPool): Promise<ConnectionStat> {
+  // max_connections — 0 in sys.configurations means "no limit" (32767)
+  let maxConnections = 32767;
   try {
-    const [sessResult, maxResult] = await Promise.all([
-      pool.request().query(`
-        SELECT
-          COUNT(*)                                                         AS total,
-          SUM(CASE WHEN status = 'running'  THEN 1 ELSE 0 END)            AS active,
-          SUM(CASE WHEN status = 'sleeping' THEN 1 ELSE 0 END)            AS idle,
-          SUM(CASE WHEN blocking_session_id > 0 THEN 1 ELSE 0 END)        AS blocked_count,
-          MAX(CASE WHEN blocking_session_id > 0
-                   THEN DATEDIFF(SECOND, last_request_start_time, GETDATE())
-                   ELSE NULL END)                                          AS longest_blocked_seconds
-        FROM sys.dm_exec_sessions
-        WHERE is_user_process = 1
-          AND database_id = DB_ID()
-      `),
-      pool.request().query(`
-        SELECT value_in_use AS max_connections
-        FROM sys.configurations
-        WHERE name = 'max connections'
-      `),
-    ]);
+    const maxResult = await pool.request().query(
+      `SELECT value_in_use AS max_connections FROM sys.configurations WHERE name = 'max connections'`,
+    );
+    const raw = parseInt(String(maxResult.recordset[0]?.max_connections ?? 0), 10);
+    if (raw > 0) maxConnections = raw;
+  } catch { /* insufficient privilege — keep default */ }
+
+  // Connection aggregates — use plain sys.dm_exec_sessions without JOIN
+  try {
+    const sessResult = await pool.request().query(`
+      SELECT
+        COUNT(*)                                                                   AS total,
+        SUM(CASE WHEN status = 'running'  THEN 1 ELSE 0 END)                      AS active,
+        SUM(CASE WHEN status = 'sleeping' AND open_transaction_count = 0
+                 THEN 1 ELSE 0 END)                                                AS idle,
+        SUM(CASE WHEN status = 'sleeping' AND open_transaction_count > 0
+                 THEN 1 ELSE 0 END)                                                AS idle_in_transaction,
+        SUM(CASE WHEN blocking_session_id > 0 THEN 1 ELSE 0 END)                  AS blocked_count,
+        MAX(CASE WHEN blocking_session_id > 0
+                 THEN DATEDIFF(SECOND, last_request_start_time, GETDATE())
+                 ELSE NULL END)                                                     AS longest_blocked_seconds
+      FROM sys.dm_exec_sessions
+      WHERE is_user_process = 1
+    `);
 
     const s = sessResult.recordset[0] ?? {};
-    const maxConn = parseInt(String(maxResult.recordset[0]?.max_connections ?? 0), 10);
-
     return {
       total: parseInt(String(s.total ?? 0), 10),
       active: parseInt(String(s.active ?? 0), 10),
       idle: parseInt(String(s.idle ?? 0), 10),
-      idleInTransaction: 0,
-      maxConnections: maxConn || 32767,
+      idleInTransaction: parseInt(String(s.idle_in_transaction ?? 0), 10),
+      maxConnections,
       blockedCount: parseInt(String(s.blocked_count ?? 0), 10),
       longestBlockedSeconds:
-        s.longest_blocked_seconds != null
-          ? parseFloat(String(s.longest_blocked_seconds))
-          : null,
+        s.longest_blocked_seconds != null ? parseFloat(String(s.longest_blocked_seconds)) : null,
     };
   } catch {
-    return {
-      total: 0, active: 0, idle: 0, idleInTransaction: 0,
-      maxConnections: 32767, blockedCount: 0, longestBlockedSeconds: null,
-    };
+    // VIEW SERVER STATE not granted — fall back to current-session-only count
+    try {
+      const fallback = await pool.request().query(
+        `SELECT COUNT(*) AS total FROM sys.dm_exec_sessions WHERE session_id = @@SPID`,
+      );
+      return {
+        total: parseInt(String(fallback.recordset[0]?.total ?? 1), 10),
+        active: 1, idle: 0, idleInTransaction: 0,
+        maxConnections, blockedCount: 0, longestBlockedSeconds: null,
+      };
+    } catch {
+      return { total: 0, active: 0, idle: 0, idleInTransaction: 0, maxConnections, blockedCount: 0, longestBlockedSeconds: null };
+    }
   }
 }
 
-// ── replication (Always On AG) ─────────────────────────────────
+// ── replication — try AG → Log Shipping → Mirroring ───────────
 async function collectReplication(pool: MssqlPool): Promise<ReplicationRow[]> {
+  // 1. Always On Availability Groups
   try {
     const result = await pool.request().query(`
       SELECT
         ar.replica_server_name                         AS replica_name,
-        drs.synchronization_state_desc                AS pg_state,
-        drs.synchronization_health_desc               AS health,
+        drs.synchronization_state_desc                 AS sync_state,
+        drs.synchronization_health_desc                AS health,
         drs.redo_queue_size                            AS redo_queue_kb,
-        drs.log_send_queue_size                        AS send_queue_kb
+        drs.log_send_queue_size                        AS send_queue_kb,
+        drs.last_redone_time                           AS last_redone_time
       FROM sys.dm_hadr_database_replica_states drs
-      JOIN sys.availability_replicas ar
-        ON drs.replica_id = ar.replica_id
+      JOIN sys.availability_replicas ar ON drs.replica_id = ar.replica_id
       WHERE drs.is_local = 0
     `);
 
-    return result.recordset.map((r: any) => {
-      const redoKb = parseFloat(String(r.redo_queue_kb ?? 0)) || 0;
-      const lagSeconds = redoKb > 0 ? redoKb / 100 : 0; // rough estimate
+    if (result.recordset.length > 0) {
+      return result.recordset.map((r: any) => {
+        const redoKb = parseFloat(String(r.redo_queue_kb ?? 0)) || 0;
+        const syncState = String(r.sync_state ?? "").toUpperCase();
+        const health = String(r.health ?? "").toUpperCase();
 
-      const state: "STREAMING" | "LAGGING" | "STOPPED" =
-        String(r.health ?? "").includes("HEALTHY") && String(r.pg_state ?? "").includes("SYNCHRONIZED")
-          ? "STREAMING"
-          : String(r.pg_state ?? "").includes("SYNCHRONIZING")
-            ? "LAGGING"
+        const state: "STREAMING" | "LAGGING" | "STOPPED" =
+          health.includes("HEALTHY") && syncState.includes("SYNCHRONIZED")
+            ? "STREAMING"
+            : syncState.includes("SYNCHRONIZING")
+              ? "LAGGING"
+              : "STOPPED";
+
+        return {
+          replicaName: String(r.replica_name ?? "unknown"),
+          state,
+          lagSeconds: redoKb > 0 ? redoKb / 1024 : null, // rough KB-based estimate
+          detailJson: {
+            type: "AlwaysOn_AG",
+            syncState: r.sync_state,
+            health: r.health,
+            redoQueueKb: r.redo_queue_kb,
+            sendQueueKb: r.send_queue_kb,
+            lastRedonetime: r.last_redone_time,
+          },
+        };
+      });
+    }
+  } catch {
+    // VIEW SERVER STATE not granted or no AG configured
+  }
+
+  // 2. Log Shipping
+  try {
+    const result = await pool.request().query(`
+      SELECT
+        secondary_server                               AS replica_name,
+        secondary_database                             AS secondary_db,
+        last_restored_date                             AS last_applied,
+        restore_threshold                              AS restore_threshold_min,
+        CASE
+          WHEN last_restored_date IS NULL THEN 'STOPPED'
+          WHEN DATEDIFF(MINUTE, last_restored_date, GETDATE()) > restore_threshold THEN 'LAGGING'
+          ELSE 'STREAMING'
+        END                                            AS state_flag,
+        DATEDIFF(SECOND, last_restored_date, GETDATE()) AS lag_seconds
+      FROM msdb.dbo.log_shipping_monitor_secondary
+      WHERE primary_database = DB_NAME()
+    `);
+
+    if (result.recordset.length > 0) {
+      return result.recordset.map((r: any) => {
+        const lagSeconds = r.lag_seconds != null ? parseInt(String(r.lag_seconds), 10) : null;
+        const stateFlag = String(r.state_flag ?? "STOPPED");
+        const state: "STREAMING" | "LAGGING" | "STOPPED" =
+          stateFlag === "STREAMING" ? "STREAMING" : stateFlag === "LAGGING" ? "LAGGING" : "STOPPED";
+
+        return {
+          replicaName: `${String(r.replica_name ?? "unknown")}\\${String(r.secondary_db ?? "")}`,
+          state,
+          lagSeconds,
+          detailJson: {
+            type: "LogShipping",
+            secondaryServer: r.replica_name,
+            secondaryDatabase: r.secondary_db,
+            lastApplied: r.last_applied,
+            restoreThresholdMin: r.restore_threshold_min,
+          },
+        };
+      });
+    }
+  } catch {
+    // msdb not accessible or no log shipping
+  }
+
+  // 3. Database Mirroring (deprecated in SQL Server 2016+ but still in use)
+  try {
+    const result = await pool.request().query(`
+      SELECT
+        mirroring_partner_name                         AS replica_name,
+        mirroring_state_desc                           AS mirror_state,
+        mirroring_role_desc                            AS role,
+        mirroring_safety_level_desc                    AS safety,
+        mirroring_witness_name                         AS witness
+      FROM sys.database_mirroring
+      WHERE mirroring_guid IS NOT NULL
+        AND DB_NAME(database_id) = DB_NAME()
+    `);
+
+    if (result.recordset.length > 0) {
+      return result.recordset.map((r: any) => {
+        const mirrorState = String(r.mirror_state ?? "").toUpperCase();
+        const state: "STREAMING" | "LAGGING" | "STOPPED" =
+          mirrorState === "SYNCHRONIZED" || mirrorState === "SYNCHRONIZING"
+            ? mirrorState === "SYNCHRONIZED" ? "STREAMING" : "LAGGING"
             : "STOPPED";
 
-      return {
-        replicaName: String(r.replica_name ?? "unknown"),
-        state,
-        lagSeconds: redoKb > 0 ? lagSeconds : null,
-        detailJson: {
-          pgState: r.pg_state,
-          health: r.health,
-          redoQueueKb: r.redo_queue_kb,
-          sendQueueKb: r.send_queue_kb,
-        },
-      };
-    });
+        return {
+          replicaName: String(r.replica_name ?? "unknown"),
+          state,
+          lagSeconds: null,
+          detailJson: {
+            type: "Mirroring",
+            mirrorState: r.mirror_state,
+            role: r.role,
+            safety: r.safety,
+            witness: r.witness,
+          },
+        };
+      });
+    }
   } catch {
-    // No Always On / VIEW SERVER STATE not granted
-    return [];
+    // No mirroring configured
   }
+
+  return [];
 }
 
 // ── main export ────────────────────────────────────────────────
