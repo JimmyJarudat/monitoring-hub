@@ -26,7 +26,7 @@ export const serverLogRoutes = new Elysia({ prefix: "/server-logs" })
     .post(
         "/fluentbit/event",
         async ({ body }) => {
-            console.log("[fluentbit]", body);
+            console.log("[fluentbit] event", body);
             return ok({ received: true });
         },
         {

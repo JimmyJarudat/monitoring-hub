@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { collectPostgres } from "./insight/postgresql.collector";
 import { collectMysql } from "./insight/mysql.collector";
 import { collectSqlServer } from "./insight/sqlserver.collector";
+import { collectMongodb } from "./insight/mongodb.collector";
 
 const TICK_MS = 60_000; // check every 1 minute
 
@@ -171,6 +172,17 @@ const runInsightCollection = async (configId: string) => {
         trustServerCertificate: (monitorConfig as Record<string, unknown>).trustServerCertificate !== false,
       };
       await saveResult(await collectSqlServer(sqlConnConfig, opts));
+    } else if (dbType === "mongodb") {
+      const mongoConfig = {
+        ...connConfig,
+        authSource: typeof (monitorConfig as Record<string, unknown>).authSource === "string"
+          ? ((monitorConfig as Record<string, unknown>).authSource as string)
+          : undefined,
+        uri: typeof (monitorConfig as Record<string, unknown>).uri === "string"
+          ? ((monitorConfig as Record<string, unknown>).uri as string)
+          : undefined,
+      };
+      await saveResult(await collectMongodb(mongoConfig, opts));
     } else {
       await prisma.dbInsightSnapshot.update({
         where: { id: snapshot.id },
