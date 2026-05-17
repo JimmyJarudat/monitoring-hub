@@ -2,12 +2,15 @@ import ExcelJS from "exceljs";
 import prisma from "../lib/prisma";
 
 const C = {
-  headerBg: "FF0F172A",
+  headerBg: "FF075985",
   headerFg: "FFFFFFFF",
-  thBg: "FFE2E8F0",
-  thFg: "FF334155",
-  border: "FFCBD5E1",
-  rowAlt: "FFF8FAFC",
+  thBg: "FFDFF6FF",
+  thFg: "FF0E7490",
+  border: "FFBAE6FD",
+  rowAlt: "FFF0F9FF",
+  sheetTab: "FF0284C7",
+  summaryBg: "FFE0F2FE",
+  summaryFg: "FF075985",
   warnBg: "FFFEF3C7",
   warnFg: "FF92400E",
   badBg: "FFFFE4E6",
@@ -39,19 +42,70 @@ const border: Partial<ExcelJS.Borders> = {
 
 const titleCase = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const num = (value: bigint | number | null | undefined) => value == null ? null : Number(value);
-const iso = (value: Date | string | null | undefined) => value ? new Date(value).toISOString() : "";
 const asRecord = (value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
+const fmtBytes = (value: bigint | number | null | undefined) => {
+  const bytes = num(value);
+  if (bytes == null) return "";
+  if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(1)} TB`;
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  if (bytes >= 1_024) return `${(bytes / 1_024).toFixed(1)} KB`;
+  return `${bytes} B`;
+};
+
+const fmtCount = (value: bigint | number | null | undefined) => {
+  const n = num(value);
+  if (n == null) return "";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString("en-US");
+};
+
+const fmtDateTime = (value: Date | string | null | undefined) => {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-GB", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).replace(",", "");
+};
+
+const fmtMs = (value: number | null | undefined) => {
+  if (value == null) return "";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
+  return `${value.toFixed(0)}ms`;
+};
+
+const fmtSeconds = (value: number | null | undefined) => {
+  if (value == null) return "";
+  if (value >= 3600) return `${(value / 3600).toFixed(1)}h`;
+  if (value >= 60) return `${(value / 60).toFixed(1)}m`;
+  return `${value.toFixed(1)}s`;
+};
+
 function styleSheet(ws: ExcelJS.Worksheet) {
+  ws.properties.tabColor = { argb: C.sheetTab };
   ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: ws.columnCount },
+  };
   ws.eachRow((row, rowNumber) => {
+    row.height = rowNumber === 1 ? 22 : undefined;
     row.eachCell((cell) => {
       cell.border = border;
       cell.alignment = { vertical: "middle", wrapText: true };
       if (rowNumber === 1) {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.thBg } };
-        cell.font = { bold: true, color: { argb: C.thFg } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.headerBg } };
+        cell.font = { bold: true, color: { argb: C.headerFg } };
       } else if (rowNumber % 2 === 0) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.rowAlt } };
       }
@@ -88,8 +142,8 @@ function addSummary(wb: ExcelJS.Workbook, snapshot: InsightSnapshot) {
     ["Monitor", monitor.name],
     ["Database type", snapshot.dbType],
     ["Target", target],
-    ["Collected at", iso(snapshot.collectedAt)],
-    ["Collection duration ms", snapshot.collectionDurationMs ?? ""],
+    ["Collected at", fmtDateTime(snapshot.collectedAt)],
+    ["Collection duration", fmtMs(snapshot.collectionDurationMs)],
     ["Slow query threshold ms", snapshot.config.slowQueryThresholdMs],
     ["Top N queries", snapshot.config.topNQueries],
     ["Slow queries", snapshot.slowQueries.length],
@@ -100,9 +154,10 @@ function addSummary(wb: ExcelJS.Workbook, snapshot: InsightSnapshot) {
   ].forEach(([field, value]) => ws.addRow({ field, value }));
 
   styleSheet(ws);
-  ws.getRow(1).eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.headerBg } };
-    cell.font = { color: { argb: C.headerFg }, bold: true };
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber <= 1) return;
+    row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.summaryBg } };
+    row.getCell(1).font = { bold: true, color: { argb: C.summaryFg } };
   });
 }
 
@@ -142,17 +197,17 @@ export async function generateDbInsightExcel(monitorId: string): Promise<{ buffe
 
   addRows(wb, "Slow Queries", [
     { header: "Query", key: "queryText", width: 90 },
-    { header: "Avg Duration ms", key: "avgDurationMs", width: 18 },
-    { header: "Max Duration ms", key: "maxDurationMs", width: 18 },
+    { header: "Avg Duration", key: "avgDuration", width: 18 },
+    { header: "Max Duration", key: "maxDuration", width: 18 },
     { header: "Calls", key: "callCount", width: 14 },
     { header: "Rows Examined", key: "rowsExamined", width: 16 },
     { header: "Query Hash", key: "queryHash", width: 36 },
   ], snapshot.slowQueries.map((q) => ({
     queryText: q.queryText,
-    avgDurationMs: q.avgDurationMs,
-    maxDurationMs: q.maxDurationMs,
-    callCount: q.callCount,
-    rowsExamined: q.rowsExamined ?? "",
+    avgDuration: fmtMs(q.avgDurationMs),
+    maxDuration: fmtMs(q.maxDurationMs),
+    callCount: fmtCount(q.callCount),
+    rowsExamined: fmtCount(q.rowsExamined),
     queryHash: q.queryHash,
   })));
 
@@ -161,43 +216,43 @@ export async function generateDbInsightExcel(monitorId: string): Promise<{ buffe
     { header: "Table", key: "tableName", width: 32 },
     { header: "Index", key: "indexName", width: 32 },
     { header: "Scans", key: "scansCount", width: 14 },
-    { header: "Size Bytes", key: "sizeBytes", width: 16 },
+    { header: "Size", key: "size", width: 16 },
     { header: "Last Used", key: "lastUsed", width: 24 },
     { header: "Suggested SQL", key: "suggestedSql", width: 90 },
   ], snapshot.indexStats.map((i) => ({
     status: i.status,
     tableName: i.tableName,
     indexName: i.indexName ?? "",
-    scansCount: i.scansCount,
-    sizeBytes: num(i.sizeBytes) ?? "",
-    lastUsed: iso(i.lastUsed),
+    scansCount: fmtCount(i.scansCount),
+    size: fmtBytes(i.sizeBytes),
+    lastUsed: fmtDateTime(i.lastUsed),
     suggestedSql: i.suggestedSql ?? "",
   })));
   colorStatusCells(indexWs, "status");
 
   addRows(wb, "Tables", [
     { header: "Table", key: "tableName", width: 36 },
-    { header: "Total Bytes", key: "totalBytes", width: 18 },
-    { header: "Data Bytes", key: "dataBytes", width: 18 },
-    { header: "Index Bytes", key: "indexBytes", width: 18 },
+    { header: "Total Size", key: "totalSize", width: 18 },
+    { header: "Data Size", key: "dataSize", width: 18 },
+    { header: "Index Size", key: "indexSize", width: 18 },
     { header: "Rows", key: "rowCount", width: 16 },
     { header: "Last Analyzed", key: "lastAnalyzedAt", width: 24 },
   ], snapshot.tableSizes.map((t) => ({
     tableName: t.tableName,
-    totalBytes: num(t.totalBytes),
-    dataBytes: num(t.dataBytes),
-    indexBytes: num(t.indexBytes),
-    rowCount: num(t.rowCount),
-    lastAnalyzedAt: iso(t.lastAnalyzedAt),
+    totalSize: fmtBytes(t.totalBytes),
+    dataSize: fmtBytes(t.dataBytes),
+    indexSize: fmtBytes(t.indexBytes),
+    rowCount: fmtCount(t.rowCount),
+    lastAnalyzedAt: fmtDateTime(t.lastAnalyzedAt),
   })));
 
   addRows(wb, "Files", [
     { header: "Type", key: "fileType", width: 14 },
-    { header: "Size Bytes", key: "sizeBytes", width: 18 },
+    { header: "Size", key: "size", width: 18 },
     { header: "Path", key: "filePath", width: 90 },
   ], snapshot.fileSizes.map((f) => ({
     fileType: f.fileType,
-    sizeBytes: num(f.sizeBytes),
+    size: fmtBytes(f.sizeBytes),
     filePath: f.filePath,
   })));
 
@@ -214,14 +269,14 @@ export async function generateDbInsightExcel(monitorId: string): Promise<{ buffe
     { metric: "Idle in Transaction", value: snapshot.connectionStats?.idleInTransaction ?? "" },
     { metric: "Max Connections", value: snapshot.connectionStats?.maxConnections ?? "" },
     { metric: "Blocked", value: snapshot.connectionStats?.blockedCount ?? "" },
-    { metric: "Longest Blocked Seconds", value: snapshot.connectionStats?.longestBlockedSeconds ?? "" },
+    { metric: "Longest Blocked", value: fmtSeconds(snapshot.connectionStats?.longestBlockedSeconds) },
   ]);
   addRows(wb, "Sessions", [
     { header: "PID", key: "pid", width: 14 },
     { header: "Login", key: "loginName", width: 24 },
     { header: "Application", key: "appName", width: 28 },
     { header: "Status", key: "status", width: 18 },
-    { header: "Duration Sec", key: "durationSec", width: 16 },
+    { header: "Duration", key: "duration", width: 16 },
     { header: "Database", key: "database", width: 24 },
     { header: "Blocked", key: "isBlocked", width: 12 },
   ], processList.map((p) => ({
@@ -229,7 +284,7 @@ export async function generateDbInsightExcel(monitorId: string): Promise<{ buffe
     loginName: p.loginName ?? "",
     appName: p.appName ?? "",
     status: p.status ?? "",
-    durationSec: p.durationSec ?? "",
+    duration: typeof p.durationSec === "number" ? fmtSeconds(p.durationSec) : "",
     database: p.database ?? "",
     isBlocked: p.isBlocked === true ? "YES" : "",
   })));
@@ -237,12 +292,12 @@ export async function generateDbInsightExcel(monitorId: string): Promise<{ buffe
   const replWs = addRows(wb, "Replication", [
     { header: "Replica", key: "replicaName", width: 34 },
     { header: "State", key: "state", width: 16 },
-    { header: "Lag Seconds", key: "lagSeconds", width: 16 },
+    { header: "Lag", key: "lag", width: 16 },
     { header: "Details", key: "details", width: 90 },
   ], snapshot.replicationStatus.map((r) => ({
     replicaName: r.replicaName,
     state: r.state,
-    lagSeconds: r.lagSeconds ?? "",
+    lag: fmtSeconds(r.lagSeconds),
     details: Object.entries(asRecord(r.detailJson)).map(([k, v]) => `${titleCase(k)}: ${String(v)}`).join("; "),
   })));
   colorStatusCells(replWs, "state");
