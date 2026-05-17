@@ -234,8 +234,9 @@ const initLastCollectedAt = async () => {
 
   await Promise.all(
     configs.map(async (cfg) => {
+      // Only count successful snapshots — failed ones shouldn't block retries
       const latest = await prisma.dbInsightSnapshot.findFirst({
-        where: { configId: cfg.id },
+        where: { configId: cfg.id, errorMessage: null },
         orderBy: { collectedAt: "desc" },
         select: { collectedAt: true },
       });

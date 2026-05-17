@@ -108,35 +108,34 @@ async function collectSlowQueries(client: pg.Client, opts: PgCollectOptions): Pr
 
 // ── index analysis ─────────────────────────────────────────────
 async function collectIndexStats(client: pg.Client): Promise<PgIndexStat[]> {
-  const [idxRes, seqRes] = await Promise.all([
-    client.query<{
-      table_name: string;
-      index_name: string;
-      scans_count: string;
-      size_bytes: string;
-    }>(
-      `SELECT relname                        AS table_name,
-              indexrelname                   AS index_name,
-              idx_scan                       AS scans_count,
-              pg_relation_size(indexrelid)   AS size_bytes
-       FROM pg_stat_user_indexes
-       ORDER BY idx_scan ASC, size_bytes DESC
-       LIMIT 300`,
-    ),
-    client.query<{
-      table_name: string;
-      seq_scan: string;
-      row_count: string;
-    }>(
-      `SELECT relname      AS table_name,
-              seq_scan,
-              n_live_tup   AS row_count
-       FROM pg_stat_user_tables
-       WHERE seq_scan > 1000 AND n_live_tup > 100
-       ORDER BY seq_scan DESC
-       LIMIT 30`,
-    ),
-  ]);
+  const idxRes = await client.query<{
+    table_name: string;
+    index_name: string;
+    scans_count: string;
+    size_bytes: string;
+  }>(
+    `SELECT relname                        AS table_name,
+            indexrelname                   AS index_name,
+            idx_scan                       AS scans_count,
+            pg_relation_size(indexrelid)   AS size_bytes
+     FROM pg_stat_user_indexes
+     ORDER BY idx_scan ASC, size_bytes DESC
+     LIMIT 300`,
+  );
+
+  const seqRes = await client.query<{
+    table_name: string;
+    seq_scan: string;
+    row_count: string;
+  }>(
+    `SELECT relname      AS table_name,
+            seq_scan,
+            n_live_tup   AS row_count
+     FROM pg_stat_user_tables
+     WHERE seq_scan > 1000 AND n_live_tup > 100
+     ORDER BY seq_scan DESC
+     LIMIT 30`,
+  );
 
   const stats: PgIndexStat[] = idxRes.rows.map((r) => {
     const scans = parseInt(r.scans_count, 10);
@@ -188,9 +187,9 @@ async function collectTableSizes(client: pg.Client): Promise<PgTableSize[]> {
     last_analyzed_at: Date | null;
   }>(
     `SELECT relname                                AS table_name,
-            pg_total_relation_size(oid)            AS total_bytes,
-            pg_relation_size(oid)                  AS data_bytes,
-            pg_indexes_size(oid)                   AS index_bytes,
+            pg_total_relation_size(relid)          AS total_bytes,
+            pg_relation_size(relid)                AS data_bytes,
+            pg_indexes_size(relid)                 AS index_bytes,
             GREATEST(n_live_tup, 0)                AS row_count,
             last_analyze                           AS last_analyzed_at
      FROM pg_stat_user_tables
@@ -266,29 +265,29 @@ async function collectFileSizes(client: pg.Client): Promise<PgFileSize[]> {
 
 // ── connection stats ───────────────────────────────────────────
 async function collectConnectionStat(client: pg.Client): Promise<PgConnectionStat> {
-  const [activityRes, maxRes] = await Promise.all([
-    client.query<{
-      total: string;
-      active: string;
-      idle: string;
-      idle_in_transaction: string;
-      blocked_count: string;
-      longest_blocked_seconds: string | null;
-    }>(
-      `SELECT
-         count(*) FILTER (WHERE backend_type = 'client backend')                                       AS total,
-         count(*) FILTER (WHERE state = 'active' AND backend_type = 'client backend')                  AS active,
-         count(*) FILTER (WHERE state = 'idle' AND backend_type = 'client backend')                    AS idle,
-         count(*) FILTER (WHERE state = 'idle in transaction' AND backend_type = 'client backend')     AS idle_in_transaction,
-         count(*) FILTER (WHERE wait_event_type = 'Lock')                                              AS blocked_count,
-         max(EXTRACT(EPOCH FROM now() - query_start)) FILTER (WHERE wait_event_type = 'Lock')          AS longest_blocked_seconds
-       FROM pg_stat_activity
-       WHERE datname = current_database()`,
-    ),
-    client.query<{ max_connections: string }>(
-      `SELECT setting AS max_connections FROM pg_settings WHERE name = 'max_connections'`,
-    ),
-  ]);
+  // pg.Client does not support concurrent queries — run sequentially
+  const activityRes = await client.query<{
+    total: string;
+    active: string;
+    idle: string;
+    idle_in_transaction: string;
+    blocked_count: string;
+    longest_blocked_seconds: string | null;
+  }>(
+    `SELECT
+       count(*) FILTER (WHERE backend_type = 'client backend')                                       AS total,
+       count(*) FILTER (WHERE state = 'active' AND backend_type = 'client backend')                  AS active,
+       count(*) FILTER (WHERE state = 'idle' AND backend_type = 'client backend')                    AS idle,
+       count(*) FILTER (WHERE state = 'idle in transaction' AND backend_type = 'client backend')     AS idle_in_transaction,
+       count(*) FILTER (WHERE wait_event_type = 'Lock')                                              AS blocked_count,
+       max(EXTRACT(EPOCH FROM now() - query_start)) FILTER (WHERE wait_event_type = 'Lock')          AS longest_blocked_seconds
+     FROM pg_stat_activity
+     WHERE datname = current_database()`,
+  );
+
+  const maxRes = await client.query<{ max_connections: string }>(
+    `SELECT setting AS max_connections FROM pg_settings WHERE name = 'max_connections'`,
+  );
 
   const a = activityRes.rows[0];
   return {
@@ -387,15 +386,13 @@ export async function collectPostgres(
   await client.connect();
 
   try {
-    const [slowQueries, indexStats, tableSizes, fileSizes, connectionStat, replicationStatus] =
-      await Promise.all([
-        collectSlowQueries(client, opts),
-        collectIndexStats(client),
-        collectTableSizes(client),
-        collectFileSizes(client),
-        collectConnectionStat(client),
-        collectReplication(client),
-      ]);
+    // pg.Client does not support concurrent queries — must be sequential
+    const slowQueries = await collectSlowQueries(client, opts);
+    const indexStats = await collectIndexStats(client);
+    const tableSizes = await collectTableSizes(client);
+    const fileSizes = await collectFileSizes(client);
+    const connectionStat = await collectConnectionStat(client);
+    const replicationStatus = await collectReplication(client);
 
     return { slowQueries, indexStats, tableSizes, fileSizes, connectionStat, replicationStatus };
   } finally {
