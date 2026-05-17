@@ -2,6 +2,9 @@ import Elysia, { t } from "elysia";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
 import prisma from "../lib/prisma";
+import { requireAdminRole } from "../lib/authorization";
+import { insightRunner } from "../services/insight.Runner";
+import { generateDbInsightExcel } from "../services/dbInsightExport.service";
 
 const snapshotInclude = {
   slowQueries: {
@@ -45,6 +48,44 @@ const serializeSnapshot = (snapshot: RawSnapshot | null) => {
 
 export const dbInsightRoutes = new Elysia({ prefix: "/db-insight" })
   .use(authMiddleware)
+
+  // GET /db-insight/:monitorId/export/excel — export latest snapshot as workbook
+  .get(
+    "/:monitorId/export/excel",
+    async ({ params, set }) => {
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.monitorId } });
+      if (!monitor) { set.status = 404; return "Monitor not found"; }
+
+      const result = await generateDbInsightExcel(params.monitorId);
+      if (!result) { set.status = 404; return "Snapshot not found"; }
+
+      set.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      set.headers["Content-Disposition"] = `attachment; filename="${result.filename}"`;
+      set.headers["Content-Length"] = String(result.buffer.byteLength);
+      return result.buffer;
+    },
+    { params: t.Object({ monitorId: t.String() }) },
+  )
+
+  // POST /db-insight/:monitorId/collect — collect a snapshot immediately
+  .post(
+    "/:monitorId/collect",
+    async ({ params, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.monitorId } });
+      if (!monitor) { set.status = 404; return fail("Monitor not found"); }
+
+      try {
+        const result = await insightRunner.triggerNow(params.monitorId);
+        return ok(result);
+      } catch (error) {
+        set.status = 400;
+        return fail(error instanceof Error ? error.message : "Failed to collect DB Insight snapshot");
+      }
+    },
+    { params: t.Object({ monitorId: t.String() }) },
+  )
 
   // GET /db-insight/:monitorId/snapshots — list recent snapshots (summary only)
   .get(

@@ -45,7 +45,7 @@ const runInsightCollection = async (configId: string) => {
     },
   });
 
-  if (!config || !config.enabled) return;
+  if (!config || !config.enabled) return null;
 
   const monitor = config.monitor;
   const monitorConfig =
@@ -205,6 +205,8 @@ const runInsightCollection = async (configId: string) => {
     });
     logger.error("insight", `collection failed for monitor ${monitor.id}: ${message}`);
   }
+
+  return snapshot.id;
 };
 
 // ── tick ───────────────────────────────────────────────────────
@@ -287,5 +289,27 @@ export const insightRunner = {
     clearInterval(timer);
     timer = null;
     logger.info("insight", "runner stopped");
+  },
+
+  async triggerNow(monitorId: string) {
+    const config = await prisma.dbInsightConfig.findUnique({
+      where: { monitorId },
+      include: { monitor: { select: { id: true, name: true, type: true, enabled: true } } },
+    });
+
+    if (!config) throw new Error("DB Insight is not configured for this monitor");
+    if (!config.enabled) throw new Error("DB Insight is not enabled for this monitor");
+    if (!config.monitor.enabled) throw new Error("Monitor is disabled");
+    if (config.monitor.type !== "DATABASE") throw new Error("DB Insight is only available for DATABASE monitors");
+    if (inFlight.has(config.id)) throw new Error("DB Insight collection is already running");
+
+    inFlight.add(config.id);
+    try {
+      const snapshotId = await runInsightCollection(config.id);
+      lastCollectedAt.set(config.id, Date.now());
+      return { snapshotId };
+    } finally {
+      inFlight.delete(config.id);
+    }
   },
 };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -147,6 +148,14 @@ const fmtRelative = (iso: string, t: (key: string, options?: Record<string, unkn
 };
 
 const copyToClipboard = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
+const downloadBlob = (filename: string, blob: Blob) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 const StatCard = ({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) => {
@@ -667,6 +676,8 @@ const DbInsightDetailPage = () => {
   const [config, setConfig] = useState<InsightConfig>(null);
   const [snapshot, setSnapshot] = useState<Snapshot>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCollecting, setIsCollecting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("slow");
 
   const load = useCallback(async () => {
@@ -687,6 +698,41 @@ const DbInsightDetailPage = () => {
   }, [api, monitorId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const collectNow = async () => {
+    if (!monitorId) return;
+    setIsCollecting(true);
+    try {
+      const res = await api.post<ApiResponse<{ snapshotId: string | null }>>(`/db-insight/${monitorId}/collect`);
+      if (!res.data.success) {
+        toast.error(res.data.message);
+        return;
+      }
+      toast.success(t("dbInsightDetail.collectSuccess"));
+      await load();
+    } catch {
+      toast.error(t("dbInsightDetail.collectError"));
+    } finally {
+      setIsCollecting(false);
+    }
+  };
+
+  const exportExcel = async () => {
+    if (!monitorId || !monitor) return;
+    setIsExporting(true);
+    try {
+      const res = await api.get(`/db-insight/${monitorId}/export/excel`, { responseType: "arraybuffer" });
+      const blob = new Blob([res.data as ArrayBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const safeName = monitor.name.replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "monitor";
+      downloadBlob(`db-insight-${safeName}-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+    } catch {
+      toast.error(t("dbInsightDetail.exportError"));
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const dbType = (monitor?.config?.type ?? "postgresql") as DbType;
   const dbMeta = DB_META[dbType] ?? DB_META.postgresql;
@@ -772,21 +818,24 @@ const DbInsightDetailPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void collectNow()}
+              disabled={isCollecting || !monitor.enabled || !config?.enabled}
+              className="flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <svg className={`h-4 w-4 ${isCollecting ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {isCollecting ? t("dbInsightDetail.collectingNow") : t("dbInsightDetail.collectNow")}
+            </button>
             {snapshot && (
               <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `db-insight-${monitor.name.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
+                onClick={() => void exportExcel()}
+                disabled={isExporting}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                {t("dbInsightDetail.export")}
+                <svg className={`h-4 w-4 ${isExporting ? "animate-pulse" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                {isExporting ? t("dbInsightDetail.exportingExcel") : t("dbInsightDetail.exportExcel")}
               </button>
             )}
             <button

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import { useApi } from "@/hooks/useApi";
 
 type DbType =
@@ -98,6 +99,7 @@ const DbInsightPage = () => {
   const { api } = useApi();
   const [monitors, setMonitors] = useState<DbMonitor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [collectingId, setCollectingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
@@ -113,6 +115,23 @@ const DbInsightPage = () => {
   }, [api]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const collectNow = async (monitor: DbMonitor) => {
+    setCollectingId(monitor.id);
+    try {
+      const res = await api.post<ApiResponse<{ snapshotId: string | null }>>(`/db-insight/${monitor.id}/collect`);
+      if (!res.data.success) {
+        toast.error(res.data.message);
+        return;
+      }
+      toast.success(t("dbInsightDetail.collectSuccess"));
+      await load();
+    } catch {
+      toast.error(t("dbInsightDetail.collectError"));
+    } finally {
+      setCollectingId(null);
+    }
+  };
 
   const filtered = monitors.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -267,19 +286,32 @@ const DbInsightPage = () => {
                   </div>
 
                   {/* Footer */}
-                  <div className="mt-auto flex items-center justify-between border-t border-slate-100 px-5 py-3 dark:border-slate-700">
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-700">
                     <p className="text-xs text-slate-400 dark:text-slate-500">
                       Every {m.interval}s
                     </p>
-                    <Link
-                      to={`/db-insight/${m.id}`}
-                      className="inline-flex items-center gap-1 rounded-md bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 dark:bg-cyan-900/20 dark:text-cyan-300 dark:hover:bg-cyan-900/40"
-                    >
-                      View Insights
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-3.5 w-3.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                      </svg>
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void collectNow(m)}
+                        disabled={collectingId === m.id || !m.enabled}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        <svg className={`h-3.5 w-3.5 ${collectingId === m.id ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {collectingId === m.id ? t("dbInsightDetail.collectingNow") : t("dbInsightDetail.collectNow")}
+                      </button>
+                      <Link
+                        to={`/db-insight/${m.id}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 dark:bg-cyan-900/20 dark:text-cyan-300 dark:hover:bg-cyan-900/40"
+                      >
+                        View Insights
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-3.5 w-3.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                        </svg>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );
