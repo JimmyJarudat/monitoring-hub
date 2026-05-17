@@ -166,12 +166,35 @@ async function collectConnectionStat(conn: Connection): Promise<ConnectionStat> 
      ORDER BY cnt DESC`,
   );
 
+  const [procRows] = await conn.execute<any[]>(
+    `SELECT ID        AS pid,
+            USER      AS login_name,
+            HOST      AS app_name,
+            COMMAND   AS status,
+            TIME      AS duration_sec,
+            DB        AS database,
+            (State LIKE '%waiting%' OR State LIKE '%locked%') AS is_blocked
+     FROM information_schema.PROCESSLIST
+     WHERE DB = DATABASE()
+     ORDER BY TIME DESC
+     LIMIT 50`,
+  );
+
   const p = (processRows as any[])[0] ?? {};
   const maxConn = parseInt(String((maxRows as any[])[0]?.Value ?? "100"), 10);
   const loginBreakdown: Record<string, number> = {};
   for (const r of userRows as any[]) {
     loginBreakdown[String(r.username ?? "(unknown)")] = parseInt(String(r.cnt), 10) || 0;
   }
+  const processList = (procRows as any[]).map((r) => ({
+    pid: parseInt(String(r.pid), 10) || 0,
+    loginName: String(r.login_name ?? "(unknown)"),
+    appName: String(r.app_name ?? ""),
+    status: String(r.status ?? ""),
+    durationSec: r.duration_sec != null ? parseInt(String(r.duration_sec), 10) : null,
+    database: String(r.database ?? ""),
+    isBlocked: r.is_blocked === 1 || r.is_blocked === true,
+  }));
 
   return {
     total: parseInt(String(p.total ?? 0), 10),
@@ -183,6 +206,7 @@ async function collectConnectionStat(conn: Connection): Promise<ConnectionStat> 
     longestBlockedSeconds:
       p.longest_blocked_seconds != null ? parseFloat(String(p.longest_blocked_seconds)) : null,
     loginBreakdown,
+    processList,
   };
 }
 

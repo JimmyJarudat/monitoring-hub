@@ -286,11 +286,36 @@ async function collectConnectionStat(pool: MssqlPool): Promise<ConnectionStat> {
       ORDER BY cnt DESC
     `);
 
+    const procResult = await pool.request().query(`
+      SELECT TOP 50
+        s.session_id                                           AS pid,
+        s.login_name,
+        ISNULL(s.program_name, '')                            AS app_name,
+        s.status,
+        DATEDIFF(SECOND, s.last_request_start_time, GETDATE()) AS duration_sec,
+        DB_NAME(s.database_id)                                AS database,
+        CASE WHEN COALESCE(r.blocking_session_id, 0) > 0 THEN 1 ELSE 0 END AS is_blocked
+      FROM sys.dm_exec_sessions s
+      LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+      WHERE s.is_user_process = 1
+        AND DB_NAME(s.database_id) = DB_NAME()
+      ORDER BY s.last_request_start_time ASC
+    `);
+
     const s = sessResult.recordset[0] ?? {};
     const loginBreakdown: Record<string, number> = {};
     for (const r of loginResult.recordset as any[]) {
       loginBreakdown[String(r.login_name ?? "(unknown)")] = parseInt(String(r.cnt), 10) || 0;
     }
+    const processList = (procResult.recordset as any[]).map((r) => ({
+      pid: parseInt(String(r.pid), 10) || 0,
+      loginName: String(r.login_name ?? "(unknown)"),
+      appName: String(r.app_name ?? ""),
+      status: String(r.status ?? ""),
+      durationSec: r.duration_sec != null ? parseInt(String(r.duration_sec), 10) : null,
+      database: String(r.database ?? ""),
+      isBlocked: r.is_blocked === 1 || r.is_blocked === true,
+    }));
 
     return {
       total: parseInt(String(s.total ?? 0), 10),
@@ -302,6 +327,7 @@ async function collectConnectionStat(pool: MssqlPool): Promise<ConnectionStat> {
       longestBlockedSeconds:
         s.longest_blocked_seconds != null ? parseFloat(String(s.longest_blocked_seconds)) : null,
       loginBreakdown,
+      processList,
     };
   } catch {
     // VIEW SERVER STATE not granted — fall back to current-session-only count

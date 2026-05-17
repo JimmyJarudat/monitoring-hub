@@ -61,6 +61,16 @@ type FileSize = {
   sizeBytes: number;
 };
 
+type ProcessRow = {
+  pid: number;
+  loginName: string;
+  appName: string;
+  status: string;
+  durationSec: number | null;
+  database: string;
+  isBlocked: boolean;
+};
+
 type ConnectionStat = {
   total: number;
   active: number;
@@ -70,6 +80,7 @@ type ConnectionStat = {
   blockedCount: number;
   longestBlockedSeconds: number | null;
   loginBreakdown?: Record<string, number> | null;
+  processListJson?: ProcessRow[] | null;
 } | null;
 
 type ReplicationRow = {
@@ -371,7 +382,7 @@ const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSiz
                       <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtBytes(t.dataBytes)}</td>
                       <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtBytes(t.indexBytes)}</td>
                       <td className="py-1.5 pr-4 text-right text-slate-500 dark:text-slate-400">{fmtNum(t.rowCount)}</td>
-                      <td className="py-1.5 min-w-[80px]">
+                      <td className="py-1.5 min-w-20">
                         <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
                           <div
                             className="h-full rounded-full bg-blue-500 dark:bg-blue-400"
@@ -392,6 +403,22 @@ const TablesFilesTab = ({ tables, files }: { tables: TableSize[]; files: FileSiz
 };
 
 // ─── Connections Tab ──────────────────────────────────────────────────────────
+const fmtDuration = (sec: number | null) => {
+  if (sec == null || sec < 0) return "—";
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+};
+
+const STATUS_DOT_CONN: Record<string, string> = {
+  active:  "bg-emerald-500",
+  running: "bg-emerald-500",
+  idle:    "bg-slate-300 dark:bg-slate-600",
+  sleeping:"bg-slate-300 dark:bg-slate-600",
+  "idle in transaction": "bg-amber-500",
+  blocked: "bg-rose-500",
+};
+
 const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
   if (!stat) {
     return (
@@ -404,6 +431,7 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
 
   const usedPct = stat.maxConnections > 0 ? (stat.total / stat.maxConnections) * 100 : 0;
   const usedColor = usedPct > 80 ? "bg-rose-500" : usedPct > 60 ? "bg-amber-500" : "bg-emerald-500";
+  const processList = stat.processListJson ?? [];
 
   return (
     <div className="space-y-6">
@@ -423,24 +451,73 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {/* Stat grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
-          { label: "Active", value: stat.active, accent: stat.active > 0 ? "text-emerald-600 dark:text-emerald-400" : undefined },
-          { label: "Idle", value: stat.idle },
-          { label: "Idle in Txn", value: stat.idleInTransaction, accent: stat.idleInTransaction > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
-          { label: "Blocked", value: stat.blockedCount, accent: stat.blockedCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined },
-          { label: "Max Allowed", value: stat.maxConnections },
+          { label: "Active",       value: stat.active,           accent: stat.active > 0 ? "text-emerald-600 dark:text-emerald-400" : undefined },
+          { label: "Idle",         value: stat.idle },
+          { label: "Idle in Txn",  value: stat.idleInTransaction, accent: stat.idleInTransaction > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
+          { label: "Blocked",      value: stat.blockedCount,      accent: stat.blockedCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined },
+          { label: "Max Allowed",  value: stat.maxConnections },
         ].map((card) => (
-          <StatCard
-            key={card.label}
-            label={card.label}
-            value={String(card.value)}
-            accent={card.accent}
-          />
+          <StatCard key={card.label} label={card.label} value={String(card.value)} accent={card.accent} />
         ))}
       </div>
 
       {stat.longestBlockedSeconds != null && stat.longestBlockedSeconds > 0 && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-3 text-sm text-rose-700 dark:text-rose-300">
           Longest blocked query: <strong>{stat.longestBlockedSeconds.toFixed(1)}s</strong>
+        </div>
+      )}
+
+      {/* Process list */}
+      {processList.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+            Active Sessions <span className="font-normal text-slate-400">({processList.length})</span>
+          </h3>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">PID</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">User</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Application</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">State</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400 text-right">Duration</th>
+                  <th className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Database</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {processList.map((row) => {
+                  const dotKey = row.isBlocked ? "blocked" : row.status.toLowerCase();
+                  const dotColor = STATUS_DOT_CONN[dotKey] ?? "bg-slate-300 dark:bg-slate-600";
+                  const isLongRunning = row.durationSec != null && row.durationSec > 300;
+                  return (
+                    <tr
+                      key={row.pid}
+                      className={`${row.isBlocked ? "bg-rose-50/50 dark:bg-rose-900/10" : isLongRunning ? "bg-amber-50/40 dark:bg-amber-900/10" : ""}`}
+                    >
+                      <td className="px-3 py-2 font-mono text-slate-500 dark:text-slate-400">{row.pid}</td>
+                      <td className="px-3 py-2 font-mono font-medium text-slate-700 dark:text-slate-300">{row.loginName}</td>
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400 max-w-45 truncate" title={row.appName}>
+                        {row.appName || <span className="italic text-slate-300 dark:text-slate-600">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColor}`} />
+                          <span className={`${row.isBlocked ? "text-rose-600 dark:text-rose-400 font-medium" : "text-slate-600 dark:text-slate-300"}`}>
+                            {row.isBlocked ? "blocked" : row.status}
+                          </span>
+                        </div>
+                      </td>
+                      <td className={`px-3 py-2 text-right font-mono ${isLongRunning ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-slate-500 dark:text-slate-400"}`}>
+                        {fmtDuration(row.durationSec)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-400 dark:text-slate-500">{row.database}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -466,13 +543,10 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
                       <tr key={user}>
                         <td className="py-1.5 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">{user}</td>
                         <td className="py-1.5 pr-4 text-right font-semibold text-slate-800 dark:text-slate-200">{count}</td>
-                        <td className="py-1.5 min-w-[100px]">
+                        <td className="py-1.5 min-w-25">
                           <div className="flex items-center gap-2">
                             <div className="h-2 flex-1 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-cyan-500 dark:bg-cyan-400"
-                                style={{ width: `${Math.min(pct, 100)}%` }}
-                              />
+                              <div className="h-full rounded-full bg-cyan-500 dark:bg-cyan-400" style={{ width: `${Math.min(pct, 100)}%` }} />
                             </div>
                             <span className="text-xs text-slate-400 dark:text-slate-500 w-8 text-right">{pct.toFixed(0)}%</span>
                           </div>
@@ -496,47 +570,68 @@ const REPLICATION_STYLE = {
   STOPPED:   "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/20 dark:text-rose-300",
 };
 
+const REPL_TYPE_STYLE: Record<string, string> = {
+  AlwaysOn_AG:  "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/20 dark:text-blue-300",
+  LogShipping:  "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-900/20 dark:text-violet-300",
+  Mirroring:    "bg-slate-100 text-slate-600 ring-slate-600/20 dark:bg-slate-700 dark:text-slate-300",
+};
+
 const ReplicationTab = ({ replicas }: { replicas: ReplicationRow[] }) => {
   if (replicas.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-slate-400 dark:text-slate-500">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
         <p className="text-sm">No replication configured or no replicas found</p>
-        <p className="text-xs text-slate-400">This is normal for standalone PostgreSQL instances</p>
+        <p className="text-xs text-slate-400">Normal for standalone instances</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">Replica</th>
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">State</th>
-            <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Lag</th>
-            <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Details</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {replicas.map((r) => (
-            <tr key={r.id}>
-              <td className="py-2 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">{r.replicaName}</td>
-              <td className="py-2 pr-4">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${REPLICATION_STYLE[r.state]}`}>
-                  {r.state}
+    <div className="space-y-4">
+      {replicas.map((r) => {
+        const replType = typeof r.detailJson.type === "string" ? r.detailJson.type : null;
+        const typeStyle = replType ? REPL_TYPE_STYLE[replType] : null;
+
+        // Build detail key-value pairs from detailJson
+        const details = Object.entries(r.detailJson)
+          .filter(([k, v]) => k !== "type" && v != null && v !== "")
+          .map(([k, v]) => ({ k, v: String(v) }));
+
+        return (
+          <div key={r.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+            {/* Header row */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{r.replicaName}</span>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${REPLICATION_STYLE[r.state]}`}>
+                {r.state}
+              </span>
+              {typeStyle && replType && (
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${typeStyle}`}>
+                  {replType.replace("_", " ")}
                 </span>
-              </td>
-              <td className={`py-2 pr-4 text-right font-mono ${r.lagSeconds != null && r.lagSeconds > 30 ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-slate-600 dark:text-slate-300"}`}>
-                {r.lagSeconds != null ? `${r.lagSeconds.toFixed(1)}s` : "—"}
-              </td>
-              <td className="py-2 text-xs text-slate-400 dark:text-slate-500 font-mono">
-                {typeof r.detailJson.replayLsn === "string" ? `replay: ${r.detailJson.replayLsn}` : ""}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              )}
+              <span className={`ml-auto font-mono text-sm font-bold ${r.lagSeconds != null && r.lagSeconds > 30 ? "text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-300"}`}>
+                {r.lagSeconds != null ? `lag: ${r.lagSeconds.toFixed(1)}s` : "lag: —"}
+              </span>
+            </div>
+
+            {/* Detail grid */}
+            {details.length > 0 && (
+              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                {details.map(({ k, v }) => (
+                  <div key={k} className="flex gap-1 min-w-0">
+                    <dt className="shrink-0 text-slate-400 dark:text-slate-500 capitalize">
+                      {k.replace(/([A-Z])/g, " $1").toLowerCase()}:
+                    </dt>
+                    <dd className="font-mono text-slate-600 dark:text-slate-300 truncate" title={v}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -620,13 +715,32 @@ const DbInsightDetailPage = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => void load()}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {snapshot && (
+            <button
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `db-insight-${monitor.name.replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Export
+            </button>
+          )}
+          <button
+            onClick={() => void load()}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* No snapshot yet */}
@@ -724,6 +838,16 @@ const DbInsightDetailPage = () => {
                   {tab.key === "index" && snapshot.indexStats.filter((i) => i.status !== "HEALTHY").length > 0 && (
                     <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-xs px-1.5 py-0.5">
                       {snapshot.indexStats.filter((i) => i.status !== "HEALTHY").length}
+                    </span>
+                  )}
+                  {tab.key === "connections" && (snapshot.connectionStats?.blockedCount ?? 0) > 0 && (
+                    <span className="ml-1.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-xs px-1.5 py-0.5">
+                      {snapshot.connectionStats!.blockedCount} blocked
+                    </span>
+                  )}
+                  {tab.key === "replication" && snapshot.replicationStatus.some((r) => r.state !== "STREAMING") && (
+                    <span className="ml-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs px-1.5 py-0.5">
+                      {snapshot.replicationStatus.filter((r) => r.state !== "STREAMING").length}
                     </span>
                   )}
                 </button>

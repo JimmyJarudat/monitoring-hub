@@ -133,6 +133,9 @@ const runInsightCollection = async (configId: string) => {
           blockedCount: result.connectionStat.blockedCount,
           longestBlockedSeconds: result.connectionStat.longestBlockedSeconds,
           loginBreakdown: result.connectionStat.loginBreakdown ?? undefined,
+          processListJson: result.connectionStat.processList
+            ? (result.connectionStat.processList as unknown as Prisma.InputJsonValue)
+            : undefined,
         },
       });
       if (result.replicationStatus.length > 0) {

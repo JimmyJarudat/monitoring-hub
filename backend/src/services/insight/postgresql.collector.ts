@@ -39,6 +39,16 @@ export interface PgFileSize {
   sizeBytes: bigint;
 }
 
+export interface PgProcessRow {
+  pid: number;
+  loginName: string;
+  appName: string;
+  status: string;
+  durationSec: number | null;
+  database: string;
+  isBlocked: boolean;
+}
+
 export interface PgConnectionStat {
   total: number;
   active: number;
@@ -48,6 +58,7 @@ export interface PgConnectionStat {
   blockedCount: number;
   longestBlockedSeconds: number | null;
   loginBreakdown?: Record<string, number>;
+  processList?: PgProcessRow[];
 }
 
 export interface PgReplicationRow {
@@ -299,11 +310,38 @@ async function collectConnectionStat(client: pg.Client): Promise<PgConnectionSta
      ORDER BY COUNT(*) DESC`,
   );
 
+  const procRes = await client.query<{
+    pid: string; login_name: string; app_name: string; status: string;
+    duration_sec: string | null; database: string; is_blocked: boolean;
+  }>(
+    `SELECT pid,
+            COALESCE(usename, '(unknown)')        AS login_name,
+            COALESCE(application_name, '')         AS app_name,
+            COALESCE(state, 'unknown')             AS status,
+            EXTRACT(EPOCH FROM (now() - query_start))::int::text AS duration_sec,
+            datname                                AS database,
+            (wait_event_type = 'Lock')             AS is_blocked
+     FROM pg_stat_activity
+     WHERE datname = current_database()
+       AND backend_type = 'client backend'
+     ORDER BY query_start ASC NULLS LAST
+     LIMIT 50`,
+  );
+
   const a = activityRes.rows[0];
   const loginBreakdown: Record<string, number> = {};
   for (const r of userRes.rows) {
     loginBreakdown[r.username] = parseInt(r.cnt, 10);
   }
+  const processList: PgProcessRow[] = procRes.rows.map((r) => ({
+    pid: parseInt(r.pid, 10),
+    loginName: r.login_name,
+    appName: r.app_name,
+    status: r.status,
+    durationSec: r.duration_sec != null ? parseInt(r.duration_sec, 10) : null,
+    database: r.database,
+    isBlocked: r.is_blocked === true,
+  }));
 
   return {
     total: parseInt(a?.total ?? "0", 10),
@@ -315,6 +353,7 @@ async function collectConnectionStat(client: pg.Client): Promise<PgConnectionSta
     longestBlockedSeconds:
       a?.longest_blocked_seconds != null ? parseFloat(a.longest_blocked_seconds) : null,
     loginBreakdown,
+    processList,
   };
 }
 
