@@ -69,6 +69,7 @@ type ConnectionStat = {
   maxConnections: number;
   blockedCount: number;
   longestBlockedSeconds: number | null;
+  loginBreakdown?: Record<string, number> | null;
 } | null;
 
 type ReplicationRow = {
@@ -440,6 +441,48 @@ const ConnectionsTab = ({ stat }: { stat: ConnectionStat }) => {
       {stat.longestBlockedSeconds != null && stat.longestBlockedSeconds > 0 && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-3 text-sm text-rose-700 dark:text-rose-300">
           Longest blocked query: <strong>{stat.longestBlockedSeconds.toFixed(1)}s</strong>
+        </div>
+      )}
+
+      {/* Per-user breakdown */}
+      {stat.loginBreakdown && Object.keys(stat.loginBreakdown).length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Connections by User</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400">User / Login</th>
+                  <th className="pb-2 pr-4 font-medium text-slate-500 dark:text-slate-400 text-right">Connections</th>
+                  <th className="pb-2 font-medium text-slate-500 dark:text-slate-400">Share</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {Object.entries(stat.loginBreakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([user, count]) => {
+                    const pct = stat.total > 0 ? (count / stat.total) * 100 : 0;
+                    return (
+                      <tr key={user}>
+                        <td className="py-1.5 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">{user}</td>
+                        <td className="py-1.5 pr-4 text-right font-semibold text-slate-800 dark:text-slate-200">{count}</td>
+                        <td className="py-1.5 min-w-[100px]">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 flex-1 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-cyan-500 dark:bg-cyan-400"
+                                style={{ width: `${Math.min(pct, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-400 dark:text-slate-500 w-8 text-right">{pct.toFixed(0)}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

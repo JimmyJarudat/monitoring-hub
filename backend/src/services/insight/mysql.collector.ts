@@ -158,8 +158,20 @@ async function collectConnectionStat(conn: Connection): Promise<ConnectionStat> 
     `SHOW VARIABLES LIKE 'max_connections'`,
   );
 
+  const [userRows] = await conn.execute<any[]>(
+    `SELECT USER AS username, COUNT(*) AS cnt
+     FROM information_schema.PROCESSLIST
+     WHERE DB = DATABASE()
+     GROUP BY USER
+     ORDER BY cnt DESC`,
+  );
+
   const p = (processRows as any[])[0] ?? {};
   const maxConn = parseInt(String((maxRows as any[])[0]?.Value ?? "100"), 10);
+  const loginBreakdown: Record<string, number> = {};
+  for (const r of userRows as any[]) {
+    loginBreakdown[String(r.username ?? "(unknown)")] = parseInt(String(r.cnt), 10) || 0;
+  }
 
   return {
     total: parseInt(String(p.total ?? 0), 10),
@@ -170,6 +182,7 @@ async function collectConnectionStat(conn: Connection): Promise<ConnectionStat> 
     blockedCount: parseInt(String(p.blocked_count ?? 0), 10),
     longestBlockedSeconds:
       p.longest_blocked_seconds != null ? parseFloat(String(p.longest_blocked_seconds)) : null,
+    loginBreakdown,
   };
 }
 

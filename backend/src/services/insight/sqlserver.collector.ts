@@ -256,25 +256,42 @@ async function collectConnectionStat(pool: MssqlPool): Promise<ConnectionStat> {
     if (raw > 0) maxConnections = raw;
   } catch { /* insufficient privilege — keep default */ }
 
-  // Connection aggregates — use plain sys.dm_exec_sessions without JOIN
+  // Connection aggregates — filter to current database only
+  // blocking_session_id lives in sys.dm_exec_requests (not dm_exec_sessions on all editions)
   try {
     const sessResult = await pool.request().query(`
       SELECT
-        COUNT(*)                                                                   AS total,
-        SUM(CASE WHEN status = 'running'  THEN 1 ELSE 0 END)                      AS active,
-        SUM(CASE WHEN status = 'sleeping' AND open_transaction_count = 0
-                 THEN 1 ELSE 0 END)                                                AS idle,
-        SUM(CASE WHEN status = 'sleeping' AND open_transaction_count > 0
-                 THEN 1 ELSE 0 END)                                                AS idle_in_transaction,
-        SUM(CASE WHEN blocking_session_id > 0 THEN 1 ELSE 0 END)                  AS blocked_count,
-        MAX(CASE WHEN blocking_session_id > 0
-                 THEN DATEDIFF(SECOND, last_request_start_time, GETDATE())
-                 ELSE NULL END)                                                     AS longest_blocked_seconds
+        COUNT(*)                                                                        AS total,
+        SUM(CASE WHEN s.status = 'running'  THEN 1 ELSE 0 END)                         AS active,
+        SUM(CASE WHEN s.status = 'sleeping' AND s.open_transaction_count = 0
+                 THEN 1 ELSE 0 END)                                                     AS idle,
+        SUM(CASE WHEN s.status = 'sleeping' AND s.open_transaction_count > 0
+                 THEN 1 ELSE 0 END)                                                     AS idle_in_transaction,
+        SUM(CASE WHEN COALESCE(r.blocking_session_id, 0) > 0 THEN 1 ELSE 0 END)        AS blocked_count,
+        MAX(CASE WHEN COALESCE(r.blocking_session_id, 0) > 0
+                 THEN DATEDIFF(SECOND, r.start_time, GETDATE())
+                 ELSE NULL END)                                                          AS longest_blocked_seconds
+      FROM sys.dm_exec_sessions s
+      LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+      WHERE s.is_user_process = 1
+        AND DB_NAME(s.database_id) = DB_NAME()
+    `);
+
+    const loginResult = await pool.request().query(`
+      SELECT login_name, COUNT(*) AS cnt
       FROM sys.dm_exec_sessions
       WHERE is_user_process = 1
+        AND DB_NAME(database_id) = DB_NAME()
+      GROUP BY login_name
+      ORDER BY cnt DESC
     `);
 
     const s = sessResult.recordset[0] ?? {};
+    const loginBreakdown: Record<string, number> = {};
+    for (const r of loginResult.recordset as any[]) {
+      loginBreakdown[String(r.login_name ?? "(unknown)")] = parseInt(String(r.cnt), 10) || 0;
+    }
+
     return {
       total: parseInt(String(s.total ?? 0), 10),
       active: parseInt(String(s.active ?? 0), 10),
@@ -284,6 +301,7 @@ async function collectConnectionStat(pool: MssqlPool): Promise<ConnectionStat> {
       blockedCount: parseInt(String(s.blocked_count ?? 0), 10),
       longestBlockedSeconds:
         s.longest_blocked_seconds != null ? parseFloat(String(s.longest_blocked_seconds)) : null,
+      loginBreakdown,
     };
   } catch {
     // VIEW SERVER STATE not granted — fall back to current-session-only count

@@ -588,6 +588,7 @@ model DbConnectionStat {
   maxConnections        Int
   blockedCount          Int               @default(0)
   longestBlockedSeconds Float?
+  loginBreakdown        Json?
 
   @@map("db_connection_stats")
 }

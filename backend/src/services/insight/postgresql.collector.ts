@@ -47,6 +47,7 @@ export interface PgConnectionStat {
   maxConnections: number;
   blockedCount: number;
   longestBlockedSeconds: number | null;
+  loginBreakdown?: Record<string, number>;
 }
 
 export interface PgReplicationRow {
@@ -289,7 +290,21 @@ async function collectConnectionStat(client: pg.Client): Promise<PgConnectionSta
     `SELECT setting AS max_connections FROM pg_settings WHERE name = 'max_connections'`,
   );
 
+  const userRes = await client.query<{ username: string; cnt: string }>(
+    `SELECT COALESCE(usename, '(unknown)') AS username, COUNT(*) AS cnt
+     FROM pg_stat_activity
+     WHERE datname = current_database()
+       AND backend_type = 'client backend'
+     GROUP BY usename
+     ORDER BY COUNT(*) DESC`,
+  );
+
   const a = activityRes.rows[0];
+  const loginBreakdown: Record<string, number> = {};
+  for (const r of userRes.rows) {
+    loginBreakdown[r.username] = parseInt(r.cnt, 10);
+  }
+
   return {
     total: parseInt(a?.total ?? "0", 10),
     active: parseInt(a?.active ?? "0", 10),
@@ -299,6 +314,7 @@ async function collectConnectionStat(client: pg.Client): Promise<PgConnectionSta
     blockedCount: parseInt(a?.blocked_count ?? "0", 10),
     longestBlockedSeconds:
       a?.longest_blocked_seconds != null ? parseFloat(a.longest_blocked_seconds) : null,
+    loginBreakdown,
   };
 }
 

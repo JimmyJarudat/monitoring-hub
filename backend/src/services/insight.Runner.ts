@@ -132,6 +132,7 @@ const runInsightCollection = async (configId: string) => {
           maxConnections: result.connectionStat.maxConnections,
           blockedCount: result.connectionStat.blockedCount,
           longestBlockedSeconds: result.connectionStat.longestBlockedSeconds,
+          loginBreakdown: result.connectionStat.loginBreakdown ?? undefined,
         },
       });
       if (result.replicationStatus.length > 0) {
