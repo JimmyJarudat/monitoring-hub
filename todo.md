@@ -43,6 +43,11 @@
   - uptime
   - interface metrics
 - [x] DOCKER via Portainer
+  - endpoint overview
+  - container by ID / name
+  - managed stack by numeric ID
+  - managed stack by name
+  - external Swarm / Compose stack by Docker labels
 - [x] DATABASE
   - PostgreSQL
   - MySQL
@@ -204,15 +209,179 @@
 ---
 
 ## Remaining Known Gaps
-- [ ] Docker monitor: รองรับ external stack (lookup by name แทน numeric stackId) — URL รูปแบบ `/stacks/name?type=1&external=true` ยังเช็คไม่ได้ ต้องเพิ่ม `stackName` field และ `checkStackByName` ใน docker.Checker.ts
+- [x] Docker monitor: รองรับ target เดียวต่อ monitor (`stackId` หรือ `stackName` หรือ `containerId`) และรองรับ external stack ผ่าน `stackName` แล้ว — lookup `/api/stacks` ก่อน แล้ว fallback ไป Docker labels (`com.docker.stack.namespace`, `com.docker.compose.project`)
 
 
 - [x] Dark mode — implement แล้ว ใช้งานได้
 - [x] Monitor Active Window — เสร็จแล้ว (commit: feat: add monitor active windows)
 - [x] Incident Acknowledge timeline — แสดง "acknowledged by / at" แม้ incident จะ resolved แล้ว
-- [ ] CPU / RAM / Disk ยังเป็น baseline graph — ยังไม่มี threshold overlay / anomaly hints
-- [ ] Bind credential usage ให้เห็นจาก group / device context
-- [ ] Rollup summaries สำหรับ long-term charts
+- [x] CPU / RAM / Disk metrics polish — มี threshold overlay, anomaly hints, และ rollup summary แล้ว
+- [x] Bind credential usage ให้เห็นจาก group / device context
+- [x] Rollup summaries สำหรับ long-term charts
+- [x] Maintenance Window core — CRUD, monitor/group target, sidebar menu, และ runner suppress incident/alert ระหว่าง window
+- [x] Maintenance Window reports — toggle "Exclude planned downtime" ใน Reports page ตัด results ที่ตกอยู่ในช่วง maintenance window ออกจาก uptime calculation
+
+---
+
+## Feature: Report Export Overhaul
+
+> ปัญหาปัจจุบัน: export เป็น CSV/JSON/HTML-as-Excel ที่อ่านไม่ออก สรุปข้อมูลไม่ได้ ไม่มีกราฟ ไม่มีหน้าสรุป
+
+### เป้าหมาย
+
+แทนที่ระบบ export เดิม (CSV + JSON + HTML-Excel) ด้วย:
+1. **Excel จริงด้วย ExcelJS** — หลายชีท สีสวย มีกราฟ มี filter อ่านได้
+2. **PDF รายงานมืออาชีพ** — โลโก้บริษัท ชื่อบริษัท หลายหน้า เหมือนรีพอร์ตจริง
+3. **ตัดส่วน Export CSV ออก** — ไม่ต้องการแล้ว
+
+---
+
+### 1. Excel Export (ExcelJS)
+
+**Library:** `exceljs` (client-side via browser bundle หรือ generate ที่ backend)
+
+> แนะนำ: generate ที่ backend endpoint `/reports/export/excel` เพื่อให้ใช้ Node.js API ได้เต็มที่
+
+#### Sheet 1 — Executive Summary (หน้าแรก)
+
+```
+Row 1-3:   Header block — ชื่อระบบ, ช่วงเวลารายงาน, วันที่ generate, ชื่อบริษัท
+Row 5+:    Stat cards แถว (merged cells):
+             Report Uptime | Down Checks | Incidents | Avg Response | Fleet Uptime 24h
+Row 12+:   Status distribution table (UP / DEGRADED / DOWN counts + %)
+Row 18+:   Top 3 ปัญหา monitors (brief)
+```
+
+- สีพื้นหลัง header: `#0f172a` (slate-950) ตัวหนังสือขาว
+- stat cells ใช้สีตาม status (เขียว/แดง/เหลือง)
+- ใส่ border และ alternating row color
+
+#### Sheet 2 — Monitor Reliability
+
+| Monitor | Type | Checks | Uptime % | Down | Degraded | Avg Response | Last Status |
+- freeze row header
+- auto filter บน column ทั้งหมด
+- conditional formatting: Uptime < 95% → แดงอ่อน, < 99% → เหลือง, ≥ 99% → เขียวอ่อน
+- sort default: uptime ASC (แย่สุดอยู่บน)
+- Bar chart ข้าง table แสดง Top 10 Uptime
+
+#### Sheet 3 — Incident Report
+
+| Started | Monitor | Type | Status | Duration | Severity | Resolved At | Message |
+- conditional formatting: OPEN → แดง, ACKNOWLEDGED → เหลือง, RESOLVED → เขียว
+- auto filter
+- duration คำนวณและแสดง "2h 15m" format
+
+#### Sheet 4 — Group Summary
+
+| Group | Monitors | Checks | Uptime % | UP | Down | Degraded | Incidents | Avg Response |
+- uptime % bar mini chart ถ้า ExcelJS รองรับ
+- conditional formatting เหมือน Sheet 2
+
+#### Sheet 5 — Raw Results (sample)
+
+- Result samples (ไม่เกิน 500 แถว)
+- ใช้ Table style ของ Excel
+- Filter พร้อมใช้งาน
+
+---
+
+### 2. PDF Export
+
+**Library:** `@react-pdf/renderer` (client-side) หรือ `puppeteer` (server-side screenshot)
+
+> แนะนำ: `@react-pdf/renderer` — generate ใน browser ไม่ต้องการ server
+
+#### หน้า 1 — Cover Page
+
+```
+[โลโก้บริษัท]
+[ชื่อบริษัท / System Name]
+
+Availability Report
+[ช่วงเวลา: Week / Day / Month / Custom]
+Generated: [วันที่]
+```
+
+- พื้นหลัง: dark slate gradient
+- ตัวอักษร: ขาวบน dark / slate บน light
+
+#### หน้า 2 — Executive Summary
+
+- Stat cards 2×3 grid (Uptime, Down, Degraded, Incidents, Avg Response, Fleet 24h)
+- Pie chart สัดส่วน UP/DOWN/DEGRADED
+- ตาราง Top 5 ปัญหา monitors
+
+#### หน้า 3 — Monitor Reliability Ranking (ทั้งหมด)
+
+- ตารางเต็ม: Monitor, Uptime%, Down, Degraded, Avg Response
+- uptime bar mini visual (colored rectangle)
+- แบ่งหน้าอัตโนมัติถ้า monitors เยอะ
+
+#### หน้า 4 — Incident Report
+
+- ตาราง incidents: Started, Monitor, Duration, Status, Message
+- สี badge ตาม status
+
+#### หน้า 5 — Group Summary
+
+- ตาราง group: Group name, Monitors, Uptime%, Checks, Incidents
+- uptime bar visual
+
+#### หน้า N — Footer ทุกหน้า
+
+- ชื่อบริษัท | ชื่อระบบ | Page X of Y | Generated at [timestamp]
+
+---
+
+### 3. Company branding (Settings page)
+
+เพิ่มใน `/settings` tab ใหม่หรือ section ใน General:
+
+```
+Report Branding
+  Company name:    [____________]     ← ใช้ใน PDF cover + Excel header
+  Company logo:    [Upload logo]      ← รูปที่ใช้ใน PDF cover (PNG/SVG, max 2MB)
+  Report footer:   [____________]     ← footer text เช่น "Confidential"
+```
+
+- เก็บใน `SystemSetting` table เหมือน branding เดิม (key-value)
+- `report_company_name`, `report_logo_url`, `report_footer_text`
+- ถ้าไม่ตั้งค่า ใช้ `system_name` และ `system_logo_url` เป็น fallback
+
+---
+
+### Implementation order
+
+- [x] **Step 1 — Report Branding (Settings)** ✅ commit: `feat: add report branding config`
+  - Backend: `reportBranding` section ใน `systemConfig.service.ts` (companyName, logoUrl, footerText)
+  - Admin routes: PATCH `/admin/system-config` รองรับ reportBranding patch, POST/DELETE `/admin/system-config/report-logo`
+  - Context: `ReportBrandingConfig` type + `DEFAULTS` ใน `systemConfig.context.tsx`
+  - Settings UI: card "Report Branding" ใน `/settings` — company name input, footer text input, logo upload/remove (PNG/JPG/WEBP/SVG ≤2MB)
+  - i18n: EN/TH keys ครบ (`settings.sections.reportBranding.*`, `settings.reportCompanyName`, ฯลฯ)
+
+- [x] **Step 2 — Excel Export (ExcelJS)** ✅ commit: `feat: Excel report export via ExcelJS (5-sheet workbook)`
+  - Backend: `excelExport.service.ts` — generate workbook จาก Prisma data โดยตรง
+  - Route: `GET /reports/export/excel?from&to&rangeLabel` → ส่ง `.xlsx` binary
+  - 5 Sheets สำเร็จรูป:
+    - Sheet 1 Executive Summary: company name header, KPI row (Checks/UP/DEGRADED/DOWN/Open Incidents/Avg Response), uptime banner color-coded, status distribution
+    - Sheet 2 Monitor Reliability: sort worst-first, conditional format Uptime % (≥99% เขียว, ≥95% เหลือง, <95% แดง), freeze row + auto-filter
+    - Sheet 3 Incident Report: color-coded status (OPEN=แดง, ACKNOWLEDGED=เหลือง, RESOLVED=เขียว), freeze + auto-filter
+    - Sheet 4 Group Summary: conditional format uptime เหมือน Sheet 2
+    - Sheet 5 Raw Results: max 500 rows, freeze + auto-filter
+  - Frontend: ลบปุ่ม CSV/JSON/HTML-Excel ออก แทนด้วยปุ่ม "Export Excel" (เขียว) เรียก backend endpoint แล้ว download `.xlsx`
+  - i18n: เพิ่ม `reportsPage.exportingExcel` EN/TH
+
+- [x] **Step 3 — PDF Export** ✅ commit: `feat: PDF report export via @react-pdf/renderer`
+  - Install: `@react-pdf/renderer` ใน frontend
+  - Component: `frontend/src/components/reports/AvailabilityReportPdf.tsx`
+  - 5 หน้า: Cover (logo+company+range) → Executive Summary (uptime banner, KPI grid, status dist, top 5) → Monitor Reliability (ranked table + uptime bar mini visual) → Incident Report (status badge) → Group Summary (uptime bar)
+  - Footer ทุกหน้า: company | footer text | Page X of Y
+  - Branding จาก `useSystemConfig()` — reportBranding.logoUrl → fallback general.logoUrl
+  - ปุ่ม "Export PDF" (สีแดง) ใน Reports page ถัดจากปุ่ม Excel
+  - i18n: `reportsPage.exportPdf`, `reportsPage.exportingPdf` EN/TH ✅
+
+- [x] **Step 4 — i18n สำหรับปุ่ม PDF** ✅ รวมใน Step 3 แล้ว
 
 ---
 
@@ -332,7 +501,7 @@ if (monitor.activeWindowEnabled) {
 
 ---------------------- END Monitor ---------------------------
 
-พอจบส่วนแรกทั้งหมดก่อน ค่อยมาเริ่มวางแฟนส่วนนี้   
+พอจบส่วนแรกทั้งหมดก่อน ค่อยมาเริ่มวางแฟนส่วนนี้
 
 ---
 
@@ -543,18 +712,22 @@ MongoDB
   db.grantRolesToUser("<user>", [{ role: "clusterMonitor", db: "admin" }])
 ```
 
+
 ---
 
 ### Implementation order (แนะนำ)
 
-- [ ] Schema: สร้างตาราง insight ทั้งหมด + migration
-- [ ] Insight config UI: toggle + interval + threshold ใน monitor edit page
-- [ ] Collector: PostgreSQL ก่อน (ข้อมูลครบ, query ตรงไปตรงมา)
-- [ ] Insight runner: scheduled job + last_collected_at tracking
-- [ ] หน้า DB Insight: stat cards + tabs (slow / index / table+file / connections)
-- [ ] Alert rules: เพิ่ม DB Insight condition types เข้าระบบ alert เดิม
-- [ ] Collector: MySQL / MariaDB
-- [ ] Collector: SQL Server / Azure SQL
-- [ ] Collector: MongoDB
-- [ ] Replication tab
+- [x] Schema: สร้างตาราง insight ทั้งหมด + migration
+- [x] Insight config UI: toggle + interval + threshold ใน monitor edit page
+- [x] Collector: PostgreSQL
+- [x] Insight runner: scheduled job + last_collected_at tracking
+- [x] หน้า DB Insight: stat cards + tabs (slow / index / table+file / connections / replication)
+- [x] Collector: MySQL / MariaDB
+- [x] Collector: SQL Server / Azure SQL — filter to monitored DB, per-login breakdown
+- [x] Connections tab: per-user/login breakdown table (all 3 DB types)
+- [x] Replication tab: AlwaysOn AG + Log Shipping + Mirroring fallback chain
+- [x] Alert rules: เพิ่ม DB Insight condition types เข้าระบบ alert เดิม
+- [x] Alert runner: evaluate DB Insight snapshot แล้วเปิด/ปิด incident + ส่ง notification ตาม rule
+- [x] Alert UI: แสดง threshold ของ size metrics เป็น MB/GB/TB และแปลงกลับเป็น bytes ตอนบันทึก
+- [x] Collector: MongoDB
 - [ ] Explain plan viewer (phase 2)

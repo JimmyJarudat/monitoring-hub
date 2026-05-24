@@ -36,6 +36,7 @@ export const alertRuleRoutes = new Elysia({ prefix: "/alert-rules" })
               name: true,
               type: true,
               enabled: true,
+              config: true,
             },
           },
           channels: {

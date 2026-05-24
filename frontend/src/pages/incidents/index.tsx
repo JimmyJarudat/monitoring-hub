@@ -6,6 +6,7 @@ import i18n from "@/i18n";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 type MonitorType =
@@ -156,7 +157,7 @@ const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
   { label: "SNMP", value: "SNMP" },
   { label: "SYSTEM", value: "SYSTEM" },
   { label: "DOCKER", value: "DOCKER" },
-  { label: "DATABASE", value: "DATABASE" },
+  { label: "Database (Test Connection)", value: "DATABASE" },
 ];
 
 const IncidentsPage = () => {
@@ -613,7 +614,7 @@ const IncidentsPage = () => {
                         {incident.monitor.name}
                       </Link>
                       <div className="text-xs text-slate-500">
-                        {incident.monitor.type} · {getTarget(incident.monitor)}
+                        {formatMonitorTypeLabel(incident.monitor.type)} · {getTarget(incident.monitor)}
                       </div>
                     </td>
                     <td className="px-4 py-3">

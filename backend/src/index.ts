@@ -7,6 +7,7 @@ import { AuthError } from "./middleware/auth";
 import { securityMiddleware } from "./middleware/security";
 import { fail } from "./lib/response";
 import { monitorRunner } from "./services/monitor.Runner";
+import { insightRunner } from "./services/insight.Runner";
 import { startNotificationRetryScheduler } from "./services/notification.service";
 import { startRetentionScheduler } from "./services/retention.service";
 import { startScheduledReportScheduler } from "./services/scheduledReport.service";
@@ -117,6 +118,7 @@ const bootstrap = async () => {
     .listen({ port: config.port, hostname: config.host });
 
   monitorRunner.start();
+  void insightRunner.start();
   startNotificationRetryScheduler();
   startRetentionScheduler();
   startScheduledReportScheduler();

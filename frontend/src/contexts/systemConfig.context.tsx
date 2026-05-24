@@ -37,6 +37,12 @@ export type ScheduledReportConfig = {
   channelIds: string[];
 };
 
+export type ReportBrandingConfig = {
+  companyName: string;
+  logoUrl: string | null;
+  footerText: string;
+};
+
 export type SystemConfig = {
   general: GeneralConfig;
   alerting: AlertingConfig;
@@ -44,6 +50,7 @@ export type SystemConfig = {
   security: SecurityConfig;
   email: EmailConfig;
   scheduledReport: ScheduledReportConfig;
+  reportBranding: ReportBrandingConfig;
 };
 
 const DEFAULTS: SystemConfig = {
@@ -61,6 +68,7 @@ const DEFAULTS: SystemConfig = {
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
   scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
+  reportBranding: { companyName: "", logoUrl: null, footerText: "" },
 };
 
 type ApiResponse<T> = { success: true; data: T } | { success: false; message: string };

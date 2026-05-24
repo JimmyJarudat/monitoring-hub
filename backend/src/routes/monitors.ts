@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { fail, ok } from "../lib/response";
 import { authMiddleware } from "../middleware/auth";
 import { notifyAdmins } from "../services/appNotification.service";
+import { DB_INSIGHT_ALERT_METRICS, isDbInsightAlertMetric } from "../services/dbInsightAlert.service";
 import { runMonitorCheck } from "../services/monitor.Runner";
 import { notifyIncidentNow } from "../services/notification.service";
 
@@ -28,7 +29,7 @@ type CheckedAtFilter = {
   lte?: Date;
 };
 type MonitorStatusFilter = "UP" | "DOWN" | "DEGRADED";
-type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
+type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET" | "PRINTER";
 type CredentialType = "SNMP_COMMUNITY" | "USERNAME_PASSWORD" | "API_TOKEN" | "SSH_KEY" | "CLOUDFLARE_ACCESS";
 type ActiveWindowInput = {
   activeWindowEnabled?: boolean;
@@ -152,11 +153,16 @@ const allowedAlertMetrics = new Set([
   "cpu.used_pct",
   "memory.used_pct",
   "disk.used_pct",
+  "printer.toner_pct",
+  "printer.paper_pct",
+  "printer.error_count",
+  ...DB_INSIGHT_ALERT_METRICS,
 ]);
 
 const validateAlertRuleInput = (
   monitorType: MonitorType,
   body: { metric: string; threshold: number },
+  monitorConfig?: unknown,
 ) => {
   if (!allowedAlertMetrics.has(body.metric)) return "metric This metric is not supported yet.";
   if (!Number.isFinite(body.threshold)) return "Threshold must be a number.";
@@ -166,11 +172,33 @@ const validateAlertRuleInput = (
   if (body.metric === "response_time" && body.threshold < 0) {
     return "Response time threshold must be greater than or equal to 0.";
   }
+  if (isDbInsightAlertMetric(body.metric)) {
+    if (monitorType !== "DATABASE") {
+      return "DB Insight rules can only be used with DATABASE monitors.";
+    }
+    if (body.threshold < 0) {
+      return "DB Insight thresholds must be greater than or equal to 0.";
+    }
+  }
+  if (body.metric.startsWith("printer.") && monitorType !== "SNMP") {
+    return "Printer rules can only be used with SNMP printer monitors.";
+  }
+  if (body.metric.startsWith("printer.")) {
+    const config = isMonitorConfig(monitorConfig) ? monitorConfig : {};
+    if (typeof config.printerPreset !== "string" || !config.printerPreset.trim()) {
+      return "Printer rules require an SNMP monitor with printerPreset configured.";
+    }
+  }
   if (body.metric.endsWith("_pct")) {
-    if (monitorType !== "SYSTEM" && monitorType !== "SNMP") {
+    if (body.metric.startsWith("printer.")) {
+      if (monitorType !== "SNMP") return "Printer rules can only be used with SNMP printer monitors.";
+    } else if (monitorType !== "SYSTEM" && monitorType !== "SNMP") {
       return "CPU/RAM/Disk rules can only be used with SYSTEM or SNMP monitors.";
     }
     if (body.threshold < 0 || body.threshold > 100) return "percent threshold must be 0-100";
+  }
+  if (body.metric === "printer.error_count" && body.threshold < 0) {
+    return "Printer error count threshold must be greater than or equal to 0.";
   }
   return null;
 };
@@ -305,6 +333,18 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig, credent
 
   if (type === "DOCKER" && (!config.portainerUrl || !config.endpointId || (!config.apiKey && !credentialId))) {
     return "DOCKER monitor requires config.portainerUrl, config.endpointId and either config.apiKey or credentialId";
+  }
+
+  if (type === "DOCKER") {
+    const targetCount = [
+      typeof config.stackId === "number" && Number.isFinite(config.stackId),
+      typeof config.stackName === "string" && config.stackName.trim().length > 0,
+      typeof config.containerId === "string" && config.containerId.trim().length > 0,
+    ].filter(Boolean).length;
+
+    if (targetCount > 1) {
+      return "DOCKER monitor accepts only one target: stackId, stackName, or containerId";
+    }
   }
 
   if (type === "DATABASE") {
@@ -912,14 +952,14 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       const monitor = await prisma.monitor.findUnique({
         where: { id: params.id },
-        select: { id: true, type: true },
+        select: { id: true, type: true, config: true },
       });
       if (!monitor) {
         set.status = 404;
         return fail("Monitor not found");
       }
 
-      const validationError = validateAlertRuleInput(monitor.type as MonitorType, body);
+      const validationError = validateAlertRuleInput(monitor.type as MonitorType, body, monitor.config);
       if (validationError) {
         set.status = 400;
         return fail(validationError);
@@ -963,7 +1003,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
 
       const existing = await prisma.alertRule.findFirst({
         where: { id: params.ruleId, monitorId: params.id },
-        include: { monitor: { select: { type: true } } },
+        include: { monitor: { select: { type: true, config: true } } },
       });
       if (!existing) {
         set.status = 404;
@@ -975,7 +1015,7 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
       const validationError = validateAlertRuleInput(existing.monitor.type as MonitorType, {
         metric: nextMetric,
         threshold: nextThreshold,
-      });
+      }, existing.monitor.config);
       if (validationError) {
         set.status = 400;
         return fail(validationError);
@@ -1117,5 +1157,52 @@ export const monitorRoutes = new Elysia({ prefix: "/monitors" })
     },
     {
       params: t.Object({ id: t.String() }),
+    },
+  )
+  // ── DB Insight config ──────────────────────────────────────────
+  .get(
+    "/:id/insight-config",
+    async ({ params, set }) => {
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.id } });
+      if (!monitor) { set.status = 404; return fail("Monitor not found"); }
+      const config = await prisma.dbInsightConfig.findUnique({ where: { monitorId: params.id } });
+      return ok(config);
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  .patch(
+    "/:id/insight-config",
+    async ({ params, body, set, currentUser }) => {
+      requireAdminRole(currentUser.role);
+      const monitor = await prisma.monitor.findUnique({ where: { id: params.id } });
+      if (!monitor) { set.status = 404; return fail("Monitor not found"); }
+      if (monitor.type !== "DATABASE") { set.status = 400; return fail("DB Insight is only available for DATABASE monitors"); }
+
+      const config = await prisma.dbInsightConfig.upsert({
+        where: { monitorId: params.id },
+        create: {
+          monitorId: params.id,
+          enabled: body.enabled,
+          collectIntervalMinutes: body.collectIntervalMinutes,
+          slowQueryThresholdMs: body.slowQueryThresholdMs,
+          topNQueries: body.topNQueries,
+        },
+        update: {
+          enabled: body.enabled,
+          collectIntervalMinutes: body.collectIntervalMinutes,
+          slowQueryThresholdMs: body.slowQueryThresholdMs,
+          topNQueries: body.topNQueries,
+        },
+      });
+      return ok(config);
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        enabled: t.Boolean(),
+        collectIntervalMinutes: t.Integer({ minimum: 1, maximum: 1440 }),
+        slowQueryThresholdMs: t.Integer({ minimum: 100 }),
+        topNQueries: t.Integer({ minimum: 1, maximum: 100 }),
+      }),
     },
   );

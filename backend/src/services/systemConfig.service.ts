@@ -43,6 +43,12 @@ export type ScheduledReportConfig = {
   channelIds: string[];
 };
 
+export type ReportBrandingConfig = {
+  companyName: string;
+  logoUrl: string | null;
+  footerText: string;
+};
+
 export type SystemConfig = {
   general: GeneralConfig;
   alerting: AlertingConfig;
@@ -50,6 +56,7 @@ export type SystemConfig = {
   security: SecurityConfig;
   email: EmailConfig;
   scheduledReport: ScheduledReportConfig;
+  reportBranding: ReportBrandingConfig;
 };
 
 export const SYSTEM_CONFIG_DEFAULTS: SystemConfig = {
@@ -67,6 +74,7 @@ export const SYSTEM_CONFIG_DEFAULTS: SystemConfig = {
   },
   email: { enabled: true, host: "", port: 587, secure: false, username: "", password: "", from: "" },
   scheduledReport: { enabled: false, time: "08:00", channelIds: [] },
+  reportBranding: { companyName: "", logoUrl: null, footerText: "" },
 };
 
 const KEYS = {
@@ -76,6 +84,7 @@ const KEYS = {
   security: "config.security",
   email: "config.email",
   scheduledReport: "config.scheduled_report",
+  reportBranding: "config.report_branding",
 } as const;
 
 const safeParse = <T>(raw: string | null | undefined, defaults: T): T => {
@@ -104,6 +113,7 @@ export const getSystemConfig = async (): Promise<SystemConfig> => {
       password: email.password ? "••••••••" : "",
     },
     scheduledReport: safeParse(map[KEYS.scheduledReport], SYSTEM_CONFIG_DEFAULTS.scheduledReport),
+    reportBranding: safeParse(map[KEYS.reportBranding], SYSTEM_CONFIG_DEFAULTS.reportBranding),
   };
 };
 
@@ -131,6 +141,7 @@ export const saveSystemConfig = async (patch: Partial<SystemConfig>): Promise<vo
   if (patch.monitorDefaults) upserts.push(upsert(KEYS.monitorDefaults, patch.monitorDefaults));
   if (patch.security) upserts.push(upsert(KEYS.security, patch.security));
   if (patch.scheduledReport) upserts.push(upsert(KEYS.scheduledReport, patch.scheduledReport));
+  if (patch.reportBranding) upserts.push(upsert(KEYS.reportBranding, patch.reportBranding));
   if (patch.email) {
     const current = await getResolvedEmailConfig();
     const next = { ...current, ...patch.email };

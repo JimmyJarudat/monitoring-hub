@@ -166,6 +166,8 @@ model Monitor {
   groups               MonitorGroupMember[]
   alertRules           AlertRule[]
   incidents            Incident[]
+  maintenanceWindows   MaintenanceWindow[]
+  dbInsightConfig      DbInsightConfig?
 
   @@index([credentialId])
   @@index([type, enabled])
@@ -236,6 +238,7 @@ model MonitorGroup {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   monitors    MonitorGroupMember[]
+  maintenanceWindows MaintenanceWindow[]
 
   @@map("monitor_groups")
 }
@@ -362,6 +365,26 @@ enum IncidentStatus {
   RESOLVED
 }
 
+model MaintenanceWindow {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  enabled     Boolean       @default(true)
+  monitorId   String?
+  monitor     Monitor?      @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       MonitorGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([enabled, startsAt, endsAt])
+  @@index([monitorId])
+  @@index([groupId])
+  @@map("maintenance_windows")
+}
+
 model SystemSetting {
   key       String   @id
   value     String
@@ -444,4 +467,148 @@ model Fail2BanEvent {
 enum Fail2BanAction {
   BAN
   UNBAN
+}
+
+// ─── DB Insight ───────────────────────────────────────────────
+
+model DbInsightConfig {
+  id                     String              @id @default(cuid())
+  monitorId              String              @unique
+  monitor                Monitor             @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  enabled                Boolean             @default(false)
+  collectIntervalMinutes Int                 @default(5)
+  slowQueryThresholdMs   Int                 @default(1000)
+  topNQueries            Int                 @default(20)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  snapshots              DbInsightSnapshot[]
+
+  @@map("db_insight_configs")
+}
+
+model DbInsightSnapshot {
+  id                   String                @id @default(cuid())
+  configId             String
+  config               DbInsightConfig       @relation(fields: [configId], references: [id], onDelete: Cascade)
+  monitorId            String
+  dbType               String
+  collectedAt          DateTime              @default(now())
+  collectionDurationMs Int?
+  errorMessage         String?
+  slowQueries          DbSlowQuery[]
+  indexStats           DbIndexStat[]
+  tableSizes           DbTableSize[]
+  fileSizes            DbFileSize[]
+  connectionStats      DbConnectionStat?
+  replicationStatus    DbReplicationStatus[]
+
+  @@index([monitorId, collectedAt])
+  @@index([configId, collectedAt])
+  @@map("db_insight_snapshots")
+}
+
+model DbSlowQuery {
+  id             String            @id @default(cuid())
+  snapshotId     String
+  snapshot       DbInsightSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  queryHash      String
+  queryText      String
+  avgDurationMs  Float
+  maxDurationMs  Float
+  callCount      Int
+  rowsExamined   Int?
+
+  @@index([snapshotId, avgDurationMs])
+  @@map("db_slow_queries")
+}
+
+model DbIndexStat {
+  id           String            @id @default(cuid())
+  snapshotId   String
+  snapshot     DbInsightSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  tableName    String
+  indexName    String?
+  status       DbIndexStatus
+  scansCount   Int               @default(0)
+  sizeBytes    BigInt?
+  lastUsed     DateTime?
+  suggestedSql String?
+
+  @@index([snapshotId, status])
+  @@map("db_index_stats")
+}
+
+enum DbIndexStatus {
+  MISSING
+  UNUSED
+  HEALTHY
+}
+
+model DbTableSize {
+  id             String            @id @default(cuid())
+  snapshotId     String
+  snapshot       DbInsightSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  tableName      String
+  totalBytes     BigInt
+  dataBytes      BigInt
+  indexBytes     BigInt
+  rowCount       BigInt
+  lastAnalyzedAt DateTime?
+
+  @@index([snapshotId, totalBytes])
+  @@map("db_table_sizes")
+}
+
+model DbFileSize {
+  id         String            @id @default(cuid())
+  snapshotId String
+  snapshot   DbInsightSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  fileType   DbFileType
+  filePath   String
+  sizeBytes  BigInt
+
+  @@index([snapshotId])
+  @@map("db_file_sizes")
+}
+
+enum DbFileType {
+  DATA
+  LOG
+  WAL
+}
+
+model DbConnectionStat {
+  id                    String            @id @default(cuid())
+  snapshotId            String            @unique
+  snapshot              DbInsightSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  total                 Int
+  active                Int
+  idle                  Int
+  idleInTransaction     Int
+  maxConnections        Int
+  blockedCount          Int               @default(0)
+  longestBlockedSeconds Float?
+  loginBreakdown        Json?
+  processListJson       Json?
+
+  @@map("db_connection_stats")
+}
+
+model DbReplicationStatus {
+  id          String              @id @default(cuid())
+  snapshotId  String
+  snapshot    DbInsightSnapshot   @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  replicaName String
+  state       DbReplicationState
+  lagSeconds  Float?
+  detailJson  Json?
+
+  @@index([snapshotId])
+  @@map("db_replication_status")
+}
+
+enum DbReplicationState {
+  STREAMING
+  LAGGING
+  STOPPED
 }

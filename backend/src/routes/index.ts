@@ -15,7 +15,10 @@ import { domainRoutes } from "./domain.route";
 import { notificationRoutes } from "./notifications";
 import { apiTokenRoutes } from "./apiTokens";
 import { ok } from "../lib/response";
-import { serverLogRoutes } from "./server-logs";
+import { serverLogRoutes } from "../controllers/server-logs.controller";
+import { maintenanceWindowRoutes } from "./maintenanceWindows";
+import { reportRoutes } from "./reports";
+import { dbInsightRoutes } from "./dbInsight";
 
 // Public routes — ไม่ต้องมี token
 export const publicRoutes = new Elysia()
@@ -47,8 +50,11 @@ export const protectedRoutes = new Elysia()
   .use(credentialRoutes) // /credentials
   .use(channelRoutes) // /channels
   .use(notificationRoutes) // /notifications
+  .use(maintenanceWindowRoutes) // /maintenance-windows
   .use(userRoutes) // /admin/users
   .use(adminRoutes) // /admin
   .use(domainRoutes) // /domain
   .use(apiTokenRoutes) // /api-tokens
-  .use(serverLogRoutes); // /server-logs monitor
+  .use(serverLogRoutes) // /server-logs monitor
+  .use(reportRoutes) // /reports
+  .use(dbInsightRoutes); // /db-insight

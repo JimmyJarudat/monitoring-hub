@@ -35,6 +35,13 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
                 enabled: true,
                 interval: true,
                 config: true,
+                credential: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                  },
+                },
                 results: {
                   orderBy: { checkedAt: "desc" },
                   take: 1,
@@ -89,6 +96,13 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
                   enabled: true,
                   interval: true,
                   config: true,
+                  credential: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                    },
+                  },
                   results: {
                     orderBy: { checkedAt: "desc" },
                     take: 1,
@@ -156,6 +170,13 @@ export const groupRoutes = new Elysia({ prefix: "/groups" })
                     enabled: true,
                     interval: true,
                     config: true,
+                    credential: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                      },
+                    },
                   },
                 },
               },

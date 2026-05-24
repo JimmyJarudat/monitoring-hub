@@ -1,4 +1,4 @@
-export type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET";
+export type DeviceMetricGroup = "SYSTEM" | "DISK" | "NET" | "PRINTER";
 
 export type DeviceMetricSample = {
   metricGroup: DeviceMetricGroup;

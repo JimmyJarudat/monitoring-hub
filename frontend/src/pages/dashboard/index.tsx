@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -660,7 +661,7 @@ const DashboardPage = () => {
                               <p className="truncate text-sm font-semibold text-slate-950">{monitor.name}</p>
                             </div>
                             <p className="mt-1 truncate text-xs text-slate-500">
-                              {monitor.type} · {getTarget(monitor.config)}
+                              {formatMonitorTypeLabel(monitor.type)} · {getTarget(monitor.config)}
                             </p>
                           </div>
                           <div className="text-xs text-slate-500">
@@ -760,7 +761,7 @@ const DashboardPage = () => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className={`h-2.5 w-2.5 rounded-full ${typeAccentClasses[index % typeAccentClasses.length]}`} />
-                            <span className="text-sm font-medium text-slate-700">{item.type}</span>
+                            <span className="text-sm font-medium text-slate-700">{formatMonitorTypeLabel(item.type)}</span>
                           </div>
                           <span className="text-sm font-semibold text-slate-950">{item.count}</span>
                         </div>

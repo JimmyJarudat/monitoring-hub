@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -73,7 +74,7 @@ const typeOptions: Array<{ label: string; value: "ALL" | MonitorType }> = [
   { label: "SNMP", value: "SNMP" },
   { label: "SYSTEM", value: "SYSTEM" },
   { label: "DOCKER", value: "DOCKER" },
-  { label: "DATABASE", value: "DATABASE" },
+  { label: "Database (Test Connection)", value: "DATABASE" },
 ];
 
 const presetDurationsMs: Record<Exclude<TimeRangePreset, "custom">, number> = {
@@ -534,7 +535,7 @@ const ResultsPage = () => {
                       {result.monitor.name}
                     </Link>
                     <div className="text-xs text-slate-500">
-                      {result.monitor.type} · {t("monitors.intervalEvery", { interval: result.monitor.interval })}
+                      {formatMonitorTypeLabel(result.monitor.type)} · {t("monitors.intervalEvery", { interval: result.monitor.interval })}
                     </div>
                   </td>
                   <td className="max-w-xs px-4 py-3 text-slate-600">

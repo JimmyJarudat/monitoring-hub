@@ -58,6 +58,7 @@ type FormState = {
   cfAccessCredentialId: string;
   endpointId: string;
   stackId: string;
+  stackName: string;
   containerId: string;
 };
 
@@ -114,17 +115,17 @@ const monitorTypes: Array<{ label: string; value: MonitorType; descriptionKey: s
     descriptionKey: "newMonitor.typeDescriptions.DNS",
   },
   {
-    label: "SNMP",
+    label: "Network / Printer / Custom SNMP",
     value: "SNMP",
     descriptionKey: "newMonitor.typeDescriptions.SNMP",
   },
   {
-    label: "System",
+    label: "System (SNMP)",
     value: "SYSTEM",
     descriptionKey: "newMonitor.typeDescriptions.SYSTEM",
   },
   { label: "Docker", value: "DOCKER", descriptionKey: "newMonitor.typeDescriptions.DOCKER" },
-  { label: "Database", value: "DATABASE", descriptionKey: "newMonitor.typeDescriptions.DATABASE" },
+  { label: "Database (Test Connection)", value: "DATABASE", descriptionKey: "newMonitor.typeDescriptions.DATABASE" },
 ];
 
 const TCP_PRESETS: Array<{ label: string; value: string; port: string }> = [
@@ -217,6 +218,7 @@ const initialForm: FormState = {
   cfAccessCredentialId: "",
   endpointId: "1",
   stackId: "",
+  stackName: "",
   containerId: "",
 };
 
@@ -330,6 +332,7 @@ const buildConfig = (form: FormState) => {
       cfAccessCredentialId: form.cfAccessCredentialId,
       endpointId: Number(form.endpointId),
       ...(form.stackId ? { stackId: Number(form.stackId) } : {}),
+      ...(form.stackName.trim() ? { stackName: form.stackName.trim() } : {}),
       ...(form.containerId ? { containerId: form.containerId } : {}),
     });
   }
@@ -456,9 +459,10 @@ const TYPE_GUIDES: Record<MonitorType, TypeGuide> = {
       { name: "API key", desc: "Create it in Portainer → User settings → Access tokens", required: true },
       { name: "Endpoint ID", desc: "Environment ID in Portainer, visible in URLs such as /#!/1/docker → ID = 1", required: true },
       { name: "Stack ID (recommended)", desc: "Numeric Stack ID in Portainer, such as 12" },
+      { name: "Stack name", desc: "Managed or external stack name, such as monitoring_hub, portainer, or wireguard" },
       { name: "Container ID / Name", desc: "Use when not checking a Stack; enter container name or short ID such as nginx or abc123def" },
     ],
-    tip: "Priority: Stack ID → Container ID/Name → Endpoint overview when both are blank.",
+    tip: "Use only one target: Stack ID, Stack name, or Container ID/Name. Leave all blank for endpoint overview.",
   },
   DATABASE: {
     summary: "Open a database connection and run a simple query to verify responsiveness.",
@@ -544,9 +548,36 @@ const AddMonitorPage = () => {
     () => availableCredentials.find((credential) => credential.id === selectedCredentialId) ?? null,
     [availableCredentials, selectedCredentialId],
   );
+  const hasDockerStackId = form.stackId.trim().length > 0;
+  const hasDockerStackName = form.stackName.trim().length > 0;
+  const hasDockerContainerId = form.containerId.trim().length > 0;
+  const isStackIdDisabled = hasDockerStackName || hasDockerContainerId;
+  const isStackNameDisabled = hasDockerStackId || hasDockerContainerId;
+  const isContainerIdDisabled = hasDockerStackId || hasDockerStackName;
+  const dockerTargetInputClass =
+    "mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-300";
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+
+      if (key === "stackId" && typeof value === "string" && value.trim()) {
+        next.stackName = "";
+        next.containerId = "";
+      }
+
+      if (key === "stackName" && typeof value === "string" && value.trim()) {
+        next.stackId = "";
+        next.containerId = "";
+      }
+
+      if (key === "containerId" && typeof value === "string" && value.trim()) {
+        next.stackId = "";
+        next.stackName = "";
+      }
+
+      return next;
+    });
   };
 
   const toggleActiveWindowDay = (day: number) => {
@@ -1489,20 +1520,33 @@ const AddMonitorPage = () => {
                       Stack ID <span className="text-xs font-normal text-cyan-600">({t("newMonitor.recommended")})</span>
                     </span>
                     <input
-                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      className={dockerTargetInputClass}
                       type="number"
                       value={form.stackId}
                       onChange={(event) => updateField("stackId", event.target.value)}
                       placeholder={t("newMonitor.stackIdPlaceholder")}
+                      disabled={isStackIdDisabled}
                     />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">{t("newMonitor.stackName")}</span>
+                    <input
+                      className={dockerTargetInputClass}
+                      value={form.stackName}
+                      onChange={(event) => updateField("stackName", event.target.value)}
+                      placeholder={t("newMonitor.stackNamePlaceholder")}
+                      disabled={isStackNameDisabled}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">{t("newMonitor.stackNameHint")}</p>
                   </label>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">{t("newMonitor.containerIdName")}</span>
                     <input
-                      className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      className={dockerTargetInputClass}
                       value={form.containerId}
                       onChange={(event) => updateField("containerId", event.target.value)}
                       placeholder={t("newMonitor.containerPlaceholder")}
+                      disabled={isContainerIdDisabled}
                     />
                   </label>
                 </>

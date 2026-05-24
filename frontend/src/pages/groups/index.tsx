@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
 import { isAdminUser } from "@/utils/permissions";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -70,7 +71,7 @@ const statusStyles: Record<MonitorStatus, string> = {
 
 const typeLabel = (type: MonitorType) => {
   if (type === "TLS_CERT") return "TLS";
-  return type;
+  return formatMonitorTypeLabel(type);
 };
 
 const formatDate = (value: string, locale: string) =>

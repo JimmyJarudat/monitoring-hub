@@ -17,6 +17,7 @@ import {
 import { toast } from "react-toastify";
 import { useSession } from "@/contexts/session.context";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 import { isAdminUser } from "@/utils/permissions";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
@@ -113,7 +114,7 @@ type PrinterInfo = {
   printerStatus?: number;
   printerStatusLabel?: string;
   errorBits?: string[];
-  toners?: Array<{ name: string; level: number; max: number; percent: number | null }>;
+  toners?: Array<{ name: string; color?: string; level: number; max: number; percent: number | null }>;
   papers?: Array<{ name: string; level: number; max: number; percent: number | null }>;
 };
 
@@ -194,10 +195,20 @@ type ThresholdForm = {
   ramPct: string;
   diskPct: string;
 };
+
+const sizeUnits = [
+  { value: "MB", multiplier: 1024 ** 2 },
+  { value: "GB", multiplier: 1024 ** 3 },
+  { value: "TB", multiplier: 1024 ** 4 },
+] as const;
+
+type SizeUnit = (typeof sizeUnits)[number]["value"];
+
 type AlertRuleForm = {
   metric: string;
   operator: AlertOperator;
   threshold: string;
+  thresholdSizeUnit: SizeUnit;
   severity: AlertSeverity;
   enabled: boolean;
   channelIds: string[];
@@ -330,6 +341,67 @@ const alertMetricLabels: Record<string, string> = {
   "cpu.used_pct": "CPU usage",
   "memory.used_pct": "RAM usage",
   "disk.used_pct": "Disk usage",
+  "printer.toner_pct": "Printer toner",
+  "printer.paper_pct": "Printer paper",
+  "printer.error_count": "Printer errors",
+  "db.slow_query_avg_ms": "DB slow query avg",
+  "db.slow_query_count": "DB slow query count",
+  "db.log_file_size_bytes": "DB log file size",
+  "db.data_file_size_bytes": "DB data file size",
+  "db.table_size_bytes": "DB largest table",
+  "db.active_connections_pct": "DB active connections",
+  "db.replication_lag_seconds": "DB replication lag",
+  "db.blocked_query_seconds": "DB blocked query",
+  "db.unused_index_count": "DB unused indexes",
+};
+
+const isSizeMetric = (metric: string) => metric.endsWith("_bytes");
+
+const trimDecimal = (value: number) => {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, "");
+};
+
+const toSizeFormValue = (bytes: number): { threshold: string; thresholdSizeUnit: SizeUnit } => {
+  const abs = Math.abs(bytes);
+  const unit: SizeUnit = abs >= 1024 ** 4 ? "TB" : abs >= 1024 ** 3 ? "GB" : "MB";
+  const multiplier = sizeUnits.find((item) => item.value === unit)?.multiplier ?? sizeUnits[1].multiplier;
+  return {
+    threshold: trimDecimal(bytes / multiplier),
+    thresholdSizeUnit: unit,
+  };
+};
+
+const getDefaultAlertThresholdForm = (metric: string, threshold: string | number) => {
+  const value = Number(threshold);
+  return isSizeMetric(metric) && Number.isFinite(value)
+    ? toSizeFormValue(value)
+    : { threshold: String(threshold), thresholdSizeUnit: "GB" as SizeUnit };
+};
+
+const getAlertThresholdValue = (form: AlertRuleForm) => {
+  const value = Number(form.threshold);
+  if (!isSizeMetric(form.metric)) return value;
+  const multiplier = sizeUnits.find((item) => item.value === form.thresholdSizeUnit)?.multiplier ?? sizeUnits[1].multiplier;
+  return value * multiplier;
+};
+
+const alertRuleDefaults = (metric: string): Pick<AlertRuleForm, "operator" | "threshold" | "severity"> => {
+  if (metric === "status") return { operator: "NEQ", threshold: "3", severity: "CRITICAL" };
+  if (metric === "response_time") return { operator: "GT", threshold: "2000", severity: "WARNING" };
+  if (metric === "printer.toner_pct") return { operator: "LT", threshold: "15", severity: "WARNING" };
+  if (metric === "printer.paper_pct") return { operator: "LT", threshold: "10", severity: "WARNING" };
+  if (metric === "printer.error_count") return { operator: "GT", threshold: "0", severity: "CRITICAL" };
+  if (metric === "db.slow_query_avg_ms") return { operator: "GT", threshold: "5000", severity: "WARNING" };
+  if (metric === "db.slow_query_count") return { operator: "GT", threshold: "10", severity: "WARNING" };
+  if (metric === "db.log_file_size_bytes") return { operator: "GT", threshold: String(2 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.data_file_size_bytes") return { operator: "GT", threshold: String(50 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.table_size_bytes") return { operator: "GT", threshold: String(10 * 1024 * 1024 * 1024), severity: "WARNING" };
+  if (metric === "db.active_connections_pct") return { operator: "GT", threshold: "80", severity: "CRITICAL" };
+  if (metric === "db.replication_lag_seconds") return { operator: "GT", threshold: "30", severity: "CRITICAL" };
+  if (metric === "db.blocked_query_seconds") return { operator: "GT", threshold: "60", severity: "CRITICAL" };
+  if (metric === "db.unused_index_count") return { operator: "GT", threshold: "5", severity: "INFO" };
+  return { operator: "GT", threshold: "90", severity: metric === "disk.used_pct" ? "CRITICAL" : "WARNING" };
 };
 
 const statusThresholdLabels: Record<number, string> = {
@@ -338,10 +410,23 @@ const statusThresholdLabels: Record<number, string> = {
   3: "UP",
 };
 
+const formatBytes = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let next = Math.abs(value);
+  let index = 0;
+  while (next >= 1024 && index < units.length - 1) {
+    next /= 1024;
+    index += 1;
+  }
+  return `${value < 0 ? "-" : ""}${next.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
 const emptyAlertRuleForm = (): AlertRuleForm => ({
   metric: "status",
   operator: "NEQ",
   threshold: "3",
+  thresholdSizeUnit: "GB",
   severity: "CRITICAL",
   enabled: true,
   channelIds: [],
@@ -397,6 +482,15 @@ const getTarget = (monitor: MonitorDetail) => {
   return "-";
 };
 
+const getMonitorTypeLabel = (monitor: Pick<MonitorDetail, "type" | "config">) => {
+  if (monitor.type === "SNMP" && typeof monitor.config.printerPreset === "string" && monitor.config.printerPreset) {
+    return "Printer (SNMP)";
+  }
+  if (monitor.type === "SNMP") return "Network / Custom SNMP";
+  if (monitor.type === "SYSTEM") return "System (SNMP)";
+  return formatMonitorTypeLabel(monitor.type);
+};
+
 const formatDateTime = (value: string | null | undefined, locale = "th-TH") => {
   if (!value) return "-";
 
@@ -434,19 +528,35 @@ const toConfigText = (config: Record<string, unknown>) => {
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+const supplyColorHex = (color?: string) => {
+  const normalized = color?.trim().toLowerCase();
+  if (!normalized) return "#64748b";
+  if (normalized.includes("black")) return "#111827";
+  if (normalized.includes("cyan")) return "#06b6d4";
+  if (normalized.includes("magenta")) return "#d946ef";
+  if (normalized.includes("yellow")) return "#facc15";
+  if (normalized.includes("red")) return "#ef4444";
+  if (normalized.includes("green")) return "#22c55e";
+  if (normalized.includes("blue")) return "#3b82f6";
+  return "#64748b";
+};
+
 const WARN_PCT = 75;
 const CRITICAL_PCT = 90;
 
-const thresholdCardClass = (pct: number | null | undefined) => {
+const effectiveThreshold = (custom: number | null | undefined, fallback: number) =>
+  isFiniteNumber(custom) ? custom : fallback;
+
+const thresholdCardClass = (pct: number | null | undefined, threshold = CRITICAL_PCT) => {
   if (!isFiniteNumber(pct)) return "border-slate-200 bg-slate-50";
-  if (pct >= CRITICAL_PCT) return "border-red-200 bg-red-50";
+  if (pct >= threshold) return "border-red-200 bg-red-50";
   if (pct >= WARN_PCT) return "border-amber-200 bg-amber-50";
   return "border-slate-200 bg-slate-50";
 };
 
-const thresholdValueClass = (pct: number | null | undefined) => {
+const thresholdValueClass = (pct: number | null | undefined, threshold = CRITICAL_PCT) => {
   if (!isFiniteNumber(pct)) return "text-slate-950";
-  if (pct >= CRITICAL_PCT) return "text-red-700";
+  if (pct >= threshold) return "text-red-700";
   if (pct >= WARN_PCT) return "text-amber-700";
   return "text-slate-950";
 };
@@ -469,10 +579,37 @@ const computeSeriesAnomaly = (
 const formatPercent = (value: number | null | undefined) =>
   isFiniteNumber(value) ? `${value.toFixed(1)}%` : "-";
 
+const percentile = (values: number[], p: number) => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[index] ?? null;
+};
+
+const summarizePercentSeries = (values: number[], threshold?: number | null) => {
+  const sanitized = values.filter(isFiniteNumber);
+  if (sanitized.length === 0) {
+    return { avg: null, max: null, p95: null, breaches: 0, count: 0 };
+  }
+
+  const avg = sanitized.reduce((sum, value) => sum + value, 0) / sanitized.length;
+  const max = Math.max(...sanitized);
+  const p95 = percentile(sanitized, 95);
+  const breaches = isFiniteNumber(threshold)
+    ? sanitized.filter((value) => value >= threshold).length
+    : 0;
+
+  return { avg, max, p95, breaches, count: sanitized.length };
+};
+
 const formatAlertThreshold = (metric: string, threshold: number) => {
   if (metric === "status") return statusThresholdLabels[threshold] ?? String(threshold);
   if (metric === "response_time") return `${threshold.toLocaleString()} ms`;
   if (metric.endsWith("_pct")) return `${threshold}%`;
+  if (metric.endsWith("_bytes")) return formatBytes(threshold);
+  if (metric.endsWith("_ms")) return `${threshold.toLocaleString()} ms`;
+  if (metric.endsWith("_seconds")) return `${threshold.toLocaleString()}s`;
+  if (metric.endsWith("_count")) return threshold.toLocaleString();
   return String(threshold);
 };
 
@@ -482,6 +619,10 @@ const formatCurrentRuleValue = (metric: string, value: number) => {
   if (metric === "status") return formatStatusValue(value);
   if (metric === "response_time") return `${value.toLocaleString()} ms`;
   if (metric.endsWith("_pct")) return `${value.toFixed(1)}%`;
+  if (metric.endsWith("_bytes")) return formatBytes(value);
+  if (metric.endsWith("_ms")) return `${value.toLocaleString()} ms`;
+  if (metric.endsWith("_seconds")) return `${value.toFixed(value >= 10 ? 0 : 1)}s`;
+  if (metric.endsWith("_count")) return value.toLocaleString();
   return String(value);
 };
 
@@ -611,6 +752,12 @@ const MonitorDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [insightForm, setInsightForm] = useState({
+    enabled: false,
+    collectIntervalMinutes: 5,
+    slowQueryThresholdMs: 1000,
+    topNQueries: 20,
+  });
   const [resultsLimit, setResultsLimit] = useState(20);
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("24h");
   const [customFrom, setCustomFrom] = useState(() =>
@@ -880,6 +1027,22 @@ const MonitorDetailPage = () => {
   const latestPrinterInfo = isPrinterMonitor
     ? (latestResult?.metadata?.printer as PrinterInfo | null | undefined) ?? null
     : null;
+  const configuredThresholds = useMemo(() => {
+    const raw = monitor?.config?.alertThresholds;
+    const config = typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? raw as { cpuPct?: unknown; ramPct?: unknown; diskPct?: unknown }
+      : {};
+    const toNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
+
+    return {
+      cpuPct: toNumber(config.cpuPct),
+      ramPct: toNumber(config.ramPct),
+      diskPct: toNumber(config.diskPct),
+    };
+  }, [monitor?.config]);
+  const cpuThreshold = effectiveThreshold(configuredThresholds.cpuPct, CRITICAL_PCT);
+  const ramThreshold = effectiveThreshold(configuredThresholds.ramPct, CRITICAL_PCT);
+  const diskThreshold = effectiveThreshold(configuredThresholds.diskPct, CRITICAL_PCT);
   const fallbackCredentialConfig = monitor?.config ?? {};
   const parsedEditConfig = useMemo(() => {
     try {
@@ -903,11 +1066,28 @@ const MonitorDetailPage = () => {
   );
   const availableAlertMetrics = useMemo(() => {
     const base = ["status", "response_time"];
-    if (monitor?.type === "SYSTEM" || monitor?.type === "SNMP") {
+    if (isPrinterMonitor) {
+      return [...base, "printer.toner_pct", "printer.paper_pct", "printer.error_count"];
+    }
+    if (monitor?.type === "SYSTEM") {
       return [...base, "cpu.used_pct", "memory.used_pct", "disk.used_pct"];
     }
+    if (monitor?.type === "DATABASE") {
+      return [
+        ...base,
+        "db.slow_query_avg_ms",
+        "db.slow_query_count",
+        "db.log_file_size_bytes",
+        "db.data_file_size_bytes",
+        "db.table_size_bytes",
+        "db.active_connections_pct",
+        "db.replication_lag_seconds",
+        "db.blocked_query_seconds",
+        "db.unused_index_count",
+      ];
+    }
     return base;
-  }, [monitor?.type]);
+  }, [isPrinterMonitor, monitor?.type]);
 
   useEffect(() => {
     if (!credentialsLoaded) return;
@@ -1010,6 +1190,19 @@ const MonitorDetailPage = () => {
       (a, b) => new Date(String(a.checkedAt)).getTime() - new Date(String(b.checkedAt)).getTime(),
     );
   }, [diskSeries, locale]);
+
+  const cpuSummary = useMemo(
+    () => summarizePercentSeries(utilizationChartData.map((point) => point.cpu).filter(isFiniteNumber), cpuThreshold),
+    [cpuThreshold, utilizationChartData],
+  );
+  const memorySummary = useMemo(
+    () => summarizePercentSeries(utilizationChartData.map((point) => point.memory).filter(isFiniteNumber), ramThreshold),
+    [ramThreshold, utilizationChartData],
+  );
+  const diskSummary = useMemo(() => {
+    const values = diskSeries.flatMap((series) => series.points.map((point) => point.value));
+    return summarizePercentSeries(values, diskThreshold);
+  }, [diskSeries, diskThreshold]);
 
   const interfaceAnalytics = useMemo(() => {
     const seriesByInterface = new Map<
@@ -1178,6 +1371,25 @@ const MonitorDetailPage = () => {
     });
     setSelectedEditCredentialId(monitor.credential?.id ?? "");
     setThresholdForm(parseThresholdConfig(monitor.config));
+
+    if (monitor.type === "DATABASE") {
+      void api.get<{ success: boolean; data: { enabled: boolean; collectIntervalMinutes: number; slowQueryThresholdMs: number; topNQueries: number } | null }>(
+        `/monitors/${monitor.id}/insight-config`,
+      ).then((res) => {
+        if (res.data.success && res.data.data) {
+          const d = res.data.data;
+          setInsightForm({
+            enabled: d.enabled,
+            collectIntervalMinutes: d.collectIntervalMinutes,
+            slowQueryThresholdMs: d.slowQueryThresholdMs,
+            topNQueries: d.topNQueries,
+          });
+        } else {
+          setInsightForm({ enabled: false, collectIntervalMinutes: 5, slowQueryThresholdMs: 1000, topNQueries: 20 });
+        }
+      });
+    }
+
     setIsEditing(true);
   };
 
@@ -1349,6 +1561,10 @@ const MonitorDetailPage = () => {
         return;
       }
 
+      if (editForm.type === "DATABASE") {
+        await api.patch(`/monitors/${monitor.id}/insight-config`, insightForm);
+      }
+
       toast.success(t("monitorDetail.updateSuccess"));
       setIsEditing(false);
       await fetchMonitor();
@@ -1361,20 +1577,11 @@ const MonitorDetailPage = () => {
 
   const openCreateRule = (metric = "status") => {
     const next = emptyAlertRuleForm();
+    const defaults = alertRuleDefaults(metric);
     next.metric = metric;
-    if (metric === "status") {
-      next.operator = "NEQ";
-      next.threshold = "3";
-      next.severity = "CRITICAL";
-    } else if (metric === "response_time") {
-      next.operator = "GT";
-      next.threshold = "2000";
-      next.severity = "WARNING";
-    } else {
-      next.operator = "GT";
-      next.threshold = "90";
-      next.severity = metric === "disk.used_pct" ? "CRITICAL" : "WARNING";
-    }
+    next.operator = defaults.operator;
+    Object.assign(next, getDefaultAlertThresholdForm(metric, defaults.threshold));
+    next.severity = defaults.severity;
     setEditingRule(null);
     setAlertRuleForm(next);
     setIsRuleModalOpen(true);
@@ -1385,7 +1592,7 @@ const MonitorDetailPage = () => {
     setAlertRuleForm({
       metric: rule.metric,
       operator: rule.operator,
-      threshold: String(rule.threshold),
+      ...getDefaultAlertThresholdForm(rule.metric, rule.threshold),
       severity: rule.severity,
       enabled: rule.enabled,
       channelIds: rule.channels?.map((item) => item.channel.id) ?? [],
@@ -1395,13 +1602,14 @@ const MonitorDetailPage = () => {
 
   const handleRuleMetricChange = (metric: string) => {
     setAlertRuleForm((current) => {
-      if (metric === "status") {
-        return { ...current, metric, operator: "NEQ", threshold: "3" };
-      }
-      if (metric === "response_time") {
-        return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "2000" : current.threshold };
-      }
-      return { ...current, metric, operator: "GT", threshold: current.metric === "status" ? "90" : current.threshold };
+      const defaults = alertRuleDefaults(metric);
+      return {
+        ...current,
+        metric,
+        operator: defaults.operator,
+        severity: defaults.severity,
+        ...getDefaultAlertThresholdForm(metric, defaults.threshold),
+      };
     });
   };
 
@@ -1421,7 +1629,7 @@ const MonitorDetailPage = () => {
       return;
     }
 
-    const threshold = Number(alertRuleForm.threshold);
+    const threshold = getAlertThresholdValue(alertRuleForm);
     if (!Number.isFinite(threshold)) {
       toast.error(t("monitorDetail.validationThresholdNumber"));
       return;
@@ -1432,6 +1640,14 @@ const MonitorDetailPage = () => {
     }
     if (alertRuleForm.metric.endsWith("_pct") && (threshold < 0 || threshold > 100)) {
       toast.error(t("monitorDetail.validationPercentThreshold"));
+      return;
+    }
+    if (alertRuleForm.metric === "printer.error_count" && threshold < 0) {
+      toast.error(t("monitorDetail.validationPrinterErrors"));
+      return;
+    }
+    if (alertRuleForm.metric.startsWith("db.") && threshold < 0) {
+      toast.error("DB Insight threshold must be greater than or equal to 0");
       return;
     }
 
@@ -1542,7 +1758,7 @@ const MonitorDetailPage = () => {
           <p className="text-sm font-medium text-cyan-700">{t("monitorDetail.title")}</p>
           <h1 className="mt-1 truncate text-2xl font-semibold text-slate-950">{monitor.name}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            {t("monitorDetail.targetSummary", { type: monitor.type, target: getTarget(monitor), interval: monitor.interval })}
+            {t("monitorDetail.targetSummary", { type: getMonitorTypeLabel(monitor), target: getTarget(monitor), interval: monitor.interval })}
           </p>
           {monitor.activeWindowEnabled ? (
             <div className="mt-2">
@@ -1689,7 +1905,13 @@ const MonitorDetailPage = () => {
                       return (
                         <div key={toner.name}>
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-700">{toner.name}</span>
+                            <span className="flex min-w-0 items-center gap-2 text-slate-700">
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-slate-900/10"
+                                style={{ backgroundColor: supplyColorHex(toner.color) }}
+                              />
+                              <span className="truncate">{toner.name}</span>
+                            </span>
                             <span className={isLow ? "font-semibold text-rose-600" : "text-slate-500"}>
                               {toner.percent !== null ? `${pct}%` : `${toner.level} / unknown`}
                             </span>
@@ -1807,8 +2029,46 @@ const MonitorDetailPage = () => {
                   </div>
                 ) : null}
 
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {[
+                    { label: "CPU", summary: cpuSummary, threshold: cpuThreshold },
+                    { label: "Memory", summary: memorySummary, threshold: ramThreshold },
+                    { label: "Disk", summary: diskSummary, threshold: diskThreshold },
+                  ].map((item) => (
+                    <div className="rounded-md border border-slate-200 bg-white p-3" key={item.label}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          threshold {formatPercent(item.threshold)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">Avg</p>
+                          <p className="text-sm font-semibold text-slate-900">{formatPercent(item.summary.avg)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">Max</p>
+                          <p className={`text-sm font-semibold ${thresholdValueClass(item.summary.max, item.threshold)}`}>
+                            {formatPercent(item.summary.max)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-slate-400">P95</p>
+                          <p className={`text-sm font-semibold ${thresholdValueClass(item.summary.p95, item.threshold)}`}>
+                            {formatPercent(item.summary.p95)}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {item.summary.breaches}/{item.summary.count} samples over threshold
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.cpuUsedPct)}`}>
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.cpuUsedPct, cpuThreshold)}`}>
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-xs text-slate-500">CPU</p>
                       {cpuAnomalyHint ? (
@@ -1817,7 +2077,7 @@ const MonitorDetailPage = () => {
                         </span>
                       ) : null}
                     </div>
-                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.cpuUsedPct)}`}>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.cpuUsedPct, cpuThreshold)}`}>
                       {formatPercent(latestMetadata?.cpuUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -1825,8 +2085,9 @@ const MonitorDetailPage = () => {
                       {isFiniteNumber(latestMetadata?.load5) ? latestMetadata?.load5?.toFixed(2) : "-"} /{" "}
                       {isFiniteNumber(latestMetadata?.load15) ? latestMetadata?.load15?.toFixed(2) : "-"}
                     </p>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400">threshold {formatPercent(cpuThreshold)}</p>
                   </div>
-                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.memUsedPct)}`}>
+                  <div className={`rounded-md border p-3 ${thresholdCardClass(latestMetadata?.memUsedPct, ramThreshold)}`}>
                     <div className="flex items-center justify-between gap-1">
                       <p className="text-xs text-slate-500">Memory</p>
                       {memAnomalyHint ? (
@@ -1835,12 +2096,13 @@ const MonitorDetailPage = () => {
                         </span>
                       ) : null}
                     </div>
-                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.memUsedPct)}`}>
+                    <p className={`mt-1 text-lg font-semibold ${thresholdValueClass(latestMetadata?.memUsedPct, ramThreshold)}`}>
                       {formatPercent(latestMetadata?.memUsedPct)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {formatKb(latestMetadata?.memUsedKb)} / {formatKb(latestMetadata?.memTotalKb)}
                     </p>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400">threshold {formatPercent(ramThreshold)}</p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Uptime</p>
@@ -1880,7 +2142,47 @@ const MonitorDetailPage = () => {
                           <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                           <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
                           <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
-                          <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
+                          {cpuThreshold === ramThreshold ? (
+                            <ReferenceLine
+                              y={cpuThreshold}
+                              stroke="#ef4444"
+                              strokeDasharray="6 3"
+                              strokeWidth={1.5}
+                              label={{
+                                value: `CPU/RAM ${formatPercent(cpuThreshold)}`,
+                                position: "insideBottomRight",
+                                fontSize: 10,
+                                fill: "#dc2626",
+                              }}
+                            />
+                          ) : (
+                            <>
+                              <ReferenceLine
+                                y={cpuThreshold}
+                                stroke="#0f766e"
+                                strokeDasharray="6 3"
+                                strokeWidth={1.5}
+                                label={{
+                                  value: `CPU ${formatPercent(cpuThreshold)}`,
+                                  position: "insideTopRight",
+                                  fontSize: 10,
+                                  fill: "#0f766e",
+                                }}
+                              />
+                              <ReferenceLine
+                                y={ramThreshold}
+                                stroke="#7c3aed"
+                                strokeDasharray="6 3"
+                                strokeWidth={1.5}
+                                label={{
+                                  value: `RAM ${formatPercent(ramThreshold)}`,
+                                  position: "insideBottomRight",
+                                  fontSize: 10,
+                                  fill: "#7c3aed",
+                                }}
+                              />
+                            </>
+                          )}
                           <Tooltip
                             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                             labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(payload[0].payload.checkedAt, locale) : "")}
@@ -2022,7 +2324,18 @@ const MonitorDetailPage = () => {
                         <XAxis dataKey="timeLabel" minTickGap={24} tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} />
                         <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `${value}%`} tickLine={false} width={56} />
                         <ReferenceLine y={WARN_PCT} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "75%", position: "insideTopRight", fontSize: 10, fill: "#d97706" }} />
-                        <ReferenceLine y={CRITICAL_PCT} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} label={{ value: "90%", position: "insideTopRight", fontSize: 10, fill: "#dc2626" }} />
+                        <ReferenceLine
+                          y={diskThreshold}
+                          stroke="#ef4444"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                          label={{
+                            value: `Disk ${formatPercent(diskThreshold)}`,
+                            position: "insideBottomRight",
+                            fontSize: 10,
+                            fill: "#dc2626",
+                          }}
+                        />
                         <Tooltip
                           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
                           labelFormatter={(_, payload) => (payload?.[0]?.payload?.checkedAt ? formatDateTime(String(payload[0].payload.checkedAt), locale) : "")}
@@ -2604,11 +2917,11 @@ const MonitorDetailPage = () => {
                     <option value="HTTP">HTTP</option>
                     <option value="PING">PING</option>
                     <option value="TCP">TCP</option>
-                    <option value="DATABASE">DATABASE</option>
+                    <option value="DATABASE">Database (Test Connection)</option>
                     <option value="TLS_CERT">TLS_CERT</option>
                     <option value="DNS">DNS</option>
-                    <option value="SNMP">SNMP</option>
-                    <option value="SYSTEM">SYSTEM</option>
+                    <option value="SNMP">Network / Printer / Custom SNMP</option>
+                    <option value="SYSTEM">System (SNMP)</option>
                     <option value="DOCKER">DOCKER</option>
                   </select>
                 </label>
@@ -2785,6 +3098,60 @@ const MonitorDetailPage = () => {
                   ) : null}
                 </div>
 
+                {editForm.type === "DATABASE" ? (
+                  <div className="rounded-md border border-cyan-200 bg-cyan-50 p-4 sm:col-span-2">
+                    <label className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={insightForm.enabled}
+                        className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                        onChange={(e) => setInsightForm((f) => ({ ...f, enabled: e.target.checked }))}
+                      />
+                      <div>
+                        <span className="text-sm font-semibold text-cyan-900">Enable DB Insight</span>
+                        <p className="text-xs text-cyan-700">Collect slow queries, index health, table sizes, and connections.</p>
+                      </div>
+                    </label>
+
+                    {insightForm.enabled ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Collect every (minutes)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={1440}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.collectIntervalMinutes}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, collectIntervalMinutes: Number(e.target.value) }))}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Slow query threshold (ms)</span>
+                          <input
+                            type="number"
+                            min={100}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.slowQueryThresholdMs}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, slowQueryThresholdMs: Number(e.target.value) }))}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-medium text-cyan-900">Top N queries</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            className="mt-1 w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                            value={insightForm.topNQueries}
+                            onChange={(e) => setInsightForm((f) => ({ ...f, topNQueries: Number(e.target.value) }))}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {editForm.type === "SYSTEM" || editForm.type === "SNMP" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
                     <p className="text-sm font-semibold text-amber-900">{t("monitorDetail.deviceAlertThresholds")}</p>
@@ -2931,6 +3298,35 @@ const MonitorDetailPage = () => {
                       <option value="2">DEGRADED</option>
                       <option value="1">DOWN</option>
                     </select>
+                  ) : isSizeMetric(alertRuleForm.metric) ? (
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+                      <input
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        min={0}
+                        step="0.1"
+                        type="number"
+                        value={alertRuleForm.threshold}
+                        onChange={(event) =>
+                          setAlertRuleForm((current) => ({ ...current, threshold: event.target.value }))
+                        }
+                      />
+                      <select
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                        value={alertRuleForm.thresholdSizeUnit}
+                        onChange={(event) =>
+                          setAlertRuleForm((current) => ({
+                            ...current,
+                            thresholdSizeUnit: event.target.value as SizeUnit,
+                          }))
+                        }
+                      >
+                        {sizeUnits.map((unit) => (
+                          <option key={unit.value} value={unit.value}>
+                            {unit.value}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   ) : (
                     <input
                       className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"

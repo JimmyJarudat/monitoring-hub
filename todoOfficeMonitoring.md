@@ -111,15 +111,15 @@ if (activeMaintenance) {
 
 ### Implementation Order
 
-- [ ] Schema: สร้างตาราง `maintenance_windows` + เพิ่ม `is_planned` ใน incidents
-- [ ] Backend: CRUD API `/maintenance`
-- [ ] Backend: helper `getActiveMaintenanceWindow(monitor)` สำหรับ runner
-- [ ] Runner: เช็ค active window ก่อน trigger alert
-- [ ] Frontend: หน้า `/maintenance` list + form
+- [x] Schema: สร้างตาราง `maintenance_windows`
+- [x] Backend: CRUD API `/maintenance-windows`
+- [x] Backend: helper `getActiveMaintenanceWindow(monitor)` สำหรับ runner
+- [x] Runner: เช็ค active window ก่อน trigger alert
+- [x] Frontend: หน้า `/maintenance-windows` list + form
 - [ ] Frontend: แสดง badge "Planned" ใน incident ที่ `is_planned = true`
 - [ ] Frontend: แสดง maintenance window ใน incident timeline
 - [ ] Reports: exclude planned downtime ออกจาก availability calculation (optional toggle)
-- [ ] i18n: EN/TH keys
+- [x] i18n: EN/TH keys
 
 ---
 

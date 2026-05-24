@@ -15,6 +15,9 @@ import {
   YAxis,
 } from "recharts";
 import { useApi } from "@/hooks/useApi";
+import { useSystemConfig } from "@/contexts/systemConfig.context";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
+import { generatePdfBlob, type PdfReportPayload } from "@/components/reports/AvailabilityReportPdf";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type MonitorType =
@@ -123,11 +126,22 @@ type GroupRow = {
   }>;
 };
 
+type MaintenanceWindowRow = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  enabled: boolean;
+  monitorId: string | null;
+  groupId: string | null;
+  group: { monitors: Array<{ monitorId: string }> } | null;
+};
+
 type ReportsData = {
   summary: MonitorSummary;
   results: MonitorResultRow[];
   incidents: IncidentRow[];
   groups: GroupRow[];
+  maintenanceWindows: MaintenanceWindowRow[];
 };
 
 type MonitorReportRow = {
@@ -279,11 +293,6 @@ const formatDuration = (startedAt: string, resolvedAt: string | null) => {
   return `${minutes}m`;
 };
 
-const escapeCsv = (value: unknown) => {
-  const text = String(value ?? "");
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-};
-
 const downloadBlob = (filename: string, blob: Blob) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -293,185 +302,11 @@ const downloadBlob = (filename: string, blob: Blob) => {
   URL.revokeObjectURL(url);
 };
 
-const downloadCsv = (filename: string, rows: Array<Record<string, unknown>>, emptyMessage: string) => {
-  if (rows.length === 0) {
-    toast.info(emptyMessage);
-    return;
-  }
-
-  const headers = Object.keys(rows[0]);
-  const body = rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(","));
-  const csv = [headers.join(","), ...body].join("\n");
-  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
-};
-
-const downloadJson = (filename: string, payload: ReportExportPayload) => {
-  downloadBlob(
-    filename,
-    new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8",
-    }),
-  );
-};
-
-const escapeHtml = (value: unknown) => {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-};
-
-const statusCellClass = (status: MonitorStatus | IncidentStatus | null) => {
-  if (status === "UP" || status === "RESOLVED") return "status-up";
-  if (status === "DEGRADED") return "status-degraded";
-  if (status === "DOWN" || status === "OPEN") return "status-down";
-  return "status-muted";
-};
-
-const tableRows = (rows: Array<Record<string, unknown>>) => {
-  if (rows.length === 0) {
-    return '<tr><td class="empty" colspan="8">No data</td></tr>';
-  }
-
-  const headers = Object.keys(rows[0]);
-  const head = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>`;
-  const body = rows
-    .map(
-      (row) =>
-        `<tr>${headers
-          .map((header) => {
-            const value = row[header];
-            const className = header.toLowerCase().includes("status")
-              ? ` class="${statusCellClass(value as MonitorStatus | IncidentStatus | null)}"`
-              : "";
-            return `<td${className}>${escapeHtml(value)}</td>`;
-          })
-          .join("")}</tr>`,
-    )
-    .join("");
-
-  return `${head}${body}`;
-};
-
-const downloadExcel = (filename: string, payload: ReportExportPayload) => {
-  const summaryRows = [
-    { Metric: "Report uptime", Value: formatPercent(payload.summary.reportUptime) },
-    { Metric: "Checks", Value: payload.summary.checks },
-    { Metric: "UP", Value: payload.summary.up },
-    { Metric: "DEGRADED", Value: payload.summary.degraded },
-    { Metric: "DOWN", Value: payload.summary.down },
-    { Metric: "Incidents", Value: payload.summary.incidents },
-    { Metric: "Open incidents", Value: payload.summary.openIncidents },
-    { Metric: "Resolved incidents", Value: payload.summary.resolvedIncidents },
-    { Metric: "Average response", Value: formatResponseTime(payload.summary.avgResponseMs) },
-    { Metric: "Fleet uptime 24h", Value: formatPercent(payload.summary.fleetUptime24h) },
-  ];
-
-  const workbook = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { font-family: Arial, sans-serif; color: #0f172a; }
-    .title { background: #0f172a; color: #ffffff; font-size: 22px; font-weight: 700; }
-    .subtitle { background: #164e63; color: #ecfeff; font-size: 12px; }
-    .section { background: #06b6d4; color: #ffffff; font-size: 14px; font-weight: 700; }
-    table { border-collapse: collapse; margin-bottom: 18px; width: 100%; }
-    th { background: #e2e8f0; color: #334155; font-weight: 700; border: 1px solid #cbd5e1; padding: 8px; }
-    td { border: 1px solid #cbd5e1; padding: 7px; vertical-align: top; }
-    tr:nth-child(even) td { background: #f8fafc; }
-    .summary td:first-child { background: #f1f5f9; font-weight: 700; }
-    .status-up { background: #dcfce7; color: #166534; font-weight: 700; }
-    .status-degraded { background: #fef3c7; color: #92400e; font-weight: 700; }
-    .status-down { background: #ffe4e6; color: #be123c; font-weight: 700; }
-    .status-muted { background: #f1f5f9; color: #64748b; font-weight: 700; }
-    .empty { color: #64748b; font-style: italic; text-align: center; }
-  </style>
-</head>
-<body>
-  <table>
-    <tr><td class="title" colspan="10">Monitoring Hub Report</td></tr>
-    <tr><td class="subtitle" colspan="10">Generated at ${escapeHtml(formatDateTime(payload.generatedAt))}</td></tr>
-    <tr><td class="subtitle" colspan="10">Range: ${escapeHtml(payload.range.label)} (${escapeHtml(formatDateTime(payload.range.from))} - ${escapeHtml(formatDateTime(payload.range.to))})</td></tr>
-  </table>
-
-  <table class="summary">
-    <tr><td class="section" colspan="2">Executive Summary</td></tr>
-    ${tableRows(summaryRows)}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="8">Monitor Reliability Ranking</td></tr>
-    ${tableRows(
-      payload.monitorRanking.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Checks: row.checks,
-        Uptime: formatPercent(row.uptime),
-        Down: row.down,
-        Degraded: row.degraded,
-        "Avg Response": formatResponseTime(row.avgResponse),
-        "Last Status": row.lastStatus ?? "",
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="9">Group Summary</td></tr>
-    ${tableRows(
-      payload.groupSummary.map((row) => ({
-        Group: row.name,
-        Monitors: row.monitorCount,
-        Checks: row.checks,
-        Uptime: formatPercent(row.uptime),
-        UP: row.up,
-        Down: row.down,
-        Degraded: row.degraded,
-        Incidents: row.incidents,
-        "Avg Response": formatResponseTime(row.avgResponse),
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="8">Incident Report</td></tr>
-    ${tableRows(
-      payload.incidents.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Status: row.status,
-        Started: formatDateTime(row.startedAt),
-        Resolved: formatDateTime(row.resolvedAt),
-        Duration: row.duration,
-        Severity: row.severity ?? "",
-        Message: row.message ?? "",
-      })),
-    )}
-  </table>
-
-  <table>
-    <tr><td class="section" colspan="7">Result Samples</td></tr>
-    ${tableRows(
-      payload.resultSamples.map((row) => ({
-        Monitor: row.monitor,
-        Type: row.type,
-        Status: row.status,
-        "Response Time": formatResponseTime(row.responseTimeMs),
-        "Checked At": formatDateTime(row.checkedAt),
-        Message: row.message ?? "",
-      })),
-    )}
-  </table>
-</body>
-</html>`;
-
-  downloadBlob(filename, new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }));
-};
 
 const ReportsPage = () => {
   const { t, i18n } = useTranslation();
   const { api } = useApi();
+  const { config: sysConfig } = useSystemConfig();
   const locale = i18n.language === "th" ? "th-TH" : "en-US";
   const [timeRange, setTimeRange] = useState<TimeRangePreset>("week");
   const [customFrom, setCustomFrom] = useState(() =>
@@ -486,10 +321,14 @@ const ReportsPage = () => {
   const [results, setResults] = useState<MonitorResultRow[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
+  const [maintenanceWindows, setMaintenanceWindows] = useState<MaintenanceWindowRow[]>([]);
+  const [excludeMaintenance, setExcludeMaintenance] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [excelExporting, setExcelExporting] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   const fetchReportsData = useCallback(async (): Promise<ReportsData> => {
-    const [summaryRes, resultsRes, incidentsRes, groupsRes] = await Promise.all([
+    const [summaryRes, resultsRes, incidentsRes, groupsRes, mwRes] = await Promise.all([
       api.get<ApiResponse<MonitorSummary>>("/monitors/summary"),
       api.get<ApiResponse<ResultsResponse>>("/monitors/results", {
         params: { from: appliedFrom, to: appliedTo, limit: 200 },
@@ -498,6 +337,7 @@ const ReportsPage = () => {
         params: { from: appliedFrom, to: appliedTo, limit: 200 },
       }),
       api.get<ApiResponse<GroupRow[]>>("/groups"),
+      api.get<ApiResponse<MaintenanceWindowRow[]>>("/maintenance-windows"),
     ]);
 
     if (!summaryRes.data.success) throw new Error(summaryRes.data.message);
@@ -510,6 +350,7 @@ const ReportsPage = () => {
       results: resultsRes.data.data.items,
       incidents: incidentsRes.data.data.items,
       groups: groupsRes.data.data,
+      maintenanceWindows: mwRes.data.success ? mwRes.data.data : [],
     };
   }, [api, appliedFrom, appliedTo]);
 
@@ -518,6 +359,7 @@ const ReportsPage = () => {
     setResults(data.results);
     setIncidents(data.incidents);
     setGroups(data.groups);
+    setMaintenanceWindows(data.maintenanceWindows);
   }, []);
 
   const loadReports = useCallback(async () => {
@@ -581,14 +423,33 @@ const ReportsPage = () => {
     setAppliedTo(to);
   };
 
+  const effectiveResults = useMemo(() => {
+    if (!excludeMaintenance || maintenanceWindows.length === 0) return results;
+
+    const activeWindows = maintenanceWindows.filter((w) => w.enabled);
+    return results.filter((result) => {
+      const checkedAt = new Date(result.checkedAt).getTime();
+      return !activeWindows.some((w) => {
+        const start = new Date(w.startsAt).getTime();
+        const end = new Date(w.endsAt).getTime();
+        if (checkedAt < start || checkedAt > end) return false;
+        if (w.monitorId === result.monitorId) return true;
+        if (w.group?.monitors.some((m) => m.monitorId === result.monitorId)) return true;
+        return false;
+      });
+    });
+  }, [excludeMaintenance, maintenanceWindows, results]);
+
+  const excludedCount = results.length - effectiveResults.length;
+
   const reportSummary = useMemo(() => {
-    const responseTimes = results
+    const responseTimes = effectiveResults
       .map((result) => result.responseTimeMs)
       .filter((value): value is number => typeof value === "number");
-    const up = results.filter((result) => result.status === "UP").length;
-    const degraded = results.filter((result) => result.status === "DEGRADED").length;
-    const down = results.filter((result) => result.status === "DOWN").length;
-    const checks = results.length;
+    const up = effectiveResults.filter((result) => result.status === "UP").length;
+    const degraded = effectiveResults.filter((result) => result.status === "DEGRADED").length;
+    const down = effectiveResults.filter((result) => result.status === "DOWN").length;
+    const checks = effectiveResults.length;
 
     return {
       checks,
@@ -603,7 +464,7 @@ const ReportsPage = () => {
       openIncidents: incidents.filter((incident) => incident.status === "OPEN").length,
       resolvedIncidents: incidents.filter((incident) => incident.status === "RESOLVED").length,
     };
-  }, [incidents, results]);
+  }, [incidents, effectiveResults]);
 
   const statusChartData = useMemo(() => {
     return [
@@ -614,7 +475,7 @@ const ReportsPage = () => {
   }, [reportSummary]);
 
   const responseTrendData = useMemo(() => {
-    return [...results]
+    return [...effectiveResults]
       .reverse()
       .slice(-20)
       .map((result) => ({
@@ -622,7 +483,7 @@ const ReportsPage = () => {
         response: result.responseTimeMs ?? 0,
         status: result.status,
       }));
-  }, [locale, results]);
+  }, [locale, effectiveResults]);
 
   const monitorRanking = useMemo(() => {
     const grouped = new Map<
@@ -640,7 +501,7 @@ const ReportsPage = () => {
       }
     >();
 
-    for (const result of results) {
+    for (const result of effectiveResults) {
       const current =
         grouped.get(result.monitor.id) ??
         {
@@ -679,13 +540,13 @@ const ReportsPage = () => {
       }))
       .sort((a, b) => b.down - a.down || b.degraded - a.degraded || (a.uptime ?? 100) - (b.uptime ?? 100))
       .slice(0, 10);
-  }, [results]);
+  }, [effectiveResults]);
 
   const groupReports = useMemo<GroupReportRow[]>(() => {
     return groups
       .map((group) => {
         const monitorIds = new Set(group.monitors.map((monitor) => monitor.id));
-        const groupResults = results.filter((result) => monitorIds.has(result.monitor.id));
+        const groupResults = effectiveResults.filter((result) => monitorIds.has(result.monitor.id));
         const up = groupResults.filter((result) => result.status === "UP").length;
         const down = groupResults.filter((result) => result.status === "DOWN").length;
         const degraded = groupResults.filter((result) => result.status === "DEGRADED").length;
@@ -712,7 +573,7 @@ const ReportsPage = () => {
       })
       .sort((a, b) => b.down - a.down || b.incidents - a.incidents || b.checks - a.checks)
       .slice(0, 8);
-  }, [groups, incidents, results]);
+  }, [groups, incidents, effectiveResults]);
 
   const activeRangeLabel = useMemo(() => {
     if (timeRange === "custom") return `${formatDateTime(appliedFrom, locale)} - ${formatDateTime(appliedTo, locale)}`;
@@ -754,7 +615,7 @@ const ReportsPage = () => {
         severity: incident.alertRule?.severity ?? null,
         message: incident.message,
       })),
-      resultSamples: results.map((result) => ({
+      resultSamples: effectiveResults.map((result) => ({
         id: result.id,
         monitor: result.monitor.name,
         type: result.monitor.type,
@@ -772,24 +633,66 @@ const ReportsPage = () => {
     incidents,
     monitorRanking,
     reportSummary,
-    results,
+    effectiveResults,
     summary,
   ]);
 
-  const exportRows = useMemo(() => {
-    return monitorRanking.map((item) => ({
-      monitor: item.monitor,
-      type: item.type,
-      checks: item.checks,
-      uptime: item.uptime ?? "",
-      down: item.down,
-      degraded: item.degraded,
-      avg_response_ms: item.avgResponse ?? "",
-      last_status: item.lastStatus ?? "",
-    }));
-  }, [monitorRanking]);
+
 
   const exportDate = new Date().toISOString().slice(0, 10);
+
+  const handlePdfExport = async () => {
+    setPdfExporting(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL as string || "/api";
+      const logoUrl = sysConfig.reportBranding.logoUrl
+        ? `${API_BASE_URL}${sysConfig.reportBranding.logoUrl}`
+        : sysConfig.general.logoUrl
+          ? `${API_BASE_URL}${sysConfig.general.logoUrl}`
+          : null;
+
+      const pdfPayload: PdfReportPayload = {
+        generatedAt: exportPayload.generatedAt,
+        range: exportPayload.range,
+        summary: exportPayload.summary,
+        monitorRanking: exportPayload.monitorRanking,
+        groupSummary: exportPayload.groupSummary.map((g) => ({ ...g, avgResponse: g.avgResponse ?? null })),
+        incidents: exportPayload.incidents,
+        branding: {
+          companyName: sysConfig.reportBranding.companyName,
+          systemName: sysConfig.general.systemName,
+          logoUrl,
+          footerText: sysConfig.reportBranding.footerText,
+        },
+        locale: i18n.language === "th" ? "th" : "en",
+      } as PdfReportPayload;
+
+      const blob = await generatePdfBlob(pdfPayload);
+      downloadBlob(`monitor-report-${exportDate}.pdf`, blob);
+    } catch {
+      toast.error("Failed to generate PDF report.");
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
+  const handleExcelExport = async () => {
+    setExcelExporting(true);
+    try {
+      const res = await api.get("/reports/export/excel", {
+        params: { from: appliedFrom, to: appliedTo, rangeLabel: activeRangeLabel },
+        responseType: "arraybuffer",
+      });
+      const blob = new Blob([res.data as ArrayBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      downloadBlob(`monitor-report-${exportDate}.xlsx`, blob);
+    } catch {
+      toast.error("Failed to generate Excel report.");
+    } finally {
+      setExcelExporting(false);
+    }
+  };
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
@@ -813,28 +716,20 @@ const ReportsPage = () => {
               {isLoading ? t("dashboard.refreshing") : t("common.refresh")}
             </button>
             <button
-              className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
-              onClick={() => downloadCsv(`monitor-report-${exportDate}.csv`, exportRows, t("reportsPage.noExportData"))}
-              disabled={exportRows.length === 0}
+              onClick={() => void handleExcelExport()}
+              disabled={excelExporting || isLoading}
             >
-              {t("reportsPage.exportCsv")}
+              {excelExporting ? t("reportsPage.exportingExcel") : t("reportsPage.exportExcel")}
             </button>
             <button
-              className="inline-flex items-center justify-center rounded-md border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
-              onClick={() => downloadJson(`monitor-report-${exportDate}.json`, exportPayload)}
-              disabled={results.length === 0 && incidents.length === 0}
+              onClick={() => void handlePdfExport()}
+              disabled={pdfExporting || isLoading}
             >
-              {t("reportsPage.exportJson")}
-            </button>
-            <button
-              className="inline-flex items-center justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              onClick={() => downloadExcel(`monitor-report-${exportDate}.xls`, exportPayload)}
-              disabled={results.length === 0 && incidents.length === 0}
-            >
-              {t("reportsPage.exportExcel")}
+              {pdfExporting ? t("reportsPage.exportingPdf") : t("reportsPage.exportPdf")}
             </button>
           </div>
         </div>
@@ -869,6 +764,24 @@ const ReportsPage = () => {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4">
+              <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={excludeMaintenance}
+                  onChange={(event) => setExcludeMaintenance(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                />
+                <span className="font-medium">{t("reportsPage.excludeMaintenance")}</span>
+              </label>
+              <span className="text-xs text-slate-500">{t("reportsPage.excludeMaintenanceHint")}</span>
+              {excludeMaintenance && excludedCount > 0 ? (
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                  {t("reportsPage.maintenanceExcluded", { count: excludedCount })}
+                </span>
+              ) : null}
             </div>
 
             {timeRange === "custom" ? (
@@ -1002,7 +915,7 @@ const ReportsPage = () => {
                               <Link className="font-medium text-cyan-700 underline-offset-2 hover:text-cyan-900 hover:underline" to={`/monitors/${item.id}`}>
                                 {item.monitor}
                               </Link>
-                              <p className="text-xs text-slate-500">{item.type} · {t("groups.checksCount", { count: item.checks })}</p>
+                              <p className="text-xs text-slate-500">{formatMonitorTypeLabel(item.type)} · {t("groups.checksCount", { count: item.checks })}</p>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
                               {item.lastStatus ? <StatusBadge status={item.lastStatus} /> : "-"}

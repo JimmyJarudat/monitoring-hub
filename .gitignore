@@ -36,5 +36,8 @@ docker-compose.override.yml
 # TypeScript
 *.tsbuildinfo
 
+# AI
 .claude/
 /.claude/
+CLAUDE.md
+todo.md

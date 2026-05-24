@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi";
+import { formatMonitorTypeLabel } from "@/utils/monitorType";
 
 type MonitorStatus = "UP" | "DOWN" | "DEGRADED";
 type IncidentStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
@@ -36,6 +37,11 @@ type MonitorRow = {
   enabled: boolean;
   interval: number;
   config: Record<string, unknown>;
+  credential: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
   latestResult: {
     status: MonitorStatus;
     checkedAt: string;
@@ -304,6 +310,7 @@ const GroupDetailPage = () => {
                   <tr>
                     <th className="px-4 py-3">{t("groups.colMonitor")}</th>
                     <th className="px-4 py-3">{t("common.status")}</th>
+                    <th className="px-4 py-3">{t("groups.colCredential")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryUptime")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryAvgResponse")}</th>
                     <th className="px-4 py-3">{t("groups.detailSummaryOpenIncidents")}</th>
@@ -320,7 +327,7 @@ const GroupDetailPage = () => {
                           {monitor.name}
                         </Link>
                         <div className="text-xs text-slate-500">
-                          {monitor.type} · {getTarget(monitor.config)}
+                          {formatMonitorTypeLabel(monitor.type)} · {getTarget(monitor.config)}
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
@@ -332,6 +339,19 @@ const GroupDetailPage = () => {
                           </span>
                         ) : (
                           <span className="text-slate-400">PENDING</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {monitor.credential ? (
+                          <Link
+                            className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                            to="/credentials"
+                            title={monitor.credential.type}
+                          >
+                            {monitor.credential.name}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-400">{t("groups.noCredential")}</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -418,7 +438,7 @@ const GroupDetailPage = () => {
                     <span className="text-xs text-slate-500">{t("groups.downPer24h", { count: monitor.downCount24h })}</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {monitor.type} · {getTarget(monitor.config)}
+                    {formatMonitorTypeLabel(monitor.type)} · {getTarget(monitor.config)}
                   </p>
                 </div>
               ))}
