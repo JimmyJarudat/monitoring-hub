@@ -303,6 +303,28 @@ const validateMonitorConfig = (type: MonitorType, config: MonitorConfig, credent
     return "PING monitor requires config.host";
   }
 
+  if (
+    type === "PING" &&
+    config.timeoutMs !== undefined &&
+    (typeof config.timeoutMs !== "number" ||
+      !Number.isFinite(config.timeoutMs) ||
+      config.timeoutMs < 1000 ||
+      config.timeoutMs > 300000)
+  ) {
+    return "PING config.timeoutMs must be between 1000 and 300000 milliseconds";
+  }
+
+  if (
+    type === "PING" &&
+    config.failureThreshold !== undefined &&
+    (typeof config.failureThreshold !== "number" ||
+      !Number.isInteger(config.failureThreshold) ||
+      config.failureThreshold < 1 ||
+      config.failureThreshold > 60)
+  ) {
+    return "PING config.failureThreshold must be an integer between 1 and 60";
+  }
+
   if (type === "TCP" && (!config.host || !config.port)) {
     return "TCP monitor requires config.host and config.port";
   }

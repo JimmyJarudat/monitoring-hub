@@ -275,7 +275,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
           }),
           monitorDefaults: t.Object({
             intervalSeconds: t.Number({ minimum: 10, maximum: 86400 }),
-            timeoutMs: t.Number({ minimum: 1000, maximum: 60000 }),
+            timeoutMs: t.Number({ minimum: 1000, maximum: 300000 }),
           }),
           security: t.Object({
             passwordMinLength: t.Number({ minimum: 6, maximum: 32 }),

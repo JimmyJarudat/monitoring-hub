@@ -40,9 +40,43 @@ type RuleEvaluationInput = {
 
 const TICK_MS = 5_000;
 const DEFAULT_INTERVAL_SECONDS = 60;
+const DEFAULT_PING_FAILURE_THRESHOLD = 5;
+const MONITOR_DEFAULTS_CACHE_TTL_MS = 60_000;
 
 const lastCheckedAt = new Map<string, number>();
 const inFlight = new Set<string>();
+let monitorDefaultsCache = {
+  timeoutMs: 10_000,
+  fetchedAt: 0,
+};
+
+const getDefaultMonitorTimeoutMs = async () => {
+  const now = Date.now();
+  if (now - monitorDefaultsCache.fetchedAt < MONITOR_DEFAULTS_CACHE_TTL_MS) {
+    return monitorDefaultsCache.timeoutMs;
+  }
+
+  try {
+    const cfg = await getSystemConfig();
+    monitorDefaultsCache = {
+      timeoutMs: cfg.monitorDefaults.timeoutMs,
+      fetchedAt: now,
+    };
+  } catch {
+    monitorDefaultsCache.fetchedAt = now;
+  }
+
+  return monitorDefaultsCache.timeoutMs;
+};
+
+const getPingFailureThreshold = (config: Prisma.InputJsonObject) => {
+  const value = config.failureThreshold;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_PING_FAILURE_THRESHOLD;
+  }
+
+  return Math.min(60, Math.max(1, Math.trunc(value)));
+};
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -490,6 +524,34 @@ const runChecker = async (
   }
 };
 
+const hasConfirmedPingDown = async (
+  monitor: Monitor,
+  config: Prisma.InputJsonObject,
+) => {
+  const failureThreshold = getPingFailureThreshold(config);
+  const recentResults = await prisma.monitorResult.findMany({
+    where: { monitorId: monitor.id },
+    orderBy: [{ checkedAt: "desc" }, { id: "desc" }],
+    take: failureThreshold,
+    select: { status: true },
+  });
+
+  const confirmed =
+    recentResults.length === failureThreshold &&
+    recentResults.every((result) => result.status === "DOWN");
+
+  if (!confirmed) {
+    const firstNonDownIndex = recentResults.findIndex((result) => result.status !== "DOWN");
+    logger.info("monitor", `PING DOWN pending confirmation: ${monitor.id}`, {
+      monitorName: monitor.name,
+      consecutiveFailures: firstNonDownIndex === -1 ? recentResults.length : firstNonDownIndex,
+      failureThreshold,
+    });
+  }
+
+  return confirmed;
+};
+
 const reconcileIncident = async (
   monitor: Monitor,
   result: {
@@ -851,6 +913,12 @@ export const runMonitorCheck = async (monitor: Monitor) => {
     if (monitor.type === "DOCKER") {
       resolvedConfig = await resolveDockerAccessCredential(resolvedConfig);
     }
+    if (typeof resolvedConfig.timeoutMs !== "number" || !Number.isFinite(resolvedConfig.timeoutMs)) {
+      resolvedConfig = {
+        ...resolvedConfig,
+        timeoutMs: await getDefaultMonitorTimeoutMs(),
+      };
+    }
   } catch (error) {
     const createdResult = await prisma.monitorResult.create({
       data: {
@@ -910,7 +978,12 @@ export const runMonitorCheck = async (monitor: Monitor) => {
 
   const underMaintenance =
     createdResult.status !== "UP" && (await shouldSuppressByMaintenance(monitor, createdResult.checkedAt));
-  const handledByRules = underMaintenance
+  const pendingPingDown =
+    !underMaintenance &&
+    monitor.type === "PING" &&
+    createdResult.status === "DOWN" &&
+    !(await hasConfirmedPingDown(monitor, resolvedConfig));
+  const handledByRules = underMaintenance || pendingPingDown
     ? false
     : await reconcileAlertRuleIncidents(monitor, {
         status: createdResult.status,
@@ -920,7 +993,7 @@ export const runMonitorCheck = async (monitor: Monitor) => {
         metadata: result.metadata,
       });
 
-  if (!underMaintenance && !handledByRules) {
+  if (!underMaintenance && !pendingPingDown && !handledByRules) {
     await reconcileIncident(monitor, {
       status: createdResult.status,
       message: createdResult.message,

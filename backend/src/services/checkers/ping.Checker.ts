@@ -1,5 +1,6 @@
 export interface PingConfig {
   host: string;
+  timeoutMs?: number;
 }
 
 export interface CheckResult {
@@ -10,10 +11,14 @@ export interface CheckResult {
 
 export async function pingCheck(config: PingConfig): Promise<CheckResult> {
   const start = Date.now();
+  const timeoutMs =
+    typeof config.timeoutMs === "number" && Number.isFinite(config.timeoutMs)
+      ? Math.max(1, Math.trunc(config.timeoutMs))
+      : 3000;
   const args =
     process.platform === "win32"
-      ? ["ping", "-n", "1", "-w", "3000", config.host]
-      : ["ping", "-c", "1", "-W", "3", config.host];
+      ? ["ping", "-n", "1", "-w", String(timeoutMs), config.host]
+      : ["ping", "-c", "1", "-W", String(Math.max(1, Math.ceil(timeoutMs / 1000))), config.host];
 
   try {
     const proc = Bun.spawn(args, {
@@ -25,7 +30,7 @@ export async function pingCheck(config: PingConfig): Promise<CheckResult> {
 
     if (exit === 0) return { status: "UP", responseTimeMs };
     return { status: "DOWN", responseTimeMs, message: `ping ไม่สำเร็จ (exit ${exit})` };
-  } catch (e: any) {
-    return { status: "DOWN", message: e.message };
+  } catch (error) {
+    return { status: "DOWN", message: error instanceof Error ? error.message : String(error) };
   }
 }
